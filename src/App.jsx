@@ -115,7 +115,7 @@ export default function App() {
         const d = await res.json();
         text = d.choices?.[0]?.message?.content || "No response.";
       } else {
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`, {
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ contents: [{ parts: [{ text: tool.prompt(q) }] }] })
