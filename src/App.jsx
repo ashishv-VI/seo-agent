@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef } from "react";
 import { TOOLS, CATS, MODELS } from "./tools";
 import Dashboard from "./Dashboard";
+import History from "./History";
 
 export default function App() {
   const [tool, setTool]     = useState(null);
+  const [page, setPage]     = useState("dashboard"); // dashboard | tool | history
   const [input, setInput]   = useState("");
   const [msgs, setMsgs]     = useState({});
   const [loading, setLoading] = useState(false);
@@ -31,6 +33,7 @@ export default function App() {
   const curMsgs = tool ? (msgs[tool.id] || []) : [];
   const filtered = cat === "All" ? TOOLS : TOOLS.filter(t => t.cat === cat);
   const catGroups = [...new Set(filtered.map(t => t.cat))];
+  const totalHistory = Object.values(msgs).reduce((a,m) => a + Math.floor(m.length/2), 0);
 
   function saveKeys() {
     localStorage.setItem("seo_keys", JSON.stringify(tmpKeys));
@@ -50,7 +53,18 @@ export default function App() {
 
   function selectTool(t) {
     setTool(t);
+    setPage("tool");
     setInput("");
+  }
+
+  function downloadText(text, filename) {
+    const blob = new Blob([text], { type:"text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   async function runPageSpeed(url) {
@@ -66,31 +80,7 @@ export default function App() {
       const score = (d,k) => Math.round((d.lighthouseResult?.categories?.[k]?.score||0)*100);
       const val   = (d,k) => d.lighthouseResult?.audits?.[k]?.displayValue || "N/A";
       const grade = s => s>=90?"✅ Good":s>=50?"⚠️ Needs Work":"❌ Poor";
-      const text = `⚡ PAGE SPEED REPORT
-━━━━━━━━━━━━━━━━━━━━━━━━
-URL: ${url}
-
-📱 MOBILE SCORES
-Performance:    ${score(mob,"performance")}/100  ${grade(score(mob,"performance"))}
-SEO:            ${score(mob,"seo")}/100  ${grade(score(mob,"seo"))}
-Accessibility:  ${score(mob,"accessibility")}/100  ${grade(score(mob,"accessibility"))}
-Best Practices: ${score(mob,"best-practices")}/100  ${grade(score(mob,"best-practices"))}
-
-🖥️ DESKTOP SCORES
-Performance:    ${score(desk,"performance")}/100  ${grade(score(desk,"performance"))}
-SEO:            ${score(desk,"seo")}/100  ${grade(score(desk,"seo"))}
-Accessibility:  ${score(desk,"accessibility")}/100  ${grade(score(desk,"accessibility"))}
-Best Practices: ${score(desk,"best-practices")}/100  ${grade(score(desk,"best-practices"))}
-
-📊 CORE WEB VITALS (Mobile)
-LCP:  ${val(mob,"largest-contentful-paint")}  (target: <2.5s)
-TBT:  ${val(mob,"total-blocking-time")}  (target: <100ms)
-CLS:  ${val(mob,"cumulative-layout-shift")}  (target: <0.1)
-FCP:  ${val(mob,"first-contentful-paint")}
-TTFB: ${val(mob,"server-response-time")}
-
-💡 TOP RECOMMENDATIONS
-${(mob.lighthouseResult?.audits?.["render-blocking-resources"]?.score||1)<1?"• Fix render-blocking resources\n":""}${(mob.lighthouseResult?.audits?.["uses-optimized-images"]?.score||1)<1?"• Optimize images\n":""}${(mob.lighthouseResult?.audits?.["unused-javascript"]?.score||1)<1?"• Remove unused JavaScript\n":""}${(mob.lighthouseResult?.audits?.["unused-css-rules"]?.score||1)<1?"• Remove unused CSS\n":""}${(mob.lighthouseResult?.audits?.["uses-text-compression"]?.score||1)<1?"• Enable text compression\n":""}`;
+      const text = `⚡ PAGE SPEED REPORT\n${"━".repeat(24)}\nURL: ${url}\n\n📱 MOBILE SCORES\nPerformance:    ${score(mob,"performance")}/100  ${grade(score(mob,"performance"))}\nSEO:            ${score(mob,"seo")}/100  ${grade(score(mob,"seo"))}\nAccessibility:  ${score(mob,"accessibility")}/100  ${grade(score(mob,"accessibility"))}\nBest Practices: ${score(mob,"best-practices")}/100  ${grade(score(mob,"best-practices"))}\n\n🖥️ DESKTOP SCORES\nPerformance:    ${score(desk,"performance")}/100  ${grade(score(desk,"performance"))}\nSEO:            ${score(desk,"seo")}/100  ${grade(score(desk,"seo"))}\nAccessibility:  ${score(desk,"accessibility")}/100  ${grade(score(desk,"accessibility"))}\nBest Practices: ${score(desk,"best-practices")}/100  ${grade(score(desk,"best-practices"))}\n\n📊 CORE WEB VITALS (Mobile)\nLCP:  ${val(mob,"largest-contentful-paint")}  (target: <2.5s)\nTBT:  ${val(mob,"total-blocking-time")}  (target: <100ms)\nCLS:  ${val(mob,"cumulative-layout-shift")}  (target: <0.1)\nFCP:  ${val(mob,"first-contentful-paint")}\nTTFB: ${val(mob,"server-response-time")}`;
       addMsg(tool.id, { role:"assistant", text });
       const nc = count+1; setCount(nc); localStorage.setItem("seo_count", nc);
     } catch(e) { addMsg(tool.id, { role:"assistant", text:"Error: "+e.message }); }
@@ -157,6 +147,9 @@ ${(mob.lighthouseResult?.audits?.["render-blocking-resources"]?.score||1)<1?"•
     saveBtn:{ width:"100%", padding:11, borderRadius:8, border:"none", background:"#7C3AED", color:"#fff", fontWeight:600, fontSize:14, cursor:"pointer", marginTop:16 },
   };
 
+  const headerTitle = page==="dashboard" ? "🏠 Dashboard" : page==="history" ? "📚 History" : tool ? `${tool.icon} ${tool.label}` : "🏠 Dashboard";
+  const headerSub   = page==="dashboard" ? `${TOOLS.length} tools · ${count} analyses` : page==="history" ? `${totalHistory} saved analyses` : tool ? `${tool.cat} · ${curMsgs.filter(m=>m.role==="user").length} queries` : "";
+
   return (
     <div style={s.app}>
       {/* Sidebar */}
@@ -165,24 +158,30 @@ ${(mob.lighthouseResult?.audits?.["render-blocking-resources"]?.score||1)<1?"•
           <div style={s.badge}>S</div>
           <div>
             <div style={{ fontSize:13, fontWeight:700, color:"#fff" }}>SEO Agent</div>
-            <div style={{ fontSize:10, color:"#444" }}>v4.0 · {TOOLS.length} tools</div>
+            <div style={{ fontSize:10, color:"#444" }}>v5.0 · {TOOLS.length} tools</div>
           </div>
         </div>
         <div style={s.nav}>
-          {/* Dashboard link */}
-          <div style={{ padding:"6px 4px 4px" }}>
-            <div onClick={()=>setTool(null)} style={{ display:"flex", alignItems:"center", gap:8, padding:"7px 10px", borderRadius:8, cursor:"pointer", fontSize:12, fontWeight:!tool?600:400, background:!tool?"#7C3AED22":"transparent", color:!tool?"#A78BFA":"#666", border:!tool?"1px solid #7C3AED33":"1px solid transparent" }}>
+          {/* Dashboard + History links */}
+          <div style={{ padding:"6px 4px 2px" }}>
+            <div onClick={()=>setPage("dashboard")} style={s.navItem(page==="dashboard","#7C3AED")}>
               🏠 <span>Dashboard</span>
             </div>
+            <div onClick={()=>setPage("history")} style={s.navItem(page==="history","#0891B2")}>
+              📚 <span>History</span>
+              {totalHistory > 0 && <span style={{ marginLeft:"auto", fontSize:10, background:"#0891B222", color:"#0891B2", padding:"1px 6px", borderRadius:10, flexShrink:0 }}>{totalHistory}</span>}
+            </div>
           </div>
+
           <div style={s.catRow}>
             {CATS.map(c => <div key={c} style={s.catBtn(cat===c)} onClick={()=>setCat(c)}>{c}</div>)}
           </div>
+
           {catGroups.map(c => (
             <div key={c}>
               <div style={s.secLabel}>{c}</div>
               {filtered.filter(t=>t.cat===c).map(t => (
-                <div key={t.id} style={s.navItem(tool?.id===t.id, t.color)} onClick={()=>selectTool(t)}>
+                <div key={t.id} style={s.navItem(page==="tool"&&tool?.id===t.id, t.color)} onClick={()=>selectTool(t)}>
                   <span style={{ fontSize:14, flexShrink:0 }}>{t.icon}</span>
                   <span style={{ overflow:"hidden", textOverflow:"ellipsis" }}>{t.label}</span>
                   {t.isApi && <span style={{ fontSize:9, background:"#0F766E22", color:"#0F766E", padding:"1px 5px", borderRadius:4, marginLeft:"auto", flexShrink:0 }}>API</span>}
@@ -205,26 +204,21 @@ ${(mob.lighthouseResult?.audits?.["render-blocking-resources"]?.score||1)<1?"•
 
       {/* Main */}
       <div style={s.main}>
-        {/* Header */}
         <div style={s.header}>
           <div style={{ display:"flex", alignItems:"center", gap:10 }}>
             <button onClick={()=>setSideOpen(o=>!o)} style={{ background:"none", border:"none", color:"#555", cursor:"pointer", fontSize:18, padding:"2px 6px", lineHeight:1 }}>☰</button>
             <div>
-              <div style={{ fontWeight:700, fontSize:14, color:"#fff" }}>
-                {tool ? `${tool.icon} ${tool.label}` : "🏠 Dashboard"}
-              </div>
-              <div style={{ fontSize:10, color:"#444" }}>
-                {tool ? `${tool.cat} · ${curMsgs.filter(m=>m.role==="user").length} queries` : `${TOOLS.length} tools · ${count} analyses`}
-              </div>
+              <div style={{ fontWeight:700, fontSize:14, color:"#fff" }}>{headerTitle}</div>
+              <div style={{ fontSize:10, color:"#444" }}>{headerSub}</div>
             </div>
           </div>
           <div style={{ display:"flex", gap:6, alignItems:"center" }}>
-            {tool && !tool.isApi && Object.entries(MODELS).map(([k,v]) => (
+            {page==="tool" && tool && !tool.isApi && Object.entries(MODELS).map(([k,v]) => (
               <div key={k} onClick={()=>setModel(k)} style={{ padding:"4px 12px", borderRadius:20, cursor:"pointer", fontSize:12, fontWeight:model===k?700:400, background:model===k?v.color+"22":"transparent", color:model===k?v.color:"#444", border:`1px solid ${model===k?v.color+"55":"#222"}` }}>
                 {v.name}
               </div>
             ))}
-            {tool && curMsgs.length > 0 && (
+            {page==="tool" && curMsgs.length > 0 && (
               <button onClick={()=>setMsgs(m=>({...m,[tool.id]:[]}))} style={{ padding:"4px 10px", borderRadius:20, border:"1px solid #222", background:"transparent", color:"#555", fontSize:12, cursor:"pointer" }}>
                 Clear
               </button>
@@ -233,10 +227,10 @@ ${(mob.lighthouseResult?.audits?.["render-blocking-resources"]?.score||1)<1?"•
           </div>
         </div>
 
-        {/* Dashboard or Tool */}
-        {!tool ? (
-          <Dashboard onToolSelect={selectTool} count={count} keys={keys} />
-        ) : (
+        {/* Pages */}
+        {page==="dashboard" && <Dashboard onToolSelect={selectTool} count={count} keys={keys} />}
+        {page==="history"   && <History msgs={msgs} onToolSelect={selectTool} />}
+        {page==="tool" && tool && (
           <>
             <div style={s.msgs}>
               {curMsgs.length === 0 && (
@@ -263,6 +257,9 @@ ${(mob.lighthouseResult?.audits?.["render-blocking-resources"]?.score||1)<1?"•
                       <div style={{ display:"flex", gap:6, paddingLeft:4 }}>
                         <button onClick={()=>copyText(m.text,i)} style={{ padding:"3px 10px", borderRadius:6, border:"1px solid #222", background:"transparent", color:copied===i?"#0F766E":"#555", fontSize:11, cursor:"pointer" }}>
                           {copied===i?"✅ Copied!":"📋 Copy"}
+                        </button>
+                        <button onClick={()=>downloadText(m.text, `seo-${tool.id}-${Date.now()}.txt`)} style={{ padding:"3px 10px", borderRadius:6, border:"1px solid #222", background:"transparent", color:"#555", fontSize:11, cursor:"pointer" }}>
+                          ⬇️ Download
                         </button>
                       </div>
                     </div>
