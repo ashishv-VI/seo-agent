@@ -8,6 +8,7 @@ import SiteAudit from "./SiteAudit";
 import Compare from "./Compare";
 import ReportGenerator from "./ReportGenerator";
 import RankTracker from "./RankTracker";
+import ContentCalendar from "./ContentCalendar";
 
 export default function App() {
   const [tool, setTool]       = useState(null);
@@ -61,15 +62,13 @@ export default function App() {
   const txt3 = dark ? "#444"    : "#bbb";
 
   function toggleDark() {
-    const nd = !dark;
-    setDark(nd);
+    const nd = !dark; setDark(nd);
     localStorage.setItem("seo_dark", nd);
   }
 
   function saveKeys() {
     localStorage.setItem("seo_keys", JSON.stringify(tmpKeys));
-    setKeys(tmpKeys);
-    setShowSettings(false);
+    setKeys(tmpKeys); setShowSettings(false);
   }
 
   function copyText(text, id) {
@@ -83,9 +82,7 @@ export default function App() {
   }
 
   function selectTool(t) {
-    setTool(t);
-    setPage("tool");
-    setInput("");
+    setTool(t); setPage("tool"); setInput("");
   }
 
   function downloadText(text, filename) {
@@ -122,8 +119,7 @@ export default function App() {
     const keywords = bulkInput.split("\n").map(k => k.trim()).filter(Boolean);
     if (!keywords.length) return;
     if (!keys.groq && !keys.gemini) { setShowSettings(true); return; }
-    setBulkLoading(true);
-    setBulkResults([]);
+    setBulkLoading(true); setBulkResults([]);
     for (const kw of keywords.slice(0, 10)) {
       const prompt = `Analyze this SEO keyword: "${kw}". Give: 1) Search intent (1 word) 2) Difficulty (Low/Med/High) 3) One content angle. Format: Intent: X | Difficulty: X | Angle: X`;
       const result = await callAI(prompt);
@@ -192,9 +188,9 @@ export default function App() {
     saveBtn:{ width:"100%", padding:11, borderRadius:8, border:"none", background:"#7C3AED", color:"#fff", fontWeight:600, fontSize:14, cursor:"pointer", marginTop:16 },
   };
 
-  const pageLabels = { dashboard:"🏠 Dashboard", history:"📚 History", bulk:"📊 Bulk Keywords", gsc:"📈 Search Console", audit:"🏥 Site Audit", compare:"⚔️ Compare Sites", report:"📄 Report Generator", ranktracker:"📡 Rank Tracker" };
+  const pageLabels = { dashboard:"🏠 Dashboard", history:"📚 History", bulk:"📊 Bulk Keywords", gsc:"📈 Search Console", audit:"🏥 Site Audit", compare:"⚔️ Compare Sites", report:"📄 Report Generator", ranktracker:"📡 Rank Tracker", calendar:"📅 Content Calendar" };
+  const headerSubs  = { dashboard:`${TOOLS.length} tools · ${count} analyses`, history:`${totalHistory} saved`, bulk:"10 keywords at once", gsc:"Last 28 days", audit:"Technical SEO + AI", compare:"Side-by-side", report:"Client-ready reports", ranktracker:"AI rank analysis", calendar:"Plan your content" };
   const headerTitle = page==="tool"&&tool ? `${tool.icon} ${tool.label}` : pageLabels[page] || "🏠 Dashboard";
-  const headerSubs  = { dashboard:`${TOOLS.length} tools · ${count} analyses`, history:`${totalHistory} saved`, bulk:"10 keywords at once", gsc:"Last 28 days", audit:"Technical SEO + AI", compare:"Side-by-side", report:"Client-ready reports", ranktracker:"AI-powered rank analysis" };
   const headerSub   = page==="tool"&&tool ? `${tool.cat} · ${curMsgs.filter(m=>m.role==="user").length} queries` : headerSubs[page] || "";
 
   return (
@@ -205,7 +201,7 @@ export default function App() {
           <div style={s.badge}>S</div>
           <div style={{ flex:1 }}>
             <div style={{ fontSize:13, fontWeight:700, color:txt }}>SEO Agent</div>
-            <div style={{ fontSize:10, color:txt3 }}>v11.0 · {TOOLS.length} tools</div>
+            <div style={{ fontSize:10, color:txt3 }}>v12.0 · {TOOLS.length} tools</div>
           </div>
         </div>
         <div style={s.nav}>
@@ -216,6 +212,7 @@ export default function App() {
             <div onClick={()=>setPage("audit")}       style={s.navItem(page==="audit","#DC2626")}>🏥 <span>Site Audit</span></div>
             <div onClick={()=>setPage("compare")}     style={s.navItem(page==="compare","#0891B2")}>⚔️ <span>Compare Sites</span></div>
             <div onClick={()=>setPage("ranktracker")} style={s.navItem(page==="ranktracker","#059669")}>📡 <span>Rank Tracker</span></div>
+            <div onClick={()=>setPage("calendar")}    style={s.navItem(page==="calendar","#B45309")}>📅 <span>Content Calendar</span></div>
             <div onClick={()=>setPage("bulk")}        style={s.navItem(page==="bulk","#CA8A04")}>📊 <span>Bulk Keywords</span></div>
             <div onClick={()=>setPage("report")}      style={s.navItem(page==="report","#9333EA")}>📄 <span>Report Generator</span></div>
             <div onClick={()=>setPage("history")}     style={s.navItem(page==="history","#D97706")}>
@@ -242,7 +239,6 @@ export default function App() {
             </div>
           ))}
         </div>
-
         <div style={{ padding:8, borderTop:`1px solid ${bdr}`, flexShrink:0 }}>
           <div style={{ padding:"6px 8px", fontSize:11, color:txt3, display:"flex", justifyContent:"space-between" }}>
             <span>Total analyses</span>
@@ -286,6 +282,7 @@ export default function App() {
         {page==="audit"       && <SiteAudit dark={dark} googleKey={keys.google} groqKey={keys.groq} geminiKey={keys.gemini} model={model} />}
         {page==="compare"     && <Compare dark={dark} googleKey={keys.google} />}
         {page==="ranktracker" && <RankTracker dark={dark} keys={keys} model={model} />}
+        {page==="calendar"    && <ContentCalendar dark={dark} keys={keys} model={model} />}
         {page==="report"      && <ReportGenerator dark={dark} keys={keys} model={model} msgs={msgs} />}
         {page==="history"     && <History msgs={msgs} onToolSelect={selectTool} dark={dark} />}
 
