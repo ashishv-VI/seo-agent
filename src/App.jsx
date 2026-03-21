@@ -13,6 +13,8 @@ import ContentCalendar from "./ContentCalendar";
 import SeoChecklist from "./SeoChecklist";
 import AiWriter from "./AiWriter";
 import BrandTracker from "./BrandTracker";
+import LocationKeywords from "./LocationKeywords";
+import AEO from "./AEO";
 
 export default function App() {
   const [tool, setTool]       = useState(null);
@@ -238,6 +240,8 @@ export default function App() {
             <div onClick={()=>setPage("compare")}      style={s.navItem(page==="compare","#0891B2")}>⚔️ <span>Compare Sites</span></div>
             <div onClick={()=>setPage("ranktracker")}  style={s.navItem(page==="ranktracker","#059669")}>📡 <span>Rank Tracker</span></div>
             <div onClick={()=>setPage("brandtracker")} style={s.navItem(page==="brandtracker","#10A37F")}>🔍 <span>Brand Tracker</span></div>
+            <div onClick={()=>setPage("location")}     style={s.navItem(page==="location","#059669")}>🌍 <span>Location Keywords</span></div>
+            <div onClick={()=>setPage("aeo")}          style={s.navItem(page==="aeo","#7C3AED")}>🎯 <span>AEO Optimizer</span></div>
             <div onClick={()=>setPage("calendar")}     style={s.navItem(page==="calendar","#B45309")}>📅 <span>Content Calendar</span></div>
             <div onClick={()=>setPage("checklist")}    style={s.navItem(page==="checklist","#059669")}>✅ <span>SEO Checklist</span></div>
             <div onClick={()=>setPage("bulk")}         style={s.navItem(page==="bulk","#CA8A04")}>📊 <span>Bulk Keywords</span></div>
@@ -308,11 +312,13 @@ export default function App() {
         {page==="dashboard"    && <Dashboard onToolSelect={selectTool} count={count} keys={keys} dark={dark} onPageSelect={setPage} />}
         {page==="writer"       && <AiWriter dark={dark} keys={keys} model={model} />}
         {page==="gsc"          && <GscDashboard dark={dark} googleKey={keys.google} />}
-        {page==="ga4"          && <GA4Dashboard dark={dark} googleKey={keys.google} />}
+        {page==="ga4"          && <GA4Dashboard dark={dark} googleKey={keys.google} keys={keys} model={model} />}
         {page==="audit"        && <SiteAudit dark={dark} googleKey={keys.google} groqKey={keys.groq} geminiKey={keys.gemini} model={model} />}
         {page==="compare"      && <Compare dark={dark} googleKey={keys.google} />}
         {page==="ranktracker"  && <RankTracker dark={dark} keys={keys} model={model} />}
         {page==="brandtracker" && <BrandTracker dark={dark} keys={keys} model={model} />}
+        {page==="location"     && <LocationKeywords dark={dark} keys={keys} model={model} />}
+        {page==="aeo"          && <AEO dark={dark} keys={keys} model={model} />}
         {page==="calendar"     && <ContentCalendar dark={dark} keys={keys} model={model} />}
         {page==="checklist"    && <SeoChecklist dark={dark} />}
         {page==="report"       && <ReportGenerator dark={dark} keys={keys} model={model} msgs={msgs} />}
