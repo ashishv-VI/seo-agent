@@ -4,6 +4,7 @@ import Dashboard from "./Dashboard";
 import History from "./History";
 import Markdown from "./Markdown";
 import GscDashboard from "./GscDashboard";
+import GA4Dashboard from "./GA4Dashboard";
 import SiteAudit from "./SiteAudit";
 import Compare from "./Compare";
 import ReportGenerator from "./ReportGenerator";
@@ -105,7 +106,6 @@ export default function App() {
       });
       const d = await res.json();
       return d.choices?.[0]?.message?.content || null;
-
     } else if (model === "gemini") {
       if (!keys.gemini) return null;
       const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${keys.gemini}`, {
@@ -115,7 +115,6 @@ export default function App() {
       });
       const d = await res.json();
       return d.candidates?.[0]?.content?.parts?.[0]?.text || null;
-
     } else if (model === "deepseek") {
       if (!keys.openrouter) return null;
       const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
@@ -125,7 +124,6 @@ export default function App() {
       });
       const d = await res.json();
       return d.choices?.[0]?.message?.content || null;
-
     } else if (model === "mistral") {
       if (!keys.openrouter) return null;
       const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
@@ -212,8 +210,8 @@ export default function App() {
     saveBtn:{ width:"100%", padding:11, borderRadius:8, border:"none", background:"#7C3AED", color:"#fff", fontWeight:600, fontSize:14, cursor:"pointer", marginTop:16 },
   };
 
-  const pageLabels = { dashboard:"🏠 Dashboard", history:"📚 History", bulk:"📊 Bulk Keywords", gsc:"📈 Search Console", audit:"🏥 Site Audit", compare:"⚔️ Compare Sites", report:"📄 Report Generator", ranktracker:"📡 Rank Tracker", calendar:"📅 Content Calendar", checklist:"✅ SEO Checklist", writer:"✍️ AI Writer" };
-  const headerSubs  = { dashboard:`${TOOLS.length} tools · ${count} analyses`, history:`${totalHistory} saved`, bulk:"10 keywords at once", gsc:"Last 28 days", audit:"Technical SEO + AI", compare:"Side-by-side", report:"Client-ready reports", ranktracker:"AI rank analysis", calendar:"Plan your content", checklist:"48 items · 7 categories", writer:"12 content templates" };
+  const pageLabels = { dashboard:"🏠 Dashboard", history:"📚 History", bulk:"📊 Bulk Keywords", gsc:"📈 Search Console", ga4:"📊 GA4 Analytics", audit:"🏥 Site Audit", compare:"⚔️ Compare Sites", report:"📄 Report Generator", ranktracker:"📡 Rank Tracker", calendar:"📅 Content Calendar", checklist:"✅ SEO Checklist", writer:"✍️ AI Writer" };
+  const headerSubs  = { dashboard:`${TOOLS.length} tools · ${count} analyses`, history:`${totalHistory} saved`, bulk:"10 keywords at once", gsc:"Last 28 days", ga4:"Sessions · Users · Traffic Sources", audit:"Technical SEO + AI", compare:"Side-by-side", report:"Client-ready reports", ranktracker:"AI rank analysis", calendar:"Plan your content", checklist:"48 items · 7 categories", writer:"12 content templates" };
   const headerTitle = page==="tool"&&tool ? `${tool.icon} ${tool.label}` : pageLabels[page] || "🏠 Dashboard";
   const headerSub   = page==="tool"&&tool ? `${tool.cat} · ${curMsgs.filter(m=>m.role==="user").length} queries` : headerSubs[page] || "";
 
@@ -225,7 +223,7 @@ export default function App() {
           <div style={s.badge}>S</div>
           <div style={{ flex:1 }}>
             <div style={{ fontSize:13, fontWeight:700, color:txt }}>SEO Agent</div>
-            <div style={{ fontSize:10, color:txt3 }}>v15.0 · {TOOLS.length} tools</div>
+            <div style={{ fontSize:10, color:txt3 }}>v15.1 · {TOOLS.length} tools</div>
           </div>
         </div>
         <div style={s.nav}>
@@ -234,6 +232,7 @@ export default function App() {
             <div onClick={()=>setPage("dashboard")}   style={s.navItem(page==="dashboard","#7C3AED")}>🏠 <span>Dashboard</span></div>
             <div onClick={()=>setPage("writer")}      style={s.navItem(page==="writer","#7C3AED")}>✍️ <span>AI Writer</span></div>
             <div onClick={()=>setPage("gsc")}         style={s.navItem(page==="gsc","#059669")}>📈 <span>Search Console</span></div>
+            <div onClick={()=>setPage("ga4")}         style={s.navItem(page==="ga4","#DC2626")}>📊 <span>GA4 Analytics</span></div>
             <div onClick={()=>setPage("audit")}       style={s.navItem(page==="audit","#DC2626")}>🏥 <span>Site Audit</span></div>
             <div onClick={()=>setPage("compare")}     style={s.navItem(page==="compare","#0891B2")}>⚔️ <span>Compare Sites</span></div>
             <div onClick={()=>setPage("ranktracker")} style={s.navItem(page==="ranktracker","#059669")}>📡 <span>Rank Tracker</span></div>
@@ -307,6 +306,7 @@ export default function App() {
         {page==="dashboard"   && <Dashboard onToolSelect={selectTool} count={count} keys={keys} dark={dark} />}
         {page==="writer"      && <AiWriter dark={dark} keys={keys} model={model} />}
         {page==="gsc"         && <GscDashboard dark={dark} googleKey={keys.google} />}
+        {page==="ga4"         && <GA4Dashboard dark={dark} googleKey={keys.google} />}
         {page==="audit"       && <SiteAudit dark={dark} googleKey={keys.google} groqKey={keys.groq} geminiKey={keys.gemini} model={model} />}
         {page==="compare"     && <Compare dark={dark} googleKey={keys.google} />}
         {page==="ranktracker" && <RankTracker dark={dark} keys={keys} model={model} />}
@@ -416,7 +416,7 @@ export default function App() {
             <input type="password" value={tmpKeys.groq} onChange={e=>setTmpKeys(k=>({...k,groq:e.target.value}))} placeholder="gsk_xxxxxxxxxxxx" style={s.inp} />
             <label style={s.label}>Gemini API Key (AIza...)</label>
             <input type="password" value={tmpKeys.gemini} onChange={e=>setTmpKeys(k=>({...k,gemini:e.target.value}))} placeholder="AIzaxxxxxxxxxx" style={s.inp} />
-            <label style={s.label}>Google APIs Key — PageSpeed + GSC + Audit</label>
+            <label style={s.label}>Google APIs Key — PageSpeed + GSC + GA4</label>
             <input type="password" value={tmpKeys.google} onChange={e=>setTmpKeys(k=>({...k,google:e.target.value}))} placeholder="AIzaxxxxxxxxxx" style={s.inp} />
             <label style={s.label}>OpenRouter Key — DeepSeek + Mistral (Free)</label>
             <input type="password" value={tmpKeys.openrouter} onChange={e=>setTmpKeys(k=>({...k,openrouter:e.target.value}))} placeholder="sk-or-xxxxxxxxxxxx" style={s.inp} />

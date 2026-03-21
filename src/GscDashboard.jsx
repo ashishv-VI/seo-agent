@@ -6,6 +6,8 @@ export default function GscDashboard({ dark, googleKey }) {
   const [data, setData]           = useState(null);
   const [error, setError]         = useState("");
   const [activeTab, setActiveTab] = useState("overview");
+  const [days, setDays]           = useState(28);
+  const [device, setDevice]       = useState("all");
 
   const bg   = dark ? "#0a0a0a" : "#f5f5f0";
   const bg2  = dark ? "#111"    : "#ffffff";
@@ -20,39 +22,80 @@ export default function GscDashboard({ dark, googleKey }) {
     if (!googleKey) { setError("Google API Key needed — add in Settings!"); return; }
     setLoading(true); setError(""); setData(null);
 
-    const url = siteUrl.startsWith("http") ? siteUrl : `https://${siteUrl}`;
+    const url       = siteUrl.startsWith("http") ? siteUrl : `https://${siteUrl}`;
     const endDate   = new Date().toISOString().split("T")[0];
-    const startDate = new Date(Date.now() - 28*24*60*60*1000).toISOString().split("T")[0];
+    const startDate = new Date(Date.now() - days*24*60*60*1000).toISOString().split("T")[0];
+
+    const makeBody = (dimensions) => {
+      const body = { startDate, endDate, dimensions, rowLimit: 20 };
+      if (device !== "all") body.dimensionFilterGroups = [{ filters:[{ dimension:"device", operator:"equals", expression: device }] }];
+      return JSON.stringify(body);
+    };
+
+    const apiUrl = `https://searchconsole.googleapis.com/webmasters/v3/sites/${encodeURIComponent(url)}/searchAnalytics/query?key=${googleKey}`;
+    const headers = { "Content-Type":"application/json" };
 
     try {
-      const [queryRes, pageRes, countryRes] = await Promise.all([
-        fetch(`https://searchconsole.googleapis.com/webmasters/v3/sites/${encodeURIComponent(url)}/searchAnalytics/query?key=${googleKey}`, {
-          method:"POST", headers:{ "Content-Type":"application/json" },
-          body: JSON.stringify({ startDate, endDate, dimensions:["query"], rowLimit:10 })
-        }).then(r=>r.json()),
-        fetch(`https://searchconsole.googleapis.com/webmasters/v3/sites/${encodeURIComponent(url)}/searchAnalytics/query?key=${googleKey}`, {
-          method:"POST", headers:{ "Content-Type":"application/json" },
-          body: JSON.stringify({ startDate, endDate, dimensions:["page"], rowLimit:10 })
-        }).then(r=>r.json()),
-        fetch(`https://searchconsole.googleapis.com/webmasters/v3/sites/${encodeURIComponent(url)}/searchAnalytics/query?key=${googleKey}`, {
-          method:"POST", headers:{ "Content-Type":"application/json" },
-          body: JSON.stringify({ startDate, endDate, dimensions:["country"], rowLimit:5 })
-        }).then(r=>r.json()),
+      const [queryRes, pageRes, countryRes, deviceRes, dateRes] = await Promise.all([
+        fetch(apiUrl, { method:"POST", headers, body: makeBody(["query"]) }).then(r=>r.json()),
+        fetch(apiUrl, { method:"POST", headers, body: makeBody(["page"]) }).then(r=>r.json()),
+        fetch(apiUrl, { method:"POST", headers, body: makeBody(["country"]) }).then(r=>r.json()),
+        fetch(apiUrl, { method:"POST", headers, body: JSON.stringify({ startDate, endDate, dimensions:["device"], rowLimit:10 }) }).then(r=>r.json()),
+        fetch(apiUrl, { method:"POST", headers, body: makeBody(["date"]) }).then(r=>r.json()),
       ]);
 
-      if (queryRes.error) { setError(queryRes.error.message || "GSC API Error — make sure site is verified in Search Console"); setLoading(false); return; }
+      if (queryRes.error) {
+        setError(queryRes.error.message || "GSC API Error — make sure site is verified in Search Console");
+        setLoading(false); return;
+      }
 
-      const totalClicks      = queryRes.rows?.reduce((a,r)=>a+r.clicks,0) || 0;
-      const totalImpressions = queryRes.rows?.reduce((a,r)=>a+r.impressions,0) || 0;
-      const avgCTR           = queryRes.rows?.length ? (queryRes.rows.reduce((a,r)=>a+r.ctr,0)/queryRes.rows.length*100).toFixed(1) : 0;
-      const avgPosition      = queryRes.rows?.length ? (queryRes.rows.reduce((a,r)=>a+r.position,0)/queryRes.rows.length).toFixed(1) : 0;
+      const rows = queryRes.rows || [];
+      const totalClicks      = rows.reduce((a,r)=>a+r.clicks, 0);
+      const totalImpressions = rows.reduce((a,r)=>a+r.impressions, 0);
+      const avgCTR           = rows.length ? (rows.reduce((a,r)=>a+r.ctr,0)/rows.length*100).toFixed(1) : 0;
+      const avgPosition      = rows.length ? (rows.reduce((a,r)=>a+r.position,0)/rows.length).toFixed(1) : 0;
 
-      setData({ queries: queryRes.rows||[], pages: pageRes.rows||[], countries: countryRes.rows||[], totalClicks, totalImpressions, avgCTR, avgPosition, startDate, endDate });
+      setData({
+        queries:   queryRes.rows||[],
+        pages:     pageRes.rows||[],
+        countries: countryRes.rows||[],
+        devices:   deviceRes.rows||[],
+        dates:     dateRes.rows||[],
+        totalClicks, totalImpressions, avgCTR, avgPosition,
+        startDate, endDate
+      });
     } catch(e) { setError("Error: "+e.message); }
     setLoading(false);
   }
 
-  const tabs = ["overview","queries","pages","countries"];
+  function exportCSV(rows, filename) {
+    if (!rows?.length) return;
+    const keys = Object.keys(rows[0]);
+    const csv = [
+      keys.join(","),
+      ...rows.map(r => keys.map(k => {
+        const v = Array.isArray(r[k]) ? r[k].join("|") : r[k];
+        return `"${String(v).replace(/"/g,'""')}"`;
+      }).join(","))
+    ].join("\n");
+    const blob = new Blob([csv], { type:"text/csv" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = filename; a.click();
+  }
+
+  function exportAllCSV() {
+    if (!data) return;
+    const rows = data.queries.map(r => ({
+      keyword: r.keys[0], clicks: r.clicks,
+      impressions: r.impressions,
+      ctr: (r.ctr*100).toFixed(2)+"%",
+      position: r.position.toFixed(1)
+    }));
+    exportCSV(rows, `gsc-keywords-${data.startDate}.csv`);
+  }
+
+  const tabs = ["overview","queries","pages","countries","devices"];
 
   const s = {
     wrap:   { flex:1, overflowY:"auto", padding:24, background:bg },
@@ -61,65 +104,76 @@ export default function GscDashboard({ dark, googleKey }) {
     stat:   (color) => ({ background:bg2, border:`1px solid ${bdr}`, borderRadius:12, padding:16, textAlign:"center", borderTop:`3px solid ${color}` }),
     statNum:{ fontSize:24, fontWeight:700, color:txt, marginBottom:4 },
     statLbl:{ fontSize:11, color:txt2 },
-    tabRow: { display:"flex", gap:8, marginBottom:16 },
+    tabRow: { display:"flex", gap:8, marginBottom:16, flexWrap:"wrap" },
     tab:    (a) => ({ padding:"6px 16px", borderRadius:20, fontSize:12, cursor:"pointer", fontWeight:a?600:400, background:a?"#7C3AED22":"transparent", color:a?"#A78BFA":txt2, border:`1px solid ${a?"#7C3AED44":bdr}` }),
     table:  { width:"100%", borderCollapse:"collapse" },
     th:     { textAlign:"left", padding:"8px 12px", fontSize:11, color:txt2, fontWeight:500, borderBottom:`1px solid ${bdr}`, textTransform:"uppercase", letterSpacing:"0.05em" },
     td:     { padding:"10px 12px", fontSize:12, color:txt, borderBottom:`1px solid ${bdr}33` },
-    bar:    (pct, color) => ({ height:4, borderRadius:2, background:`${color}33`, position:"relative", overflow:"hidden", marginTop:4 }),
-    barFill:(pct, color) => ({ height:"100%", width:`${Math.min(pct,100)}%`, background:color, borderRadius:2 }),
     inp:    { flex:1, padding:"10px 14px", borderRadius:10, border:`1px solid ${bdr}`, background:bg3, color:txt, fontSize:13, outline:"none", fontFamily:"inherit" },
-    btn:    (ok) => ({ padding:"10px 20px", borderRadius:10, border:"none", background:ok?"#7C3AED":bdr, color:ok?"#fff":txt3, fontWeight:600, fontSize:13, cursor:ok?"pointer":"not-allowed" }),
+    btn:    (ok,color="#7C3AED") => ({ padding:"10px 20px", borderRadius:10, border:"none", background:ok?color:bdr, color:ok?"#fff":txt3, fontWeight:600, fontSize:13, cursor:ok?"pointer":"not-allowed" }),
+    sel:    { padding:"8px 12px", borderRadius:8, border:`1px solid ${bdr}`, background:bg3, color:txt, fontSize:12, cursor:"pointer", outline:"none" },
+    bar:    { height:4, borderRadius:2, background:"#7C3AED33", marginTop:4, overflow:"hidden" },
+    barFill:(pct) => ({ height:"100%", width:`${Math.min(pct,100)}%`, background:"#7C3AED", borderRadius:2 }),
   };
 
-  const maxClicks = data?.queries?.length ? Math.max(...data.queries.map(r=>r.clicks)) : 1;
+  const maxClicks = data?.queries?.length ? Math.max(...data.queries.map(r=>r.clicks),1) : 1;
+  const posColor  = p => p<=3?"#059669":p<=10?"#D97706":"#DC2626";
+  const ctrColor  = c => c>0.05?"#059669":"#D97706";
 
   return (
     <div style={s.wrap}>
       <div style={{ fontSize:18, fontWeight:700, color:txt, marginBottom:4 }}>📊 Search Console Dashboard</div>
-      <div style={{ fontSize:13, color:txt2, marginBottom:20 }}>Real GSC data — last 28 days</div>
+      <div style={{ fontSize:13, color:txt2, marginBottom:20 }}>Real GSC data — live from Google Search Console</div>
 
-      {/* Input */}
+      {/* Input + Filters */}
       <div style={s.card}>
-        <div style={{ fontSize:12, color:txt2, marginBottom:8 }}>Enter your verified site URL:</div>
-        <div style={{ display:"flex", gap:10 }}>
+        <div style={{ display:"flex", gap:10, flexWrap:"wrap", marginBottom:10 }}>
           <input value={siteUrl} onChange={e=>setSiteUrl(e.target.value)}
             onKeyDown={e=>e.key==="Enter"&&fetchGSC()}
             placeholder="https://yourdomain.com" style={s.inp} />
+          <select value={days} onChange={e=>setDays(Number(e.target.value))} style={s.sel}>
+            <option value={7}>Last 7 days</option>
+            <option value={28}>Last 28 days</option>
+            <option value={90}>Last 90 days</option>
+            <option value={180}>Last 6 months</option>
+          </select>
+          <select value={device} onChange={e=>setDevice(e.target.value)} style={s.sel}>
+            <option value="all">All Devices</option>
+            <option value="mobile">Mobile</option>
+            <option value="desktop">Desktop</option>
+            <option value="tablet">Tablet</option>
+          </select>
           <button onClick={fetchGSC} disabled={loading||!siteUrl.trim()} style={s.btn(!loading&&!!siteUrl.trim())}>
             {loading ? "Loading..." : "Fetch Data"}
           </button>
         </div>
-        {error && <div style={{ fontSize:12, color:"#DC2626", marginTop:8, padding:"8px 12px", background:"#DC262611", borderRadius:8 }}>{error}</div>}
-        <div style={{ fontSize:11, color:txt3, marginTop:8 }}>
-          ⚠️ Site must be verified in Google Search Console + GSC API must be enabled in Google Cloud Console
-        </div>
+        {error && <div style={{ fontSize:12, color:"#DC2626", padding:"8px 12px", background:"#DC262611", borderRadius:8 }}>{error}</div>}
+        <div style={{ fontSize:11, color:txt3 }}>⚠️ Site must be verified in Google Search Console · GSC API must be enabled</div>
       </div>
 
       {data && (
         <>
           {/* Stats */}
           <div style={s.statGrid}>
-            <div style={s.stat("#7C3AED")}>
-              <div style={s.statNum}>{data.totalClicks.toLocaleString()}</div>
-              <div style={s.statLbl}>Total Clicks</div>
-            </div>
-            <div style={s.stat("#0891B2")}>
-              <div style={s.statNum}>{data.totalImpressions.toLocaleString()}</div>
-              <div style={s.statLbl}>Impressions</div>
-            </div>
-            <div style={s.stat("#059669")}>
-              <div style={s.statNum}>{data.avgCTR}%</div>
-              <div style={s.statLbl}>Avg CTR</div>
-            </div>
-            <div style={s.stat("#D97706")}>
-              <div style={s.statNum}>#{data.avgPosition}</div>
-              <div style={s.statLbl}>Avg Position</div>
-            </div>
+            {[
+              { label:"Total Clicks", val:data.totalClicks.toLocaleString(), color:"#7C3AED" },
+              { label:"Impressions",  val:data.totalImpressions.toLocaleString(), color:"#0891B2" },
+              { label:"Avg CTR",      val:data.avgCTR+"%", color:"#059669" },
+              { label:"Avg Position", val:"#"+data.avgPosition, color:"#D97706" },
+            ].map(s2 => (
+              <div key={s2.label} style={s.stat(s2.color)}>
+                <div style={s.statNum}>{s2.val}</div>
+                <div style={s.statLbl}>{s2.label}</div>
+              </div>
+            ))}
           </div>
 
-          <div style={{ fontSize:12, color:txt2, marginBottom:16 }}>
-            📅 Data: {data.startDate} → {data.endDate}
+          {/* Date + Export */}
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
+            <div style={{ fontSize:12, color:txt2 }}>📅 {data.startDate} → {data.endDate} · {device==="all"?"All devices":device}</div>
+            <button onClick={exportAllCSV} style={{ padding:"6px 14px", borderRadius:8, border:`1px solid #059669aa`, background:"#05966911", color:"#059669", fontSize:12, cursor:"pointer", fontWeight:600 }}>
+              ⬇️ Export CSV
+            </button>
           </div>
 
           {/* Tabs */}
@@ -127,31 +181,58 @@ export default function GscDashboard({ dark, googleKey }) {
             {tabs.map(t => <div key={t} style={s.tab(activeTab===t)} onClick={()=>setActiveTab(t)}>{t.charAt(0).toUpperCase()+t.slice(1)}</div>)}
           </div>
 
+          {/* Overview */}
+          {activeTab==="overview" && (
+            <div style={s.card}>
+              <div style={{ fontSize:13, fontWeight:600, color:txt, marginBottom:16 }}>Performance Overview</div>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
+                <div>
+                  <div style={{ fontSize:12, color:txt2, marginBottom:8, fontWeight:600 }}>🔍 Top Keywords</div>
+                  {data.queries.slice(0,8).map((r,i) => (
+                    <div key={i} style={{ display:"flex", justifyContent:"space-between", padding:"7px 0", borderBottom:`1px solid ${bdr}33`, fontSize:12 }}>
+                      <span style={{ color:txt, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:"65%" }}>{r.keys[0]}</span>
+                      <div style={{ display:"flex", gap:8, flexShrink:0 }}>
+                        <span style={{ color:"#7C3AED", fontWeight:600 }}>{r.clicks}</span>
+                        <span style={{ color:posColor(r.position), fontSize:11 }}>#{r.position.toFixed(0)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div>
+                  <div style={{ fontSize:12, color:txt2, marginBottom:8, fontWeight:600 }}>📄 Top Pages</div>
+                  {data.pages.slice(0,8).map((r,i) => (
+                    <div key={i} style={{ display:"flex", justifyContent:"space-between", padding:"7px 0", borderBottom:`1px solid ${bdr}33`, fontSize:12 }}>
+                      <span style={{ color:txt, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:"65%" }}>{r.keys[0].replace(/^https?:\/\/[^/]+/,"")||"/"}</span>
+                      <span style={{ color:"#0891B2", fontWeight:600, flexShrink:0 }}>{r.clicks} clicks</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Queries */}
           {activeTab==="queries" && (
             <div style={s.card}>
-              <div style={{ fontSize:13, fontWeight:600, color:txt, marginBottom:12 }}>Top 10 Keywords</div>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+                <div style={{ fontSize:13, fontWeight:600, color:txt }}>Top Keywords (20)</div>
+                <button onClick={exportAllCSV} style={{ padding:"4px 12px", borderRadius:6, border:`1px solid #059669aa`, background:"#05966911", color:"#059669", fontSize:11, cursor:"pointer" }}>⬇️ CSV</button>
+              </div>
               <table style={s.table}>
                 <thead><tr>
-                  <th style={s.th}>Keyword</th>
-                  <th style={s.th}>Clicks</th>
-                  <th style={s.th}>Impressions</th>
-                  <th style={s.th}>CTR</th>
-                  <th style={s.th}>Position</th>
+                  {["Keyword","Clicks","Impressions","CTR","Position"].map(h=><th key={h} style={s.th}>{h}</th>)}
                 </tr></thead>
                 <tbody>
                   {data.queries.map((r,i) => (
                     <tr key={i}>
                       <td style={s.td}>
                         <div style={{ fontWeight:500 }}>{r.keys[0]}</div>
-                        <div style={s.bar((r.clicks/maxClicks)*100,"#7C3AED")}>
-                          <div style={s.barFill((r.clicks/maxClicks)*100,"#7C3AED")} />
-                        </div>
+                        <div style={s.bar}><div style={s.barFill((r.clicks/maxClicks)*100)} /></div>
                       </td>
                       <td style={{ ...s.td, color:"#7C3AED", fontWeight:600 }}>{r.clicks}</td>
                       <td style={s.td}>{r.impressions.toLocaleString()}</td>
-                      <td style={{ ...s.td, color: r.ctr>0.05?"#059669":"#D97706" }}>{(r.ctr*100).toFixed(1)}%</td>
-                      <td style={{ ...s.td, color: r.position<=3?"#059669":r.position<=10?"#D97706":"#DC2626", fontWeight:600 }}>#{r.position.toFixed(0)}</td>
+                      <td style={{ ...s.td, color:ctrColor(r.ctr) }}>{(r.ctr*100).toFixed(1)}%</td>
+                      <td style={{ ...s.td, color:posColor(r.position), fontWeight:600 }}>#{r.position.toFixed(0)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -162,27 +243,23 @@ export default function GscDashboard({ dark, googleKey }) {
           {/* Pages */}
           {activeTab==="pages" && (
             <div style={s.card}>
-              <div style={{ fontSize:13, fontWeight:600, color:txt, marginBottom:12 }}>Top 10 Pages</div>
+              <div style={{ fontSize:13, fontWeight:600, color:txt, marginBottom:12 }}>Top Pages (20)</div>
               <table style={s.table}>
                 <thead><tr>
-                  <th style={s.th}>Page</th>
-                  <th style={s.th}>Clicks</th>
-                  <th style={s.th}>Impressions</th>
-                  <th style={s.th}>CTR</th>
-                  <th style={s.th}>Position</th>
+                  {["Page","Clicks","Impressions","CTR","Position"].map(h=><th key={h} style={s.th}>{h}</th>)}
                 </tr></thead>
                 <tbody>
                   {data.pages.map((r,i) => (
                     <tr key={i}>
                       <td style={s.td}>
-                        <div style={{ fontSize:11, color:txt2, maxWidth:300, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                        <div style={{ fontSize:11, color:txt2, maxWidth:320, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
                           {r.keys[0].replace(/^https?:\/\/[^/]+/,"")||"/"}
                         </div>
                       </td>
                       <td style={{ ...s.td, color:"#7C3AED", fontWeight:600 }}>{r.clicks}</td>
                       <td style={s.td}>{r.impressions.toLocaleString()}</td>
-                      <td style={{ ...s.td, color: r.ctr>0.05?"#059669":"#D97706" }}>{(r.ctr*100).toFixed(1)}%</td>
-                      <td style={{ ...s.td, color: r.position<=3?"#059669":r.position<=10?"#D97706":"#DC2626", fontWeight:600 }}>#{r.position.toFixed(0)}</td>
+                      <td style={{ ...s.td, color:ctrColor(r.ctr) }}>{(r.ctr*100).toFixed(1)}%</td>
+                      <td style={{ ...s.td, color:posColor(r.position), fontWeight:600 }}>#{r.position.toFixed(0)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -196,10 +273,7 @@ export default function GscDashboard({ dark, googleKey }) {
               <div style={{ fontSize:13, fontWeight:600, color:txt, marginBottom:12 }}>Top Countries</div>
               <table style={s.table}>
                 <thead><tr>
-                  <th style={s.th}>Country</th>
-                  <th style={s.th}>Clicks</th>
-                  <th style={s.th}>Impressions</th>
-                  <th style={s.th}>CTR</th>
+                  {["Country","Clicks","Impressions","CTR","Position"].map(h=><th key={h} style={s.th}>{h}</th>)}
                 </tr></thead>
                 <tbody>
                   {data.countries.map((r,i) => (
@@ -207,7 +281,8 @@ export default function GscDashboard({ dark, googleKey }) {
                       <td style={{ ...s.td, fontWeight:500, textTransform:"uppercase" }}>{r.keys[0]}</td>
                       <td style={{ ...s.td, color:"#7C3AED", fontWeight:600 }}>{r.clicks}</td>
                       <td style={s.td}>{r.impressions.toLocaleString()}</td>
-                      <td style={s.td}>{(r.ctr*100).toFixed(1)}%</td>
+                      <td style={{ ...s.td, color:ctrColor(r.ctr) }}>{(r.ctr*100).toFixed(1)}%</td>
+                      <td style={{ ...s.td, color:posColor(r.position), fontWeight:600 }}>#{r.position.toFixed(0)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -215,29 +290,40 @@ export default function GscDashboard({ dark, googleKey }) {
             </div>
           )}
 
-          {/* Overview */}
-          {activeTab==="overview" && (
+          {/* Devices */}
+          {activeTab==="devices" && (
             <div style={s.card}>
-              <div style={{ fontSize:13, fontWeight:600, color:txt, marginBottom:12 }}>Performance Overview</div>
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
-                <div>
-                  <div style={{ fontSize:12, color:txt2, marginBottom:8 }}>🔍 Top Keywords</div>
-                  {data.queries.slice(0,5).map((r,i) => (
-                    <div key={i} style={{ display:"flex", justifyContent:"space-between", padding:"6px 0", borderBottom:`1px solid ${bdr}33`, fontSize:12 }}>
-                      <span style={{ color:txt, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:"70%" }}>{r.keys[0]}</span>
-                      <span style={{ color:"#7C3AED", fontWeight:600, flexShrink:0 }}>{r.clicks} clicks</span>
+              <div style={{ fontSize:13, fontWeight:600, color:txt, marginBottom:12 }}>Device Breakdown</div>
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:12 }}>
+                {data.devices.map((r,i) => {
+                  const icons = { mobile:"📱", desktop:"🖥️", tablet:"📟" };
+                  const colors = { mobile:"#7C3AED", desktop:"#0891B2", tablet:"#059669" };
+                  const dev = r.keys[0];
+                  return (
+                    <div key={i} style={{ background:bg3, border:`1px solid ${bdr}`, borderRadius:10, padding:16, textAlign:"center" }}>
+                      <div style={{ fontSize:28, marginBottom:8 }}>{icons[dev]||"📱"}</div>
+                      <div style={{ fontSize:13, fontWeight:600, color:txt, textTransform:"capitalize", marginBottom:12 }}>{dev}</div>
+                      <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                        <div style={{ display:"flex", justifyContent:"space-between", fontSize:12 }}>
+                          <span style={{ color:txt2 }}>Clicks</span>
+                          <span style={{ color:colors[dev]||"#7C3AED", fontWeight:600 }}>{r.clicks}</span>
+                        </div>
+                        <div style={{ display:"flex", justifyContent:"space-between", fontSize:12 }}>
+                          <span style={{ color:txt2 }}>Impressions</span>
+                          <span style={{ color:txt, fontWeight:600 }}>{r.impressions.toLocaleString()}</span>
+                        </div>
+                        <div style={{ display:"flex", justifyContent:"space-between", fontSize:12 }}>
+                          <span style={{ color:txt2 }}>CTR</span>
+                          <span style={{ color:ctrColor(r.ctr) }}>{(r.ctr*100).toFixed(1)}%</span>
+                        </div>
+                        <div style={{ display:"flex", justifyContent:"space-between", fontSize:12 }}>
+                          <span style={{ color:txt2 }}>Position</span>
+                          <span style={{ color:posColor(r.position), fontWeight:600 }}>#{r.position.toFixed(0)}</span>
+                        </div>
+                      </div>
                     </div>
-                  ))}
-                </div>
-                <div>
-                  <div style={{ fontSize:12, color:txt2, marginBottom:8 }}>📄 Top Pages</div>
-                  {data.pages.slice(0,5).map((r,i) => (
-                    <div key={i} style={{ display:"flex", justifyContent:"space-between", padding:"6px 0", borderBottom:`1px solid ${bdr}33`, fontSize:12 }}>
-                      <span style={{ color:txt, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:"70%" }}>{r.keys[0].replace(/^https?:\/\/[^/]+/,"")||"/"}</span>
-                      <span style={{ color:"#0891B2", fontWeight:600, flexShrink:0 }}>{r.clicks} clicks</span>
-                    </div>
-                  ))}
-                </div>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -247,8 +333,8 @@ export default function GscDashboard({ dark, googleKey }) {
       {!data && !loading && !error && (
         <div style={{ textAlign:"center", padding:60, color:txt3 }}>
           <div style={{ fontSize:40, marginBottom:12 }}>📊</div>
-          <div style={{ fontSize:15, color:txt2, marginBottom:8 }}>Enter your site URL above to fetch GSC data</div>
-          <div style={{ fontSize:12, color:txt3 }}>Shows last 28 days of search performance data</div>
+          <div style={{ fontSize:15, color:txt2, marginBottom:8 }}>Enter your site URL above to fetch real GSC data</div>
+          <div style={{ fontSize:12, color:txt3 }}>Clicks · Impressions · CTR · Position · Device breakdown · CSV export</div>
         </div>
       )}
     </div>
