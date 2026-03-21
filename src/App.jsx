@@ -4,6 +4,7 @@ import Dashboard from "./Dashboard";
 import History from "./History";
 import Markdown from "./Markdown";
 import GscDashboard from "./GscDashboard";
+import SiteAudit from "./SiteAudit";
 
 export default function App() {
   const [tool, setTool]       = useState(null);
@@ -20,7 +21,7 @@ export default function App() {
   const [keys, setKeys]       = useState({ groq:"", gemini:"", google:"" });
   const [tmpKeys, setTmpKeys] = useState({ groq:"", gemini:"", google:"" });
   const [copied, setCopied]   = useState(null);
-  const [bulkInput, setBulkInput] = useState("");
+  const [bulkInput, setBulkInput]   = useState("");
   const [bulkResults, setBulkResults] = useState([]);
   const [bulkLoading, setBulkLoading] = useState(false);
   const bottomRef = useRef(null);
@@ -121,7 +122,7 @@ export default function App() {
     setBulkLoading(true);
     setBulkResults([]);
     for (const kw of keywords.slice(0, 10)) {
-      const prompt = `Analyze this SEO keyword in 3 lines max: "${kw}". Give: 1) Search intent (1 word) 2) Difficulty (Low/Med/High) 3) One content angle. Format: Intent: X | Difficulty: X | Angle: X`;
+      const prompt = `Analyze this SEO keyword: "${kw}". Give: 1) Search intent (1 word) 2) Difficulty (Low/Med/High) 3) One content angle. Format: Intent: X | Difficulty: X | Angle: X`;
       const result = await callAI(prompt);
       setBulkResults(r => [...r, { keyword: kw, result: result || "Error" }]);
     }
@@ -140,7 +141,7 @@ export default function App() {
       const score = (d, k) => Math.round((d.lighthouseResult?.categories?.[k]?.score || 0) * 100);
       const val   = (d, k) => d.lighthouseResult?.audits?.[k]?.displayValue || "N/A";
       const grade = s => s >= 90 ? "✅ Good" : s >= 50 ? "⚠️ Needs Work" : "❌ Poor";
-      const text = `## ⚡ Page Speed Report\n\n**URL:** ${url}\n\n### 📱 Mobile Scores\n- **Performance:** ${score(mob,"performance")}/100 ${grade(score(mob,"performance"))}\n- **SEO:** ${score(mob,"seo")}/100 ${grade(score(mob,"seo"))}\n- **Accessibility:** ${score(mob,"accessibility")}/100 ${grade(score(mob,"accessibility"))}\n- **Best Practices:** ${score(mob,"best-practices")}/100 ${grade(score(mob,"best-practices"))}\n\n### 🖥️ Desktop Scores\n- **Performance:** ${score(desk,"performance")}/100 ${grade(score(desk,"performance"))}\n- **SEO:** ${score(desk,"seo")}/100 ${grade(score(desk,"seo"))}\n- **Accessibility:** ${score(desk,"accessibility")}/100 ${grade(score(desk,"accessibility"))}\n- **Best Practices:** ${score(desk,"best-practices")}/100 ${grade(score(desk,"best-practices"))}\n\n### 📊 Core Web Vitals (Mobile)\n- **LCP:** ${val(mob,"largest-contentful-paint")} *(target: <2.5s)*\n- **TBT:** ${val(mob,"total-blocking-time")} *(target: <100ms)*\n- **CLS:** ${val(mob,"cumulative-layout-shift")} *(target: <0.1)*\n- **FCP:** ${val(mob,"first-contentful-paint")}\n- **TTFB:** ${val(mob,"server-response-time")}`;
+      const text = `## ⚡ Page Speed Report\n\n**URL:** ${url}\n\n### 📱 Mobile\n- **Performance:** ${score(mob,"performance")}/100 ${grade(score(mob,"performance"))}\n- **SEO:** ${score(mob,"seo")}/100 ${grade(score(mob,"seo"))}\n- **Accessibility:** ${score(mob,"accessibility")}/100\n- **Best Practices:** ${score(mob,"best-practices")}/100\n\n### 🖥️ Desktop\n- **Performance:** ${score(desk,"performance")}/100 ${grade(score(desk,"performance"))}\n- **SEO:** ${score(desk,"seo")}/100\n\n### 📊 Core Web Vitals\n- **LCP:** ${val(mob,"largest-contentful-paint")} *(target: <2.5s)*\n- **TBT:** ${val(mob,"total-blocking-time")} *(target: <100ms)*\n- **CLS:** ${val(mob,"cumulative-layout-shift")} *(target: <0.1)*\n- **FCP:** ${val(mob,"first-contentful-paint")}\n- **TTFB:** ${val(mob,"server-response-time")}`;
       addMsg(tool.id, { role: "assistant", text });
       const nc = count + 1; setCount(nc); localStorage.setItem("seo_count", nc);
     } catch(e) { addMsg(tool.id, { role: "assistant", text: "Error: " + e.message }); }
@@ -188,9 +189,9 @@ export default function App() {
     saveBtn:{ width:"100%", padding:11, borderRadius:8, border:"none", background:"#7C3AED", color:"#fff", fontWeight:600, fontSize:14, cursor:"pointer", marginTop:16 },
   };
 
-  const pages = { dashboard:"🏠 Dashboard", history:"📚 History", bulk:"📊 Bulk Keywords", gsc:"📈 Search Console" };
+  const pages = { dashboard:"🏠 Dashboard", history:"📚 History", bulk:"📊 Bulk Keywords", gsc:"📈 Search Console", audit:"🏥 Site Audit" };
   const headerTitle = page==="tool" && tool ? `${tool.icon} ${tool.label}` : pages[page] || "🏠 Dashboard";
-  const headerSub   = page==="dashboard" ? `${TOOLS.length} tools · ${count} analyses` : page==="history" ? `${totalHistory} saved` : page==="bulk" ? "Analyze up to 10 keywords" : page==="gsc" ? "Last 28 days GSC data" : tool ? `${tool.cat} · ${curMsgs.filter(m=>m.role==="user").length} queries` : "";
+  const headerSub   = page==="dashboard" ? `${TOOLS.length} tools · ${count} analyses` : page==="history" ? `${totalHistory} saved` : page==="bulk" ? "Analyze up to 10 keywords" : page==="gsc" ? "Last 28 days GSC data" : page==="audit" ? "Technical SEO + AI insights" : tool ? `${tool.cat} · ${curMsgs.filter(m=>m.role==="user").length} queries` : "";
 
   return (
     <div style={s.app}>
@@ -200,18 +201,16 @@ export default function App() {
           <div style={s.badge}>S</div>
           <div style={{ flex:1 }}>
             <div style={{ fontSize:13, fontWeight:700, color:txt }}>SEO Agent</div>
-            <div style={{ fontSize:10, color:txt3 }}>v7.0 · {TOOLS.length} tools</div>
+            <div style={{ fontSize:10, color:txt3 }}>v8.0 · {TOOLS.length} tools</div>
           </div>
         </div>
         <div style={s.nav}>
           <div style={{ padding:"6px 4px 2px" }}>
             <div onClick={()=>setPage("dashboard")} style={s.navItem(page==="dashboard","#7C3AED")}>🏠 <span>Dashboard</span></div>
-            <div onClick={()=>setPage("gsc")} style={s.navItem(page==="gsc","#059669")}>
-              📈 <span>Search Console</span>
-              {!keys.google && <span style={{ fontSize:9, background:"#DC262611", color:"#DC2626", padding:"1px 5px", borderRadius:4, marginLeft:"auto" }}>Setup</span>}
-            </div>
-            <div onClick={()=>setPage("bulk")} style={s.navItem(page==="bulk","#0891B2")}>📊 <span>Bulk Keywords</span></div>
-            <div onClick={()=>setPage("history")} style={s.navItem(page==="history","#D97706")}>
+            <div onClick={()=>setPage("gsc")}       style={s.navItem(page==="gsc","#059669")}>📈 <span>Search Console</span></div>
+            <div onClick={()=>setPage("audit")}     style={s.navItem(page==="audit","#DC2626")}>🏥 <span>Site Audit</span></div>
+            <div onClick={()=>setPage("bulk")}      style={s.navItem(page==="bulk","#0891B2")}>📊 <span>Bulk Keywords</span></div>
+            <div onClick={()=>setPage("history")}   style={s.navItem(page==="history","#D97706")}>
               📚 <span>History</span>
               {totalHistory>0 && <span style={{ marginLeft:"auto", fontSize:10, background:"#D9770622", color:"#D97706", padding:"1px 6px", borderRadius:10, flexShrink:0 }}>{totalHistory}</span>}
             </div>
@@ -275,6 +274,7 @@ export default function App() {
         {/* Pages */}
         {page==="dashboard" && <Dashboard onToolSelect={selectTool} count={count} keys={keys} dark={dark} />}
         {page==="gsc"       && <GscDashboard dark={dark} googleKey={keys.google} />}
+        {page==="audit"     && <SiteAudit dark={dark} googleKey={keys.google} groqKey={keys.groq} geminiKey={keys.gemini} model={model} />}
         {page==="history"   && <History msgs={msgs} onToolSelect={selectTool} dark={dark} />}
 
         {/* Bulk */}
@@ -373,12 +373,12 @@ export default function App() {
         <div style={s.overlay} onClick={()=>setShowSettings(false)}>
           <div style={s.modal} onClick={e=>e.stopPropagation()}>
             <div style={{ fontWeight:700, fontSize:17, color:txt }}>⚙️ API Keys</div>
-            <div style={{ fontSize:12, color:txt2, marginTop:4 }}>Saved in browser — persist across sessions</div>
+            <div style={{ fontSize:12, color:txt2, marginTop:4 }}>Saved in browser · persist across sessions</div>
             <label style={s.label}>Groq API Key (gsk_...)</label>
             <input type="password" value={tmpKeys.groq} onChange={e=>setTmpKeys(k=>({...k,groq:e.target.value}))} placeholder="gsk_xxxxxxxxxxxx" style={s.inp} />
             <label style={s.label}>Gemini API Key (AIza...)</label>
             <input type="password" value={tmpKeys.gemini} onChange={e=>setTmpKeys(k=>({...k,gemini:e.target.value}))} placeholder="AIzaxxxxxxxxxx" style={s.inp} />
-            <label style={s.label}>Google APIs Key — PageSpeed + GSC</label>
+            <label style={s.label}>Google APIs Key — PageSpeed + GSC + Audit</label>
             <input type="password" value={tmpKeys.google} onChange={e=>setTmpKeys(k=>({...k,google:e.target.value}))} placeholder="AIzaxxxxxxxxxx" style={s.inp} />
             <button onClick={saveKeys} style={s.saveBtn}>💾 Save Keys</button>
             <div style={{ fontSize:11, color:txt3, marginTop:10, textAlign:"center" }}>
