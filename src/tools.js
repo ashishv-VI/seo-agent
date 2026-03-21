@@ -459,7 +459,10 @@ Be comprehensive and specific.`},
 
 export const CATS = ["All","Content","Technical","Research","GEO","Local","Backlinks","Tools"];
 
+// ── UPDATED: 4 models — Groq, Gemini, DeepSeek (free), Mistral (free) ──
 export const MODELS = {
-  groq:   { name:"Groq",   color:"#F97316" },
-  gemini: { name:"Gemini", color:"#2563EB" },
+  groq:     { name:"Groq",     color:"#F97316" },
+  gemini:   { name:"Gemini",   color:"#2563EB" },
+  deepseek: { name:"DeepSeek", color:"#22C55E" },
+  mistral:  { name:"Mistral",  color:"#A855F7" },
 };

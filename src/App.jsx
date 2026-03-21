@@ -24,8 +24,8 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [count, setCount]     = useState(0);
   const [dark, setDark]       = useState(true);
-  const [keys, setKeys]       = useState({ groq:"", gemini:"", google:"" });
-  const [tmpKeys, setTmpKeys] = useState({ groq:"", gemini:"", google:"" });
+  const [keys, setKeys]       = useState({ groq:"", gemini:"", google:"", openrouter:"" });
+  const [tmpKeys, setTmpKeys] = useState({ groq:"", gemini:"", google:"", openrouter:"" });
   const [copied, setCopied]   = useState(null);
   const [bulkInput, setBulkInput]     = useState("");
   const [bulkResults, setBulkResults] = useState([]);
@@ -96,31 +96,53 @@ export default function App() {
   }
 
   async function callAI(prompt) {
-    const key = model === "groq" ? keys.groq : keys.gemini;
-    if (!key) return null;
     if (model === "groq") {
+      if (!keys.groq) return null;
       const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${keys.groq}` },
         body: JSON.stringify({ model: "llama-3.1-8b-instant", max_tokens: 2000, messages: [{ role: "user", content: prompt }] })
       });
       const d = await res.json();
       return d.choices?.[0]?.message?.content || null;
-    } else {
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`, {
+
+    } else if (model === "gemini") {
+      if (!keys.gemini) return null;
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${keys.gemini}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
       });
       const d = await res.json();
       return d.candidates?.[0]?.content?.parts?.[0]?.text || null;
+
+    } else if (model === "deepseek") {
+      if (!keys.openrouter) return null;
+      const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${keys.openrouter}` },
+        body: JSON.stringify({ model: "deepseek/deepseek-r1:free", max_tokens: 2000, messages: [{ role: "user", content: prompt }] })
+      });
+      const d = await res.json();
+      return d.choices?.[0]?.message?.content || null;
+
+    } else if (model === "mistral") {
+      if (!keys.openrouter) return null;
+      const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${keys.openrouter}` },
+        body: JSON.stringify({ model: "mistralai/mistral-7b-instruct:free", max_tokens: 2000, messages: [{ role: "user", content: prompt }] })
+      });
+      const d = await res.json();
+      return d.choices?.[0]?.message?.content || null;
     }
+    return null;
   }
 
   async function runBulkKeywords() {
     const keywords = bulkInput.split("\n").map(k => k.trim()).filter(Boolean);
     if (!keywords.length) return;
-    if (!keys.groq && !keys.gemini) { setShowSettings(true); return; }
+    if (!keys.groq && !keys.gemini && !keys.openrouter) { setShowSettings(true); return; }
     setBulkLoading(true); setBulkResults([]);
     for (const kw of keywords.slice(0, 10)) {
       const prompt = `Analyze this SEO keyword: "${kw}". Give: 1) Search intent (1 word) 2) Difficulty (Low/Med/High) 3) One content angle. Format: Intent: X | Difficulty: X | Angle: X`;
@@ -153,13 +175,13 @@ export default function App() {
     const q = input.trim();
     if (!q || loading || !tool) return;
     if (tool.isApi && tool.apiType === "pagespeed") { runPageSpeed(q); return; }
-    const key = model === "groq" ? keys.groq : keys.gemini;
-    if (!key) { setShowSettings(true); return; }
+    const hasKey = keys.groq || keys.gemini || keys.openrouter;
+    if (!hasKey) { setShowSettings(true); return; }
     addMsg(tool.id, { role: "user", text: q });
     setInput(""); setLoading(true);
     try {
       const text = await callAI(tool.prompt(q));
-      addMsg(tool.id, { role: "assistant", text: text || "No response." });
+      addMsg(tool.id, { role: "assistant", text: text || "No response. Check your API key in Settings." });
       const nc = count + 1; setCount(nc); localStorage.setItem("seo_count", nc);
     } catch(e) { addMsg(tool.id, { role: "assistant", text: "Error: " + e.message }); }
     setLoading(false);
@@ -203,7 +225,7 @@ export default function App() {
           <div style={s.badge}>S</div>
           <div style={{ flex:1 }}>
             <div style={{ fontSize:13, fontWeight:700, color:txt }}>SEO Agent</div>
-            <div style={{ fontSize:10, color:txt3 }}>v14.0 · {TOOLS.length} tools</div>
+            <div style={{ fontSize:10, color:txt3 }}>v15.0 · {TOOLS.length} tools</div>
           </div>
         </div>
         <div style={s.nav}>
@@ -396,9 +418,11 @@ export default function App() {
             <input type="password" value={tmpKeys.gemini} onChange={e=>setTmpKeys(k=>({...k,gemini:e.target.value}))} placeholder="AIzaxxxxxxxxxx" style={s.inp} />
             <label style={s.label}>Google APIs Key — PageSpeed + GSC + Audit</label>
             <input type="password" value={tmpKeys.google} onChange={e=>setTmpKeys(k=>({...k,google:e.target.value}))} placeholder="AIzaxxxxxxxxxx" style={s.inp} />
+            <label style={s.label}>OpenRouter Key — DeepSeek + Mistral (Free)</label>
+            <input type="password" value={tmpKeys.openrouter} onChange={e=>setTmpKeys(k=>({...k,openrouter:e.target.value}))} placeholder="sk-or-xxxxxxxxxxxx" style={s.inp} />
             <button onClick={saveKeys} style={s.saveBtn}>💾 Save Keys</button>
             <div style={{ fontSize:11, color:txt3, marginTop:10, textAlign:"center" }}>
-              Groq: console.groq.com · Gemini: aistudio.google.com · Google: console.cloud.google.com
+              Groq: console.groq.com · Gemini: aistudio.google.com · OpenRouter: openrouter.ai
             </div>
           </div>
         </div>
