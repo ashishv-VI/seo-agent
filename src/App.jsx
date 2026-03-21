@@ -5,6 +5,7 @@ import History from "./History";
 import Markdown from "./Markdown";
 import GscDashboard from "./GscDashboard";
 import SiteAudit from "./SiteAudit";
+import Compare from "./Compare";
 
 export default function App() {
   const [tool, setTool]       = useState(null);
@@ -21,7 +22,7 @@ export default function App() {
   const [keys, setKeys]       = useState({ groq:"", gemini:"", google:"" });
   const [tmpKeys, setTmpKeys] = useState({ groq:"", gemini:"", google:"" });
   const [copied, setCopied]   = useState(null);
-  const [bulkInput, setBulkInput]   = useState("");
+  const [bulkInput, setBulkInput]     = useState("");
   const [bulkResults, setBulkResults] = useState([]);
   const [bulkLoading, setBulkLoading] = useState(false);
   const bottomRef = useRef(null);
@@ -189,9 +190,9 @@ export default function App() {
     saveBtn:{ width:"100%", padding:11, borderRadius:8, border:"none", background:"#7C3AED", color:"#fff", fontWeight:600, fontSize:14, cursor:"pointer", marginTop:16 },
   };
 
-  const pages = { dashboard:"🏠 Dashboard", history:"📚 History", bulk:"📊 Bulk Keywords", gsc:"📈 Search Console", audit:"🏥 Site Audit" };
-  const headerTitle = page==="tool" && tool ? `${tool.icon} ${tool.label}` : pages[page] || "🏠 Dashboard";
-  const headerSub   = page==="dashboard" ? `${TOOLS.length} tools · ${count} analyses` : page==="history" ? `${totalHistory} saved` : page==="bulk" ? "Analyze up to 10 keywords" : page==="gsc" ? "Last 28 days GSC data" : page==="audit" ? "Technical SEO + AI insights" : tool ? `${tool.cat} · ${curMsgs.filter(m=>m.role==="user").length} queries` : "";
+  const pages = { dashboard:"🏠 Dashboard", history:"📚 History", bulk:"📊 Bulk Keywords", gsc:"📈 Search Console", audit:"🏥 Site Audit", compare:"⚔️ Compare Sites" };
+  const headerTitle = page==="tool"&&tool ? `${tool.icon} ${tool.label}` : pages[page] || "🏠 Dashboard";
+  const headerSub   = { dashboard:`${TOOLS.length} tools · ${count} analyses`, history:`${totalHistory} saved`, bulk:"Analyze up to 10 keywords", gsc:"Last 28 days GSC data", audit:"Technical SEO + AI insights", compare:"Side-by-side site comparison", tool: tool?`${tool.cat} · ${curMsgs.filter(m=>m.role==="user").length} queries`:"" }[page] || "";
 
   return (
     <div style={s.app}>
@@ -201,7 +202,7 @@ export default function App() {
           <div style={s.badge}>S</div>
           <div style={{ flex:1 }}>
             <div style={{ fontSize:13, fontWeight:700, color:txt }}>SEO Agent</div>
-            <div style={{ fontSize:10, color:txt3 }}>v8.0 · {TOOLS.length} tools</div>
+            <div style={{ fontSize:10, color:txt3 }}>v9.0 · {TOOLS.length} tools</div>
           </div>
         </div>
         <div style={s.nav}>
@@ -209,7 +210,8 @@ export default function App() {
             <div onClick={()=>setPage("dashboard")} style={s.navItem(page==="dashboard","#7C3AED")}>🏠 <span>Dashboard</span></div>
             <div onClick={()=>setPage("gsc")}       style={s.navItem(page==="gsc","#059669")}>📈 <span>Search Console</span></div>
             <div onClick={()=>setPage("audit")}     style={s.navItem(page==="audit","#DC2626")}>🏥 <span>Site Audit</span></div>
-            <div onClick={()=>setPage("bulk")}      style={s.navItem(page==="bulk","#0891B2")}>📊 <span>Bulk Keywords</span></div>
+            <div onClick={()=>setPage("compare")}   style={s.navItem(page==="compare","#0891B2")}>⚔️ <span>Compare Sites</span></div>
+            <div onClick={()=>setPage("bulk")}      style={s.navItem(page==="bulk","#CA8A04")}>📊 <span>Bulk Keywords</span></div>
             <div onClick={()=>setPage("history")}   style={s.navItem(page==="history","#D97706")}>
               📚 <span>History</span>
               {totalHistory>0 && <span style={{ marginLeft:"auto", fontSize:10, background:"#D9770622", color:"#D97706", padding:"1px 6px", borderRadius:10, flexShrink:0 }}>{totalHistory}</span>}
@@ -275,6 +277,7 @@ export default function App() {
         {page==="dashboard" && <Dashboard onToolSelect={selectTool} count={count} keys={keys} dark={dark} />}
         {page==="gsc"       && <GscDashboard dark={dark} googleKey={keys.google} />}
         {page==="audit"     && <SiteAudit dark={dark} googleKey={keys.google} groqKey={keys.groq} geminiKey={keys.gemini} model={model} />}
+        {page==="compare"   && <Compare dark={dark} googleKey={keys.google} />}
         {page==="history"   && <History msgs={msgs} onToolSelect={selectTool} dark={dark} />}
 
         {/* Bulk */}
