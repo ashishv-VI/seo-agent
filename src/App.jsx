@@ -6,6 +6,7 @@ import Markdown from "./Markdown";
 import GscDashboard from "./GscDashboard";
 import SiteAudit from "./SiteAudit";
 import Compare from "./Compare";
+import ReportGenerator from "./ReportGenerator";
 
 export default function App() {
   const [tool, setTool]       = useState(null);
@@ -190,9 +191,10 @@ export default function App() {
     saveBtn:{ width:"100%", padding:11, borderRadius:8, border:"none", background:"#7C3AED", color:"#fff", fontWeight:600, fontSize:14, cursor:"pointer", marginTop:16 },
   };
 
-  const pages = { dashboard:"🏠 Dashboard", history:"📚 History", bulk:"📊 Bulk Keywords", gsc:"📈 Search Console", audit:"🏥 Site Audit", compare:"⚔️ Compare Sites" };
-  const headerTitle = page==="tool"&&tool ? `${tool.icon} ${tool.label}` : pages[page] || "🏠 Dashboard";
-  const headerSub   = { dashboard:`${TOOLS.length} tools · ${count} analyses`, history:`${totalHistory} saved`, bulk:"Analyze up to 10 keywords", gsc:"Last 28 days GSC data", audit:"Technical SEO + AI insights", compare:"Side-by-side site comparison", tool: tool?`${tool.cat} · ${curMsgs.filter(m=>m.role==="user").length} queries`:"" }[page] || "";
+  const pageLabels = { dashboard:"🏠 Dashboard", history:"📚 History", bulk:"📊 Bulk Keywords", gsc:"📈 Search Console", audit:"🏥 Site Audit", compare:"⚔️ Compare Sites", report:"📄 Report Generator" };
+  const headerTitle = page==="tool"&&tool ? `${tool.icon} ${tool.label}` : pageLabels[page] || "🏠 Dashboard";
+  const headerSubs  = { dashboard:`${TOOLS.length} tools · ${count} analyses`, history:`${totalHistory} saved`, bulk:"10 keywords at once", gsc:"Last 28 days", audit:"Technical SEO + AI", compare:"Side-by-side", report:"Client-ready reports" };
+  const headerSub   = page==="tool"&&tool ? `${tool.cat} · ${curMsgs.filter(m=>m.role==="user").length} queries` : headerSubs[page] || "";
 
   return (
     <div style={s.app}>
@@ -202,26 +204,29 @@ export default function App() {
           <div style={s.badge}>S</div>
           <div style={{ flex:1 }}>
             <div style={{ fontSize:13, fontWeight:700, color:txt }}>SEO Agent</div>
-            <div style={{ fontSize:10, color:txt3 }}>v9.0 · {TOOLS.length} tools</div>
+            <div style={{ fontSize:10, color:txt3 }}>v10.0 · {TOOLS.length} tools</div>
           </div>
         </div>
         <div style={s.nav}>
+          {/* Main pages */}
           <div style={{ padding:"6px 4px 2px" }}>
+            <div style={s.secLabel}>Pages</div>
             <div onClick={()=>setPage("dashboard")} style={s.navItem(page==="dashboard","#7C3AED")}>🏠 <span>Dashboard</span></div>
             <div onClick={()=>setPage("gsc")}       style={s.navItem(page==="gsc","#059669")}>📈 <span>Search Console</span></div>
             <div onClick={()=>setPage("audit")}     style={s.navItem(page==="audit","#DC2626")}>🏥 <span>Site Audit</span></div>
             <div onClick={()=>setPage("compare")}   style={s.navItem(page==="compare","#0891B2")}>⚔️ <span>Compare Sites</span></div>
             <div onClick={()=>setPage("bulk")}      style={s.navItem(page==="bulk","#CA8A04")}>📊 <span>Bulk Keywords</span></div>
+            <div onClick={()=>setPage("report")}    style={s.navItem(page==="report","#9333EA")}>📄 <span>Report Generator</span></div>
             <div onClick={()=>setPage("history")}   style={s.navItem(page==="history","#D97706")}>
               📚 <span>History</span>
               {totalHistory>0 && <span style={{ marginLeft:"auto", fontSize:10, background:"#D9770622", color:"#D97706", padding:"1px 6px", borderRadius:10, flexShrink:0 }}>{totalHistory}</span>}
             </div>
           </div>
 
+          {/* AI Tools */}
           <div style={s.catRow}>
             {CATS.map(c => <div key={c} style={s.catBtn(cat===c)} onClick={()=>setCat(c)}>{c}</div>)}
           </div>
-
           {catGroups.map(c => (
             <div key={c}>
               <div style={s.secLabel}>{c}</div>
@@ -236,6 +241,8 @@ export default function App() {
             </div>
           ))}
         </div>
+
+        {/* Footer */}
         <div style={{ padding:8, borderTop:`1px solid ${bdr}`, flexShrink:0 }}>
           <div style={{ padding:"6px 8px", fontSize:11, color:txt3, display:"flex", justifyContent:"space-between" }}>
             <span>Total analyses</span>
@@ -249,6 +256,7 @@ export default function App() {
 
       {/* Main */}
       <div style={s.main}>
+        {/* Header */}
         <div style={s.header}>
           <div style={{ display:"flex", alignItems:"center", gap:10 }}>
             <button onClick={()=>setSideOpen(o=>!o)} style={{ background:"none", border:"none", color:txt2, cursor:"pointer", fontSize:18, padding:"2px 6px", lineHeight:1 }}>☰</button>
@@ -278,6 +286,7 @@ export default function App() {
         {page==="gsc"       && <GscDashboard dark={dark} googleKey={keys.google} />}
         {page==="audit"     && <SiteAudit dark={dark} googleKey={keys.google} groqKey={keys.groq} geminiKey={keys.gemini} model={model} />}
         {page==="compare"   && <Compare dark={dark} googleKey={keys.google} />}
+        {page==="report"    && <ReportGenerator dark={dark} keys={keys} model={model} msgs={msgs} />}
         {page==="history"   && <History msgs={msgs} onToolSelect={selectTool} dark={dark} />}
 
         {/* Bulk */}
@@ -312,7 +321,7 @@ export default function App() {
           </div>
         )}
 
-        {/* Tool */}
+        {/* Tool Chat */}
         {page==="tool" && tool && (
           <>
             <div style={s.msgs}>
@@ -321,8 +330,8 @@ export default function App() {
                   <div style={{ fontSize:44, marginBottom:14 }}>{tool.icon}</div>
                   <div style={{ fontSize:17, fontWeight:700, color:txt, marginBottom:8 }}>{tool.label}</div>
                   <div style={{ fontSize:13, color:txt2, marginBottom:20 }}>{tool.ph}</div>
-                  {tool.cat==="GEO" && <div style={{ fontSize:11, color:"#0F766E", background:"#0F766E11", border:"1px solid #0F766E33", borderRadius:8, padding:"6px 14px", display:"inline-block", marginBottom:16 }}>🌐 2026 Feature</div>}
-                  {tool.isApi && <div style={{ fontSize:11, color:"#D97706", background:"#D9770611", border:"1px solid #D9770633", borderRadius:8, padding:"6px 14px", display:"inline-block", marginBottom:16 }}>⚡ Requires Google API Key</div>}
+                  {tool.cat==="GEO" && <div style={{ fontSize:11, color:"#0F766E", background:"#0F766E11", border:"1px solid #0F766E33", borderRadius:8, padding:"6px 14px", display:"inline-block", marginBottom:16 }}>🌐 2026 Feature — AI Search Visibility</div>}
+                  {tool.isApi && <div style={{ fontSize:11, color:"#D97706", background:"#D9770611", border:"1px solid #D9770633", borderRadius:8, padding:"6px 14px", display:"inline-block", marginBottom:16 }}>⚡ Requires Google API Key in Settings</div>}
                   <div style={{ display:"flex", flexWrap:"wrap", gap:8, justifyContent:"center" }}>
                     {["digital marketing agency","e-commerce store","SaaS tool","local restaurant"].map(ex => (
                       <div key={ex} onClick={()=>setInput(ex)} style={{ padding:"6px 14px", borderRadius:20, border:`1px solid ${bdr}`, color:txt2, fontSize:12, cursor:"pointer" }}>{ex}</div>
