@@ -10,6 +10,7 @@ import ReportGenerator from "./ReportGenerator";
 import RankTracker from "./RankTracker";
 import ContentCalendar from "./ContentCalendar";
 import SeoChecklist from "./SeoChecklist";
+import AiWriter from "./AiWriter";
 
 export default function App() {
   const [tool, setTool]       = useState(null);
@@ -189,8 +190,8 @@ export default function App() {
     saveBtn:{ width:"100%", padding:11, borderRadius:8, border:"none", background:"#7C3AED", color:"#fff", fontWeight:600, fontSize:14, cursor:"pointer", marginTop:16 },
   };
 
-  const pageLabels = { dashboard:"🏠 Dashboard", history:"📚 History", bulk:"📊 Bulk Keywords", gsc:"📈 Search Console", audit:"🏥 Site Audit", compare:"⚔️ Compare Sites", report:"📄 Report Generator", ranktracker:"📡 Rank Tracker", calendar:"📅 Content Calendar", checklist:"✅ SEO Checklist" };
-  const headerSubs  = { dashboard:`${TOOLS.length} tools · ${count} analyses`, history:`${totalHistory} saved`, bulk:"10 keywords at once", gsc:"Last 28 days", audit:"Technical SEO + AI", compare:"Side-by-side", report:"Client-ready reports", ranktracker:"AI rank analysis", calendar:"Plan your content", checklist:"48 items · 7 categories" };
+  const pageLabels = { dashboard:"🏠 Dashboard", history:"📚 History", bulk:"📊 Bulk Keywords", gsc:"📈 Search Console", audit:"🏥 Site Audit", compare:"⚔️ Compare Sites", report:"📄 Report Generator", ranktracker:"📡 Rank Tracker", calendar:"📅 Content Calendar", checklist:"✅ SEO Checklist", writer:"✍️ AI Writer" };
+  const headerSubs  = { dashboard:`${TOOLS.length} tools · ${count} analyses`, history:`${totalHistory} saved`, bulk:"10 keywords at once", gsc:"Last 28 days", audit:"Technical SEO + AI", compare:"Side-by-side", report:"Client-ready reports", ranktracker:"AI rank analysis", calendar:"Plan your content", checklist:"48 items · 7 categories", writer:"12 content templates" };
   const headerTitle = page==="tool"&&tool ? `${tool.icon} ${tool.label}` : pageLabels[page] || "🏠 Dashboard";
   const headerSub   = page==="tool"&&tool ? `${tool.cat} · ${curMsgs.filter(m=>m.role==="user").length} queries` : headerSubs[page] || "";
 
@@ -202,13 +203,14 @@ export default function App() {
           <div style={s.badge}>S</div>
           <div style={{ flex:1 }}>
             <div style={{ fontSize:13, fontWeight:700, color:txt }}>SEO Agent</div>
-            <div style={{ fontSize:10, color:txt3 }}>v13.0 · {TOOLS.length} tools</div>
+            <div style={{ fontSize:10, color:txt3 }}>v14.0 · {TOOLS.length} tools</div>
           </div>
         </div>
         <div style={s.nav}>
           <div style={{ padding:"6px 4px 2px" }}>
             <div style={s.secLabel}>Pages</div>
             <div onClick={()=>setPage("dashboard")}   style={s.navItem(page==="dashboard","#7C3AED")}>🏠 <span>Dashboard</span></div>
+            <div onClick={()=>setPage("writer")}      style={s.navItem(page==="writer","#7C3AED")}>✍️ <span>AI Writer</span></div>
             <div onClick={()=>setPage("gsc")}         style={s.navItem(page==="gsc","#059669")}>📈 <span>Search Console</span></div>
             <div onClick={()=>setPage("audit")}       style={s.navItem(page==="audit","#DC2626")}>🏥 <span>Site Audit</span></div>
             <div onClick={()=>setPage("compare")}     style={s.navItem(page==="compare","#0891B2")}>⚔️ <span>Compare Sites</span></div>
@@ -281,6 +283,7 @@ export default function App() {
 
         {/* Pages */}
         {page==="dashboard"   && <Dashboard onToolSelect={selectTool} count={count} keys={keys} dark={dark} />}
+        {page==="writer"      && <AiWriter dark={dark} keys={keys} model={model} />}
         {page==="gsc"         && <GscDashboard dark={dark} googleKey={keys.google} />}
         {page==="audit"       && <SiteAudit dark={dark} googleKey={keys.google} groqKey={keys.groq} geminiKey={keys.gemini} model={model} />}
         {page==="compare"     && <Compare dark={dark} googleKey={keys.google} />}
