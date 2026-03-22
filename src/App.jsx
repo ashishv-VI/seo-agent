@@ -15,6 +15,14 @@ import AiWriter from "./AiWriter";
 import BrandTracker from "./BrandTracker";
 import LocationKeywords from "./LocationKeywords";
 import AEO from "./AEO";
+import AIMode from "./AIMode";
+import MetaPreview from "./MetaPreview";
+import SerpSimulator from "./SerpSimulator";
+import PromptToContent from "./PromptToContent";
+import CompetitorGap from "./CompetitorGap";
+import ReadabilityChecker from "./ReadabilityChecker";
+import BacklinkAnalyzer from "./BacklinkAnalyzer";
+import SitemapGenerator from "./SitemapGenerator";
 
 export default function App() {
   const [tool, setTool]       = useState(null);
@@ -189,64 +197,131 @@ export default function App() {
   }
 
   const s = {
-    app:    { fontFamily:"Inter,system-ui,sans-serif", display:"flex", height:"100vh", background:bg, color:txt, overflow:"hidden" },
-    side:   { width:sideOpen?240:0, minWidth:sideOpen?240:0, background:bg2, borderRight:`1px solid ${bdr}`, display:"flex", flexDirection:"column", transition:"all 0.2s", overflow:"hidden", flexShrink:0 },
-    logo:   { padding:"14px 16px", borderBottom:`1px solid ${bdr}`, display:"flex", alignItems:"center", gap:10, flexShrink:0 },
-    badge:  { width:32, height:32, borderRadius:8, background:"#7C3AED", display:"flex", alignItems:"center", justifyContent:"center", fontWeight:800, fontSize:14, color:"#fff", flexShrink:0 },
-    nav:    { flex:1, overflowY:"auto", padding:"6px" },
-    catRow: { display:"flex", flexWrap:"wrap", gap:4, padding:"8px 4px 4px" },
-    catBtn: a => ({ padding:"3px 9px", borderRadius:20, fontSize:11, fontWeight:a?600:400, cursor:"pointer", border:"1px solid", background:a?"#7C3AED22":"transparent", color:a?"#A78BFA":txt2, borderColor:a?"#7C3AED44":bdr }),
-    secLabel: { fontSize:10, color:txt3, padding:"8px 8px 3px", textTransform:"uppercase", letterSpacing:"0.08em" },
+    app:     { fontFamily:"Inter,system-ui,sans-serif", display:"flex", height:"100vh", background:bg, color:txt, overflow:"hidden" },
+    side:    { width:sideOpen?240:0, minWidth:sideOpen?240:0, background:bg2, borderRight:`1px solid ${bdr}`, display:"flex", flexDirection:"column", transition:"all 0.2s", overflow:"hidden", flexShrink:0 },
+    logo:    { padding:"14px 16px", borderBottom:`1px solid ${bdr}`, display:"flex", alignItems:"center", gap:10, flexShrink:0 },
+    badge:   { width:32, height:32, borderRadius:8, background:"#7C3AED", display:"flex", alignItems:"center", justifyContent:"center", fontWeight:800, fontSize:14, color:"#fff", flexShrink:0 },
+    nav:     { flex:1, overflowY:"auto", padding:"6px" },
+    catRow:  { display:"flex", flexWrap:"wrap", gap:4, padding:"8px 4px 4px" },
+    catBtn:  a => ({ padding:"3px 9px", borderRadius:20, fontSize:11, fontWeight:a?600:400, cursor:"pointer", border:"1px solid", background:a?"#7C3AED22":"transparent", color:a?"#A78BFA":txt2, borderColor:a?"#7C3AED44":bdr }),
+    secLabel:{ fontSize:10, color:txt3, padding:"8px 8px 3px", textTransform:"uppercase", letterSpacing:"0.08em" },
     navItem: (a, color) => ({ display:"flex", alignItems:"center", gap:8, padding:"7px 10px", borderRadius:8, marginBottom:1, cursor:"pointer", fontSize:12, fontWeight:a?600:400, background:a?color+"22":"transparent", color:a?color:txt2, border:a?`1px solid ${color}33`:"1px solid transparent", whiteSpace:"nowrap" }),
-    main:   { flex:1, display:"flex", flexDirection:"column", overflow:"hidden", minWidth:0 },
-    header: { padding:"10px 16px", borderBottom:`1px solid ${bdr}`, background:bg2, display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, flexShrink:0 },
-    msgs:   { flex:1, overflowY:"auto", padding:"20px", display:"flex", flexDirection:"column", gap:14 },
-    uBub:   { alignSelf:"flex-end", background:"#7C3AED", color:"#fff", padding:"10px 14px", borderRadius:"12px 12px 4px 12px", maxWidth:"75%", fontSize:13, lineHeight:1.6, whiteSpace:"pre-wrap" },
-    aBub:   { alignSelf:"flex-start", background:bg3, border:`1px solid ${bdr}`, color:txt, padding:"14px 16px", borderRadius:"4px 12px 12px 12px", maxWidth:"88%", fontSize:13 },
-    inputArea: { padding:"12px 16px", borderTop:`1px solid ${bdr}`, background:bg2, flexShrink:0 },
-    textarea:  { flex:1, padding:"10px 14px", borderRadius:10, border:`1px solid ${bdr}`, background:bg3, color:txt, fontSize:13, resize:"none", outline:"none", fontFamily:"inherit", lineHeight:1.5 },
-    runBtn: ok => ({ padding:"0 18px", borderRadius:10, border:"none", background:ok?"#7C3AED":bdr, color:ok?"#fff":txt3, fontWeight:600, fontSize:13, cursor:ok?"pointer":"not-allowed", flexShrink:0, minWidth:64 }),
-    overlay:{ position:"fixed", inset:0, background:"rgba(0,0,0,0.85)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:100 },
-    modal:  { background:bg2, border:`1px solid ${bdr}`, borderRadius:16, padding:28, width:440, maxWidth:"92vw" },
-    label:  { fontSize:12, color:txt2, marginBottom:4, display:"block", marginTop:12 },
-    inp:    { width:"100%", padding:"9px 12px", borderRadius:8, border:`1px solid ${bdr}`, background:bg3, color:txt, fontSize:13, outline:"none", boxSizing:"border-box" },
-    saveBtn:{ width:"100%", padding:11, borderRadius:8, border:"none", background:"#7C3AED", color:"#fff", fontWeight:600, fontSize:14, cursor:"pointer", marginTop:16 },
+    main:    { flex:1, display:"flex", flexDirection:"column", overflow:"hidden", minWidth:0 },
+    header:  { padding:"10px 16px", borderBottom:`1px solid ${bdr}`, background:bg2, display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, flexShrink:0 },
+    msgs:    { flex:1, overflowY:"auto", padding:"20px", display:"flex", flexDirection:"column", gap:14 },
+    uBub:    { alignSelf:"flex-end", background:"#7C3AED", color:"#fff", padding:"10px 14px", borderRadius:"12px 12px 4px 12px", maxWidth:"75%", fontSize:13, lineHeight:1.6, whiteSpace:"pre-wrap" },
+    aBub:    { alignSelf:"flex-start", background:bg3, border:`1px solid ${bdr}`, color:txt, padding:"14px 16px", borderRadius:"4px 12px 12px 12px", maxWidth:"88%", fontSize:13 },
+    inputArea:{ padding:"12px 16px", borderTop:`1px solid ${bdr}`, background:bg2, flexShrink:0 },
+    textarea: { flex:1, padding:"10px 14px", borderRadius:10, border:`1px solid ${bdr}`, background:bg3, color:txt, fontSize:13, resize:"none", outline:"none", fontFamily:"inherit", lineHeight:1.5 },
+    runBtn:  ok => ({ padding:"0 18px", borderRadius:10, border:"none", background:ok?"#7C3AED":bdr, color:ok?"#fff":txt3, fontWeight:600, fontSize:13, cursor:ok?"pointer":"not-allowed", flexShrink:0, minWidth:64 }),
+    overlay: { position:"fixed", inset:0, background:"rgba(0,0,0,0.85)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:100 },
+    modal:   { background:bg2, border:`1px solid ${bdr}`, borderRadius:16, padding:28, width:440, maxWidth:"92vw" },
+    label:   { fontSize:12, color:txt2, marginBottom:4, display:"block", marginTop:12 },
+    inp:     { width:"100%", padding:"9px 12px", borderRadius:8, border:`1px solid ${bdr}`, background:bg3, color:txt, fontSize:13, outline:"none", boxSizing:"border-box" },
+    saveBtn: { width:"100%", padding:11, borderRadius:8, border:"none", background:"#7C3AED", color:"#fff", fontWeight:600, fontSize:14, cursor:"pointer", marginTop:16 },
   };
 
-  const pageLabels = { dashboard:"🏠 Dashboard", history:"📚 History", bulk:"📊 Bulk Keywords", gsc:"📈 Search Console", ga4:"📊 GA4 Analytics", audit:"🏥 Site Audit", compare:"⚔️ Compare Sites", report:"📄 Report Generator", ranktracker:"📡 Rank Tracker", calendar:"📅 Content Calendar", checklist:"✅ SEO Checklist", writer:"✍️ AI Writer", brandtracker:"🔍 Brand Tracker" };
-  const headerSubs  = { dashboard:`${TOOLS.length} tools · ${count} analyses`, history:`${totalHistory} saved`, bulk:"10 keywords at once", gsc:"Last 28 days", ga4:"Sessions · Users · Traffic Sources", audit:"Technical SEO + AI + Indexing", compare:"Side-by-side · Up to 3 sites", report:"Client-ready reports + PDF", ranktracker:"AI rank + Keyword Volume + CPC", calendar:"Plan your content", checklist:"48 items · 7 categories", writer:"12 templates + Image SEO", brandtracker:"ChatGPT · Gemini · Perplexity · Claude" };
+  const pageLabels = {
+    dashboard:      "🏠 Dashboard",
+    history:        "📚 History",
+    bulk:           "📊 Bulk Keywords",
+    gsc:            "📈 Search Console",
+    ga4:            "📊 GA4 Analytics",
+    audit:          "🏥 Site Audit",
+    compare:        "⚔️ Compare Sites",
+    report:         "📄 Report Generator",
+    ranktracker:    "📡 Rank Tracker",
+    calendar:       "📅 Content Calendar",
+    checklist:      "✅ SEO Checklist",
+    writer:         "✍️ AI Writer",
+    brandtracker:   "🔍 Brand Tracker",
+    location:       "🌍 Location Keywords",
+    aeo:            "🎯 AEO Optimizer",
+    aimode:         "🤖 AI Mode Optimizer",
+    metapreview:    "🏷️ Meta Tag Previewer",
+    serpsimulator:  "🔎 SERP Simulator",
+    promptcontent:  "⚡ Prompt-to-Content",
+    competitorgap:  "🕵️ Competitor Gap",
+    readability:    "📖 Readability Checker",
+    backlink:       "🔗 Backlink Analyzer",
+    sitemap:        "🗺️ Sitemap Generator",
+  };
+
+  const headerSubs = {
+    dashboard:      `${TOOLS.length} tools · ${count} analyses`,
+    history:        `${totalHistory} saved`,
+    bulk:           "10 keywords at once",
+    gsc:            "Last 28 days",
+    ga4:            "Sessions · Users · Traffic Sources",
+    audit:          "Technical SEO + AI + Indexing",
+    compare:        "Side-by-side · Up to 3 sites",
+    report:         "Client-ready reports + PDF",
+    ranktracker:    "AI rank + Keyword Volume + CPC",
+    calendar:       "Plan your content",
+    checklist:      "48 items · 7 categories",
+    writer:         "12 templates + Image SEO",
+    brandtracker:   "ChatGPT · Gemini · Perplexity · Claude",
+    location:       "20 countries · AI keyword research",
+    aeo:            "Google AI Overview · ChatGPT · Perplexity",
+    aimode:         "AI Overview · AI Mode · Featured Snippets · PAA",
+    metapreview:    "Live Google · Twitter · Facebook · LinkedIn preview",
+    serpsimulator:  "AI Google SERP · Ads · Featured · PAA · Local",
+    promptcontent:  "Topic → Full SEO Page · Content + Meta + Schema",
+    competitorgap:  "Keyword · Content · Backlink · Technical gaps",
+    readability:    "Flesch score · Passive voice · Keyword density",
+    backlink:       "DA estimate · Opportunities · Outreach templates",
+    sitemap:        "Manual · AI generator · Import · XML download",
+  };
+
   const headerTitle = page==="tool"&&tool ? `${tool.icon} ${tool.label}` : pageLabels[page] || "🏠 Dashboard";
   const headerSub   = page==="tool"&&tool ? `${tool.cat} · ${curMsgs.filter(m=>m.role==="user").length} queries` : headerSubs[page] || "";
 
   return (
     <div style={s.app}>
-      {/* Sidebar */}
+      {/* ── Sidebar ── */}
       <div style={s.side}>
         <div style={s.logo}>
           <div style={s.badge}>S</div>
           <div style={{ flex:1 }}>
             <div style={{ fontSize:13, fontWeight:700, color:txt }}>SEO Agent</div>
-            <div style={{ fontSize:10, color:txt3 }}>v15.3 · {TOOLS.length} tools</div>
+            <div style={{ fontSize:10, color:txt3 }}>v16.0 · {TOOLS.length} tools</div>
           </div>
         </div>
+
         <div style={s.nav}>
           <div style={{ padding:"6px 4px 2px" }}>
-            <div style={s.secLabel}>Pages</div>
-            <div onClick={()=>setPage("dashboard")}    style={s.navItem(page==="dashboard","#7C3AED")}>🏠 <span>Dashboard</span></div>
-            <div onClick={()=>setPage("writer")}       style={s.navItem(page==="writer","#7C3AED")}>✍️ <span>AI Writer</span></div>
-            <div onClick={()=>setPage("gsc")}          style={s.navItem(page==="gsc","#059669")}>📈 <span>Search Console</span></div>
-            <div onClick={()=>setPage("ga4")}          style={s.navItem(page==="ga4","#DC2626")}>📊 <span>GA4 Analytics</span></div>
-            <div onClick={()=>setPage("audit")}        style={s.navItem(page==="audit","#DC2626")}>🏥 <span>Site Audit</span></div>
-            <div onClick={()=>setPage("compare")}      style={s.navItem(page==="compare","#0891B2")}>⚔️ <span>Compare Sites</span></div>
-            <div onClick={()=>setPage("ranktracker")}  style={s.navItem(page==="ranktracker","#059669")}>📡 <span>Rank Tracker</span></div>
-            <div onClick={()=>setPage("brandtracker")} style={s.navItem(page==="brandtracker","#10A37F")}>🔍 <span>Brand Tracker</span></div>
-            <div onClick={()=>setPage("location")}     style={s.navItem(page==="location","#059669")}>🌍 <span>Location Keywords</span></div>
-            <div onClick={()=>setPage("aeo")}          style={s.navItem(page==="aeo","#7C3AED")}>🎯 <span>AEO Optimizer</span></div>
-            <div onClick={()=>setPage("calendar")}     style={s.navItem(page==="calendar","#B45309")}>📅 <span>Content Calendar</span></div>
-            <div onClick={()=>setPage("checklist")}    style={s.navItem(page==="checklist","#059669")}>✅ <span>SEO Checklist</span></div>
-            <div onClick={()=>setPage("bulk")}         style={s.navItem(page==="bulk","#CA8A04")}>📊 <span>Bulk Keywords</span></div>
-            <div onClick={()=>setPage("report")}       style={s.navItem(page==="report","#9333EA")}>📄 <span>Report Generator</span></div>
-            <div onClick={()=>setPage("history")}      style={s.navItem(page==="history","#D97706")}>
+            <div style={s.secLabel}>Main</div>
+            <div onClick={()=>setPage("dashboard")}     style={s.navItem(page==="dashboard",     "#7C3AED")}>🏠 <span>Dashboard</span></div>
+            <div onClick={()=>setPage("promptcontent")} style={s.navItem(page==="promptcontent", "#F59E0B")}>⚡ <span>Prompt-to-Content</span></div>
+            <div onClick={()=>setPage("writer")}        style={s.navItem(page==="writer",        "#7C3AED")}>✍️ <span>AI Writer</span></div>
+
+            <div style={s.secLabel}>Analytics</div>
+            <div onClick={()=>setPage("gsc")}           style={s.navItem(page==="gsc",           "#059669")}>📈 <span>Search Console</span></div>
+            <div onClick={()=>setPage("ga4")}           style={s.navItem(page==="ga4",           "#DC2626")}>📊 <span>GA4 Analytics</span></div>
+            <div onClick={()=>setPage("ranktracker")}   style={s.navItem(page==="ranktracker",   "#059669")}>📡 <span>Rank Tracker</span></div>
+            <div onClick={()=>setPage("brandtracker")}  style={s.navItem(page==="brandtracker",  "#10A37F")}>🔍 <span>Brand Tracker</span></div>
+
+            <div style={s.secLabel}>SEO Tools</div>
+            <div onClick={()=>setPage("audit")}         style={s.navItem(page==="audit",         "#DC2626")}>🏥 <span>Site Audit</span></div>
+            <div onClick={()=>setPage("compare")}       style={s.navItem(page==="compare",       "#0891B2")}>⚔️ <span>Compare Sites</span></div>
+            <div onClick={()=>setPage("competitorgap")} style={s.navItem(page==="competitorgap", "#7C3AED")}>🕵️ <span>Competitor Gap</span></div>
+            <div onClick={()=>setPage("backlink")}      style={s.navItem(page==="backlink",      "#1E40AF")}>🔗 <span>Backlink Analyzer</span></div>
+            <div onClick={()=>setPage("readability")}   style={s.navItem(page==="readability",   "#059669")}>📖 <span>Readability Checker</span></div>
+            <div onClick={()=>setPage("sitemap")}       style={s.navItem(page==="sitemap",       "#D97706")}>🗺️ <span>Sitemap Generator</span></div>
+
+            <div style={s.secLabel}>AI Optimization</div>
+            <div onClick={()=>setPage("aeo")}           style={s.navItem(page==="aeo",           "#7C3AED")}>🎯 <span>AEO Optimizer</span></div>
+            <div onClick={()=>setPage("aimode")}        style={s.navItem(page==="aimode",        "#4285F4")}>🤖 <span>AI Mode Optimizer</span></div>
+            <div onClick={()=>setPage("location")}      style={s.navItem(page==="location",      "#059669")}>🌍 <span>Location Keywords</span></div>
+            <div onClick={()=>setPage("serpsimulator")} style={s.navItem(page==="serpsimulator", "#EA4335")}>🔎 <span>SERP Simulator</span></div>
+            <div onClick={()=>setPage("metapreview")}   style={s.navItem(page==="metapreview",   "#D97706")}>🏷️ <span>Meta Previewer</span></div>
+
+            <div style={s.secLabel}>Planning</div>
+            <div onClick={()=>setPage("calendar")}      style={s.navItem(page==="calendar",      "#B45309")}>📅 <span>Content Calendar</span></div>
+            <div onClick={()=>setPage("checklist")}     style={s.navItem(page==="checklist",     "#059669")}>✅ <span>SEO Checklist</span></div>
+            <div onClick={()=>setPage("bulk")}          style={s.navItem(page==="bulk",          "#CA8A04")}>📊 <span>Bulk Keywords</span></div>
+            <div onClick={()=>setPage("report")}        style={s.navItem(page==="report",        "#9333EA")}>📄 <span>Report Generator</span></div>
+            <div onClick={()=>setPage("history")}       style={s.navItem(page==="history",       "#D97706")}>
               📚 <span>History</span>
               {totalHistory>0 && <span style={{ marginLeft:"auto", fontSize:10, background:"#D9770622", color:"#D97706", padding:"1px 6px", borderRadius:10, flexShrink:0 }}>{totalHistory}</span>}
             </div>
@@ -276,13 +351,14 @@ export default function App() {
             <span>Total analyses</span>
             <span style={{ color:"#7C3AED", fontWeight:600 }}>{count}</span>
           </div>
-          <div onClick={()=>{ setTmpKeys({...keys}); setShowSettings(true); }} style={{ padding:"8px 10px", borderRadius:8, cursor:"pointer", fontSize:12, color:txt2, display:"flex", alignItems:"center", gap:8 }}>
+          <div onClick={()=>{ setTmpKeys({...keys}); setShowSettings(true); }}
+            style={{ padding:"8px 10px", borderRadius:8, cursor:"pointer", fontSize:12, color:txt2, display:"flex", alignItems:"center", gap:8 }}>
             ⚙️ <span>Settings & Keys</span>
           </div>
         </div>
       </div>
 
-      {/* Main */}
+      {/* ── Main Area ── */}
       <div style={s.main}>
         <div style={s.header}>
           <div style={{ display:"flex", alignItems:"center", gap:10 }}>
@@ -294,35 +370,47 @@ export default function App() {
           </div>
           <div style={{ display:"flex", gap:6, alignItems:"center" }}>
             {page==="tool" && tool && !tool.isApi && Object.entries(MODELS).map(([k,v]) => (
-              <div key={k} onClick={()=>setModel(k)} style={{ padding:"4px 12px", borderRadius:20, cursor:"pointer", fontSize:12, fontWeight:model===k?700:400, background:model===k?v.color+"22":"transparent", color:model===k?v.color:txt2, border:`1px solid ${model===k?v.color+"55":bdr}` }}>
+              <div key={k} onClick={()=>setModel(k)}
+                style={{ padding:"4px 12px", borderRadius:20, cursor:"pointer", fontSize:12, fontWeight:model===k?700:400, background:model===k?v.color+"22":"transparent", color:model===k?v.color:txt2, border:`1px solid ${model===k?v.color+"55":bdr}` }}>
                 {v.name}
               </div>
             ))}
             {page==="tool" && curMsgs.length>0 && (
-              <button onClick={()=>setMsgs(m=>({...m,[tool.id]:[]}))} style={{ padding:"4px 10px", borderRadius:20, border:`1px solid ${bdr}`, background:"transparent", color:txt2, fontSize:12, cursor:"pointer" }}>Clear</button>
+              <button onClick={()=>setMsgs(m=>({...m,[tool.id]:[]}))}
+                style={{ padding:"4px 10px", borderRadius:20, border:`1px solid ${bdr}`, background:"transparent", color:txt2, fontSize:12, cursor:"pointer" }}>Clear</button>
             )}
-            <button onClick={toggleDark} style={{ padding:"4px 10px", borderRadius:20, border:`1px solid ${bdr}`, background:"transparent", color:txt2, fontSize:12, cursor:"pointer" }}>
+            <button onClick={toggleDark}
+              style={{ padding:"4px 10px", borderRadius:20, border:`1px solid ${bdr}`, background:"transparent", color:txt2, fontSize:12, cursor:"pointer" }}>
               {dark?"☀️":"🌙"}
             </button>
-            <div onClick={()=>{ setTmpKeys({...keys}); setShowSettings(true); }} style={{ padding:"4px 10px", borderRadius:20, cursor:"pointer", fontSize:12, color:txt2, border:`1px solid ${bdr}` }}>⚙️</div>
+            <div onClick={()=>{ setTmpKeys({...keys}); setShowSettings(true); }}
+              style={{ padding:"4px 10px", borderRadius:20, cursor:"pointer", fontSize:12, color:txt2, border:`1px solid ${bdr}` }}>⚙️</div>
           </div>
         </div>
 
-        {/* Pages */}
-        {page==="dashboard"    && <Dashboard onToolSelect={selectTool} count={count} keys={keys} dark={dark} onPageSelect={setPage} />}
-        {page==="writer"       && <AiWriter dark={dark} keys={keys} model={model} />}
-        {page==="gsc"          && <GscDashboard dark={dark} googleKey={keys.google} />}
-        {page==="ga4"          && <GA4Dashboard dark={dark} googleKey={keys.google} keys={keys} model={model} />}
-        {page==="audit"        && <SiteAudit dark={dark} googleKey={keys.google} groqKey={keys.groq} geminiKey={keys.gemini} model={model} />}
-        {page==="compare"      && <Compare dark={dark} googleKey={keys.google} />}
-        {page==="ranktracker"  && <RankTracker dark={dark} keys={keys} model={model} />}
-        {page==="brandtracker" && <BrandTracker dark={dark} keys={keys} model={model} />}
-        {page==="location"     && <LocationKeywords dark={dark} keys={keys} model={model} />}
-        {page==="aeo"          && <AEO dark={dark} keys={keys} model={model} />}
-        {page==="calendar"     && <ContentCalendar dark={dark} keys={keys} model={model} />}
-        {page==="checklist"    && <SeoChecklist dark={dark} />}
-        {page==="report"       && <ReportGenerator dark={dark} keys={keys} model={model} msgs={msgs} />}
-        {page==="history"      && <History msgs={msgs} onToolSelect={selectTool} dark={dark} />}
+        {/* ── All Page Renders ── */}
+        {page==="dashboard"     && <Dashboard onToolSelect={selectTool} count={count} keys={keys} dark={dark} onPageSelect={setPage} />}
+        {page==="promptcontent" && <PromptToContent dark={dark} keys={keys} model={model} />}
+        {page==="writer"        && <AiWriter dark={dark} keys={keys} model={model} />}
+        {page==="gsc"           && <GscDashboard dark={dark} googleKey={keys.google} />}
+        {page==="ga4"           && <GA4Dashboard dark={dark} googleKey={keys.google} keys={keys} model={model} />}
+        {page==="audit"         && <SiteAudit dark={dark} googleKey={keys.google} groqKey={keys.groq} geminiKey={keys.gemini} model={model} />}
+        {page==="compare"       && <Compare dark={dark} googleKey={keys.google} />}
+        {page==="ranktracker"   && <RankTracker dark={dark} keys={keys} model={model} />}
+        {page==="brandtracker"  && <BrandTracker dark={dark} keys={keys} model={model} />}
+        {page==="location"      && <LocationKeywords dark={dark} keys={keys} model={model} />}
+        {page==="aeo"           && <AEO dark={dark} keys={keys} model={model} />}
+        {page==="aimode"        && <AIMode dark={dark} keys={keys} model={model} />}
+        {page==="metapreview"   && <MetaPreview dark={dark} keys={keys} model={model} />}
+        {page==="serpsimulator" && <SerpSimulator dark={dark} keys={keys} model={model} />}
+        {page==="competitorgap" && <CompetitorGap dark={dark} keys={keys} model={model} />}
+        {page==="readability"   && <ReadabilityChecker dark={dark} keys={keys} model={model} />}
+        {page==="backlink"      && <BacklinkAnalyzer dark={dark} keys={keys} model={model} />}
+        {page==="sitemap"       && <SitemapGenerator dark={dark} keys={keys} model={model} />}
+        {page==="calendar"      && <ContentCalendar dark={dark} keys={keys} model={model} />}
+        {page==="checklist"     && <SeoChecklist dark={dark} />}
+        {page==="report"        && <ReportGenerator dark={dark} keys={keys} model={model} msgs={msgs} />}
+        {page==="history"       && <History msgs={msgs} onToolSelect={selectTool} dark={dark} />}
 
         {page==="bulk" && (
           <div style={{ flex:1, overflowY:"auto", padding:24, background:bg }}>
@@ -367,7 +455,8 @@ export default function App() {
                   {tool.isApi && <div style={{ fontSize:11, color:"#D97706", background:"#D9770611", border:"1px solid #D9770633", borderRadius:8, padding:"6px 14px", display:"inline-block", marginBottom:16 }}>⚡ Requires Google API Key</div>}
                   <div style={{ display:"flex", flexWrap:"wrap", gap:8, justifyContent:"center" }}>
                     {["digital marketing agency","e-commerce store","SaaS tool","local restaurant"].map(ex => (
-                      <div key={ex} onClick={()=>setInput(ex)} style={{ padding:"6px 14px", borderRadius:20, border:`1px solid ${bdr}`, color:txt2, fontSize:12, cursor:"pointer" }}>{ex}</div>
+                      <div key={ex} onClick={()=>setInput(ex)}
+                        style={{ padding:"6px 14px", borderRadius:20, border:`1px solid ${bdr}`, color:txt2, fontSize:12, cursor:"pointer" }}>{ex}</div>
                     ))}
                   </div>
                 </div>
@@ -380,10 +469,12 @@ export default function App() {
                     <div style={{ maxWidth:"88%", display:"flex", flexDirection:"column", gap:4 }}>
                       <div style={s.aBub}><Markdown text={m.text} dark={dark} /></div>
                       <div style={{ display:"flex", gap:6, paddingLeft:4 }}>
-                        <button onClick={()=>copyText(m.text,i)} style={{ padding:"3px 10px", borderRadius:6, border:`1px solid ${bdr}`, background:"transparent", color:copied===i?"#0F766E":txt2, fontSize:11, cursor:"pointer" }}>
+                        <button onClick={()=>copyText(m.text,i)}
+                          style={{ padding:"3px 10px", borderRadius:6, border:`1px solid ${bdr}`, background:"transparent", color:copied===i?"#0F766E":txt2, fontSize:11, cursor:"pointer" }}>
                           {copied===i?"✅ Copied!":"📋 Copy"}
                         </button>
-                        <button onClick={()=>downloadText(m.text,`seo-${tool.id}-${Date.now()}.txt`)} style={{ padding:"3px 10px", borderRadius:6, border:`1px solid ${bdr}`, background:"transparent", color:txt2, fontSize:11, cursor:"pointer" }}>
+                        <button onClick={()=>downloadText(m.text,`seo-${tool.id}-${Date.now()}.txt`)}
+                          style={{ padding:"3px 10px", borderRadius:6, border:`1px solid ${bdr}`, background:"transparent", color:txt2, fontSize:11, cursor:"pointer" }}>
                           ⬇️ Download
                         </button>
                       </div>
@@ -407,13 +498,15 @@ export default function App() {
                   {loading?"...":"Run ▶"}
                 </button>
               </div>
-              <div style={{ fontSize:11, color:txt3, marginTop:5 }}>Enter to run · Shift+Enter new line · {tool.isApi?"Google API":`Model: ${MODELS[model]?.name}`}</div>
+              <div style={{ fontSize:11, color:txt3, marginTop:5 }}>
+                Enter to run · Shift+Enter new line · {tool.isApi?"Google API":`Model: ${MODELS[model]?.name}`}
+              </div>
             </div>
           </>
         )}
       </div>
 
-      {/* Settings */}
+      {/* ── Settings Modal ── */}
       {showSettings && (
         <div style={s.overlay} onClick={()=>setShowSettings(false)}>
           <div style={s.modal} onClick={e=>e.stopPropagation()}>

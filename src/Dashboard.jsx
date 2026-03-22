@@ -12,14 +12,18 @@ const CAT_COLORS = {
 };
 
 const QUICK_PAGES = [
-  { id:"gsc",          icon:"📈", label:"Search Console",  color:"#059669", desc:"GSC clicks & impressions" },
-  { id:"ga4",          icon:"📊", label:"GA4 Analytics",   color:"#DC2626", desc:"Traffic & sessions" },
-  { id:"audit",        icon:"🏥", label:"Site Audit",      color:"#DC2626", desc:"Technical SEO check" },
-  { id:"brandtracker", icon:"🔍", label:"Brand Tracker",   color:"#10A37F", desc:"AI visibility" },
-  { id:"compare",      icon:"⚔️", label:"Compare Sites",   color:"#0891B2", desc:"Side-by-side analysis" },
-  { id:"report",       icon:"📄", label:"Report Generator",color:"#9333EA", desc:"PDF client reports" },
-  { id:"ranktracker",  icon:"📡", label:"Rank Tracker",    color:"#059669", desc:"Keyword positions" },
-  { id:"writer",       icon:"✍️", label:"AI Writer",       color:"#7C3AED", desc:"SEO content" },
+  { id:"promptcontent",  icon:"⚡", label:"Prompt-to-Content",  color:"#F59E0B", desc:"Topic → Full SEO page" },
+  { id:"competitorgap",  icon:"🕵️", label:"Competitor Gap",     color:"#7C3AED", desc:"Find what they have, you don't" },
+  { id:"serpsimulator",  icon:"🔎", label:"SERP Simulator",     color:"#EA4335", desc:"Google SERP preview" },
+  { id:"metapreview",    icon:"🏷️", label:"Meta Previewer",     color:"#D97706", desc:"Live social preview" },
+  { id:"readability",    icon:"📖", label:"Readability Checker", color:"#059669", desc:"Flesch score + fixes" },
+  { id:"backlink",       icon:"🔗", label:"Backlink Analyzer",  color:"#1E40AF", desc:"DA + opportunities" },
+  { id:"sitemap",        icon:"🗺️", label:"Sitemap Generator",  color:"#D97706", desc:"XML sitemap builder" },
+  { id:"aimode",         icon:"🤖", label:"AI Mode Optimizer",  color:"#4285F4", desc:"Google AI Mode & Overview" },
+  { id:"aeo",            icon:"🎯", label:"AEO Optimizer",      color:"#7C3AED", desc:"Answer engine optimization" },
+  { id:"gsc",            icon:"📈", label:"Search Console",     color:"#059669", desc:"GSC clicks & impressions" },
+  { id:"audit",          icon:"🏥", label:"Site Audit",         color:"#DC2626", desc:"Technical SEO check" },
+  { id:"report",         icon:"📄", label:"Report Generator",   color:"#9333EA", desc:"PDF client reports" },
 ];
 
 export default function Dashboard({ onToolSelect, count, keys, dark, onPageSelect }) {
@@ -30,7 +34,6 @@ export default function Dashboard({ onToolSelect, count, keys, dark, onPageSelec
   const bg   = dark ? "#0a0a0a" : "#f5f5f0";
   const bg2  = dark ? "#111"    : "#ffffff";
   const bg3  = dark ? "#1a1a1a" : "#f0f0ea";
-  const bg4  = dark ? "#161616" : "#f8f8f4";
   const bdr  = dark ? "#222"    : "#e0e0d8";
   const txt  = dark ? "#e8e8e8" : "#1a1a18";
   const txt2 = dark ? "#666"    : "#888";
@@ -57,7 +60,7 @@ export default function Dashboard({ onToolSelect, count, keys, dark, onPageSelec
   const apiCount      = [hasGroq, hasGemini, hasGoogle, hasOpenRouter].filter(Boolean).length;
 
   const filtered = TOOLS.filter(t => {
-    const matchCat  = activeCat === "All" || t.cat === activeCat;
+    const matchCat    = activeCat === "All" || t.cat === activeCat;
     const matchSearch = !search || t.label.toLowerCase().includes(search.toLowerCase()) || t.cat.toLowerCase().includes(search.toLowerCase());
     return matchCat && matchSearch;
   });
@@ -68,10 +71,10 @@ export default function Dashboard({ onToolSelect, count, keys, dark, onPageSelec
   }));
 
   const apis = [
-    { name:"Groq",       desc:"Llama 3.1 — Fast",          ok:hasGroq,       color:"#F97316" },
-    { name:"Gemini",     desc:"Google AI — Smart",          ok:hasGemini,     color:"#2563EB" },
-    { name:"Google API", desc:"PageSpeed + GSC + GA4",      ok:hasGoogle,     color:"#059669" },
-    { name:"OpenRouter", desc:"DeepSeek + Mistral — Free",  ok:hasOpenRouter, color:"#A855F7" },
+    { name:"Groq",       desc:"Llama 3.1 — Fast",         ok:hasGroq,       color:"#F97316" },
+    { name:"Gemini",     desc:"Google AI — Smart",         ok:hasGemini,     color:"#2563EB" },
+    { name:"Google API", desc:"PageSpeed + GSC + GA4",     ok:hasGoogle,     color:"#059669" },
+    { name:"OpenRouter", desc:"DeepSeek + Mistral — Free", ok:hasOpenRouter, color:"#A855F7" },
   ];
 
   return (
@@ -86,14 +89,13 @@ export default function Dashboard({ onToolSelect, count, keys, dark, onPageSelec
                 <div style={{ width:36, height:36, borderRadius:10, background:"#7C3AED", display:"flex", alignItems:"center", justifyContent:"center", fontSize:18 }}>🚀</div>
                 <div>
                   <div style={{ fontSize:22, fontWeight:800, color:txt, letterSpacing:"-0.03em" }}>SEO Agent</div>
-                  <div style={{ fontSize:11, color:txt2, marginTop:1 }}>v15.2 · Your complete SEO Operating System</div>
+                  <div style={{ fontSize:11, color:txt2, marginTop:1 }}>v16.0 · Your complete SEO Operating System</div>
                 </div>
               </div>
               <div style={{ fontSize:13, color:txt2, maxWidth:480 }}>
                 {TOOLS.length} AI-powered tools · {CATS.length-1} categories · Real Google APIs · Multi-model AI
               </div>
             </div>
-            {/* Search */}
             <div style={{ position:"relative", minWidth:240 }}>
               <span style={{ position:"absolute", left:12, top:"50%", transform:"translateY(-50%)", fontSize:14, color:txt2 }}>🔍</span>
               <input value={search} onChange={e=>setSearch(e.target.value)}
@@ -102,13 +104,12 @@ export default function Dashboard({ onToolSelect, count, keys, dark, onPageSelec
             </div>
           </div>
 
-          {/* Stats Row */}
           <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12, marginTop:24 }}>
             {[
-              { label:"Total Tools",      value:TOOLS.length,  color:"#7C3AED", icon:"🛠️" },
-              { label:"Analyses Done",    value:count,         color:"#059669", icon:"📊" },
-              { label:"Categories",       value:CATS.length-1, color:"#0891B2", icon:"📂" },
-              { label:"APIs Connected",   value:`${apiCount}/4`,color:apiCount>=3?"#059669":apiCount>=2?"#D97706":"#DC2626", icon:"🔑" },
+              { label:"Total Tools",    value:TOOLS.length,    color:"#7C3AED", icon:"🛠️" },
+              { label:"Analyses Done",  value:count,           color:"#059669", icon:"📊" },
+              { label:"Categories",     value:CATS.length-1,   color:"#0891B2", icon:"📂" },
+              { label:"APIs Connected", value:`${apiCount}/4`, color:apiCount>=3?"#059669":apiCount>=2?"#D97706":"#DC2626", icon:"🔑" },
             ].map(s => (
               <div key={s.label} style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:12, padding:"14px 16px", display:"flex", alignItems:"center", gap:12 }}>
                 <div style={{ width:40, height:40, borderRadius:10, background:s.color+"18", display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, flexShrink:0 }}>{s.icon}</div>
@@ -141,13 +142,13 @@ export default function Dashboard({ onToolSelect, count, keys, dark, onPageSelec
           </div>
         </div>
 
-        {/* ── Quick Access Pages ── */}
+        {/* ── Quick Access ── */}
         <div style={{ marginBottom:28 }}>
           <div style={{ fontSize:11, fontWeight:700, color:txt2, textTransform:"uppercase", letterSpacing:"0.1em", marginBottom:10 }}>Quick Access</div>
           <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:10 }}>
             {QUICK_PAGES.map(p => (
-              <div key={p.id} onClick={()=>onToolSelect&&onPageSelect?.(p.id)}
-                style={{ background:bg2, border:`1px solid ${p.color}22`, borderRadius:10, padding:"14px 16px", cursor:"pointer", transition:"all 0.15s", display:"flex", alignItems:"center", gap:12 }}
+              <div key={p.id} onClick={()=>onPageSelect?.(p.id)}
+                style={{ background:bg2, border:`1px solid ${p.color}22`, borderRadius:10, padding:"14px 16px", cursor:"pointer", display:"flex", alignItems:"center", gap:12, transition:"all 0.15s" }}
                 onMouseEnter={e=>{e.currentTarget.style.borderColor=p.color+"55";e.currentTarget.style.background=p.color+"0a"}}
                 onMouseLeave={e=>{e.currentTarget.style.borderColor=p.color+"22";e.currentTarget.style.background=bg2}}>
                 <div style={{ width:36, height:36, borderRadius:8, background:p.color+"18", display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, flexShrink:0 }}>{p.icon}</div>
@@ -167,7 +168,7 @@ export default function Dashboard({ onToolSelect, count, keys, dark, onPageSelec
             <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
               {recentTools.map(t => (
                 <div key={t.id} onClick={()=>handleToolSelect(t)}
-                  style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 14px", borderRadius:20, border:`1px solid ${t.color}33`, background:bg2, cursor:"pointer", fontSize:12, color:txt, transition:"all 0.15s" }}
+                  style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 14px", borderRadius:20, border:`1px solid ${t.color}33`, background:bg2, cursor:"pointer", fontSize:12, color:txt }}
                   onMouseEnter={e=>{e.currentTarget.style.background=t.color+"15";e.currentTarget.style.borderColor=t.color+"55"}}
                   onMouseLeave={e=>{e.currentTarget.style.background=bg2;e.currentTarget.style.borderColor=t.color+"33"}}>
                   <span style={{ fontSize:14 }}>{t.icon}</span>
@@ -184,7 +185,6 @@ export default function Dashboard({ onToolSelect, count, keys, dark, onPageSelec
           <div style={{ fontSize:11, fontWeight:700, color:txt2, textTransform:"uppercase", letterSpacing:"0.1em", marginBottom:10 }}>
             {search ? `Search Results (${filtered.length})` : "All Tools"}
           </div>
-
           {!search && (
             <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:16 }}>
               {["All", ...CATS.filter(c=>c!=="All")].map(c => {
@@ -192,7 +192,7 @@ export default function Dashboard({ onToolSelect, count, keys, dark, onPageSelec
                 const color  = c==="All" ? "#7C3AED" : CAT_COLORS[c];
                 return (
                   <div key={c} onClick={()=>setActiveCat(c)}
-                    style={{ padding:"5px 14px", borderRadius:20, fontSize:12, cursor:"pointer", fontWeight:active?700:400, background:active?color+"22":"transparent", color:active?color:txt2, border:`1px solid ${active?color+"44":bdr}`, transition:"all 0.15s" }}>
+                    style={{ padding:"5px 14px", borderRadius:20, fontSize:12, cursor:"pointer", fontWeight:active?700:400, background:active?color+"22":"transparent", color:active?color:txt2, border:`1px solid ${active?color+"44":bdr}` }}>
                     {c==="All"?"All Tools":`${CAT_ICONS[c]} ${c}`}
                   </div>
                 );
@@ -203,7 +203,6 @@ export default function Dashboard({ onToolSelect, count, keys, dark, onPageSelec
 
         {/* ── Tools Grid ── */}
         {!search && activeCat==="All" ? (
-          // Grouped by category
           CATS.filter(c=>c!=="All").map(cat => (
             <div key={cat} style={{ marginBottom:24 }}>
               <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
@@ -219,7 +218,6 @@ export default function Dashboard({ onToolSelect, count, keys, dark, onPageSelec
             </div>
           ))
         ) : (
-          // Filtered flat grid
           <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(170px,1fr))", gap:8 }}>
             {filtered.map(t => (
               <ToolCard key={t.id} t={t} dark={dark} bg2={bg2} bdr={bdr} txt={txt} txt2={txt2} onClick={()=>handleToolSelect(t)} />
@@ -244,12 +242,7 @@ function ToolCard({ t, dark, bg2, bdr, txt, txt2, onClick }) {
     <div onClick={onClick}
       onMouseEnter={()=>setHovered(true)}
       onMouseLeave={()=>setHovered(false)}
-      style={{
-        background: hovered ? t.color+"0f" : bg2,
-        border: `1px solid ${hovered?t.color+"55":bdr}`,
-        borderRadius:10, padding:"12px 14px", cursor:"pointer",
-        transition:"all 0.15s", display:"flex", flexDirection:"column", gap:6,
-      }}>
+      style={{ background:hovered?t.color+"0f":bg2, border:`1px solid ${hovered?t.color+"55":bdr}`, borderRadius:10, padding:"12px 14px", cursor:"pointer", transition:"all 0.15s", display:"flex", flexDirection:"column", gap:6 }}>
       <div style={{ fontSize:20 }}>{t.icon}</div>
       <div style={{ fontSize:12, fontWeight:600, color:txt, lineHeight:1.3 }}>{t.label}</div>
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
