@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { TOOLS, CATS, MODELS } from "./tools";
+import { AuthProvider, useAuth } from "./context/AuthContext";
+import Login from "./pages/Login";
 import Dashboard from "./Dashboard";
 import History from "./History";
 import Markdown from "./Markdown";
@@ -24,7 +26,31 @@ import ReadabilityChecker from "./ReadabilityChecker";
 import BacklinkAnalyzer from "./BacklinkAnalyzer";
 import SitemapGenerator from "./SitemapGenerator";
 
+// ── Main App wrapped with Auth ─────────────────────
 export default function App() {
+  return (
+    <AuthProvider>
+      <AppInner />
+    </AuthProvider>
+  );
+}
+
+// ── Inner App — Auth check hoga yahan ─────────────
+function AppInner() {
+  const { user, logout } = useAuth();
+
+  // Agar user login nahi hai — Login page dikhao
+  if (!user) {
+    return <Login />;
+  }
+
+  // User login hai — main app dikhao
+  return <MainApp onLogout={logout} />;
+}
+
+// ── Main App ───────────────────────────────────────
+function MainApp({ onLogout }) {
+  const { user } = useAuth();
   const [tool, setTool]       = useState(null);
   const [page, setPage]       = useState("dashboard");
   const [input, setInput]     = useState("");
@@ -222,55 +248,40 @@ export default function App() {
   };
 
   const pageLabels = {
-    dashboard:      "🏠 Dashboard",
-    history:        "📚 History",
-    bulk:           "📊 Bulk Keywords",
-    gsc:            "📈 Search Console",
-    ga4:            "📊 GA4 Analytics",
-    audit:          "🏥 Site Audit",
-    compare:        "⚔️ Compare Sites",
-    report:         "📄 Report Generator",
-    ranktracker:    "📡 Rank Tracker",
-    calendar:       "📅 Content Calendar",
-    checklist:      "✅ SEO Checklist",
-    writer:         "✍️ AI Writer",
-    brandtracker:   "🔍 Brand Tracker",
-    location:       "🌍 Location Keywords",
-    aeo:            "🎯 AEO Optimizer",
-    aimode:         "🤖 AI Mode Optimizer",
-    metapreview:    "🏷️ Meta Tag Previewer",
-    serpsimulator:  "🔎 SERP Simulator",
-    promptcontent:  "⚡ Prompt-to-Content",
-    competitorgap:  "🕵️ Competitor Gap",
-    readability:    "📖 Readability Checker",
-    backlink:       "🔗 Backlink Analyzer",
-    sitemap:        "🗺️ Sitemap Generator",
+    dashboard:"🏠 Dashboard", history:"📚 History", bulk:"📊 Bulk Keywords",
+    gsc:"📈 Search Console", ga4:"📊 GA4 Analytics", audit:"🏥 Site Audit",
+    compare:"⚔️ Compare Sites", report:"📄 Report Generator", ranktracker:"📡 Rank Tracker",
+    calendar:"📅 Content Calendar", checklist:"✅ SEO Checklist", writer:"✍️ AI Writer",
+    brandtracker:"🔍 Brand Tracker", location:"🌍 Location Keywords",
+    aeo:"🎯 AEO Optimizer", aimode:"🤖 AI Mode Optimizer",
+    metapreview:"🏷️ Meta Tag Previewer", serpsimulator:"🔎 SERP Simulator",
+    promptcontent:"⚡ Prompt-to-Content", competitorgap:"🕵️ Competitor Gap",
+    readability:"📖 Readability Checker", backlink:"🔗 Backlink Analyzer",
+    sitemap:"🗺️ Sitemap Generator",
   };
 
   const headerSubs = {
-    dashboard:      `${TOOLS.length} tools · ${count} analyses`,
-    history:        `${totalHistory} saved`,
-    bulk:           "10 keywords at once",
-    gsc:            "Last 28 days",
-    ga4:            "Sessions · Users · Traffic Sources",
-    audit:          "Technical SEO + AI + Indexing",
-    compare:        "Side-by-side · Up to 3 sites",
-    report:         "Client-ready reports + PDF",
-    ranktracker:    "AI rank + Keyword Volume + CPC",
-    calendar:       "Plan your content",
-    checklist:      "48 items · 7 categories",
-    writer:         "12 templates + Image SEO",
-    brandtracker:   "ChatGPT · Gemini · Perplexity · Claude",
-    location:       "20 countries · AI keyword research",
-    aeo:            "Google AI Overview · ChatGPT · Perplexity",
-    aimode:         "AI Overview · AI Mode · Featured Snippets · PAA",
-    metapreview:    "Live Google · Twitter · Facebook · LinkedIn preview",
-    serpsimulator:  "AI Google SERP · Ads · Featured · PAA · Local",
-    promptcontent:  "Topic → Full SEO Page · Content + Meta + Schema",
-    competitorgap:  "Keyword · Content · Backlink · Technical gaps",
-    readability:    "Flesch score · Passive voice · Keyword density",
-    backlink:       "DA estimate · Opportunities · Outreach templates",
-    sitemap:        "Manual · AI generator · Import · XML download",
+    dashboard:`${TOOLS.length} tools · ${count} analyses`,
+    history:`${totalHistory} saved`,
+    bulk:"10 keywords at once", gsc:"Last 28 days",
+    ga4:"Sessions · Users · Traffic Sources",
+    audit:"Technical SEO + AI + Indexing",
+    compare:"Side-by-side · Up to 3 sites",
+    report:"Client-ready reports + PDF",
+    ranktracker:"AI rank + Keyword Volume + CPC",
+    calendar:"Plan your content", checklist:"48 items · 7 categories",
+    writer:"12 templates + Image SEO",
+    brandtracker:"ChatGPT · Gemini · Perplexity · Claude",
+    location:"20 countries · AI keyword research",
+    aeo:"Google AI Overview · ChatGPT · Perplexity",
+    aimode:"AI Overview · AI Mode · Featured Snippets · PAA",
+    metapreview:"Live Google · Twitter · Facebook · LinkedIn preview",
+    serpsimulator:"AI Google SERP · Ads · Featured · PAA · Local",
+    promptcontent:"Topic → Full SEO Page · Content + Meta + Schema",
+    competitorgap:"Keyword · Content · Backlink · Technical gaps",
+    readability:"Flesch score · Passive voice · Keyword density",
+    backlink:"DA estimate · Opportunities · Outreach templates",
+    sitemap:"Manual · AI generator · Import · XML download",
   };
 
   const headerTitle = page==="tool"&&tool ? `${tool.icon} ${tool.label}` : pageLabels[page] || "🏠 Dashboard";
@@ -290,6 +301,22 @@ export default function App() {
 
         <div style={s.nav}>
           <div style={{ padding:"6px 4px 2px" }}>
+
+            {/* User Info */}
+            <div style={{ padding:"8px 10px", marginBottom:6, background:bg3, borderRadius:8, display:"flex", alignItems:"center", gap:8 }}>
+              <div style={{ width:28, height:28, borderRadius:"50%", background:"#7C3AED", display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, color:"#fff", fontWeight:700, flexShrink:0 }}>
+                {user?.displayName?.[0]?.toUpperCase() || user?.email?.[0]?.toUpperCase() || "U"}
+              </div>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontSize:11, fontWeight:600, color:txt, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                  {user?.displayName || user?.email?.split("@")[0] || "User"}
+                </div>
+                <div style={{ fontSize:9, color:"#A78BFA" }}>Free Plan</div>
+              </div>
+              <div onClick={onLogout} title="Logout"
+                style={{ fontSize:14, cursor:"pointer", color:txt3 }}>🚪</div>
+            </div>
+
             <div style={s.secLabel}>Main</div>
             <div onClick={()=>setPage("dashboard")}     style={s.navItem(page==="dashboard",     "#7C3AED")}>🏠 <span>Dashboard</span></div>
             <div onClick={()=>setPage("promptcontent")} style={s.navItem(page==="promptcontent", "#F59E0B")}>⚡ <span>Prompt-to-Content</span></div>
@@ -385,10 +412,12 @@ export default function App() {
             </button>
             <div onClick={()=>{ setTmpKeys({...keys}); setShowSettings(true); }}
               style={{ padding:"4px 10px", borderRadius:20, cursor:"pointer", fontSize:12, color:txt2, border:`1px solid ${bdr}` }}>⚙️</div>
+            <div onClick={onLogout}
+              style={{ padding:"4px 10px", borderRadius:20, cursor:"pointer", fontSize:12, color:"#DC2626", border:"1px solid #DC262633" }}>🚪 Logout</div>
           </div>
         </div>
 
-        {/* ── All Page Renders ── */}
+        {/* ── Pages ── */}
         {page==="dashboard"     && <Dashboard onToolSelect={selectTool} count={count} keys={keys} dark={dark} onPageSelect={setPage} />}
         {page==="promptcontent" && <PromptToContent dark={dark} keys={keys} model={model} />}
         {page==="writer"        && <AiWriter dark={dark} keys={keys} model={model} />}
@@ -424,7 +453,6 @@ export default function App() {
                 style={{ ...s.runBtn(!bulkLoading&&!!bulkInput.trim()), padding:"10px 24px", borderRadius:10, marginBottom:20 }}>
                 {bulkLoading?"Analyzing...":"▶ Analyze All"}
               </button>
-              {bulkLoading && <div style={{ color:txt3, fontSize:13, marginBottom:12 }}>⏳ Analyzing {bulkResults.length+1} of {bulkInput.split("\n").filter(Boolean).length}...</div>}
               {bulkResults.length>0 && (
                 <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
                   {bulkResults.map((r,i) => (
@@ -433,10 +461,6 @@ export default function App() {
                       <div style={{ fontSize:12, color:txt2, lineHeight:1.7 }}>{r.result}</div>
                     </div>
                   ))}
-                  <button onClick={()=>downloadText(bulkResults.map(r=>`${r.keyword}\n${r.result}`).join("\n\n---\n\n"),"bulk-keywords.txt")}
-                    style={{ padding:"8px 20px", borderRadius:8, border:"1px solid #0F766E44", background:"#0F766E11", color:"#0F766E", fontSize:12, cursor:"pointer", alignSelf:"flex-start" }}>
-                    ⬇️ Download All
-                  </button>
                 </div>
               )}
             </div>
@@ -451,8 +475,6 @@ export default function App() {
                   <div style={{ fontSize:44, marginBottom:14 }}>{tool.icon}</div>
                   <div style={{ fontSize:17, fontWeight:700, color:txt, marginBottom:8 }}>{tool.label}</div>
                   <div style={{ fontSize:13, color:txt2, marginBottom:20 }}>{tool.ph}</div>
-                  {tool.cat==="GEO" && <div style={{ fontSize:11, color:"#0F766E", background:"#0F766E11", border:"1px solid #0F766E33", borderRadius:8, padding:"6px 14px", display:"inline-block", marginBottom:16 }}>🌐 2026 Feature</div>}
-                  {tool.isApi && <div style={{ fontSize:11, color:"#D97706", background:"#D9770611", border:"1px solid #D9770633", borderRadius:8, padding:"6px 14px", display:"inline-block", marginBottom:16 }}>⚡ Requires Google API Key</div>}
                   <div style={{ display:"flex", flexWrap:"wrap", gap:8, justifyContent:"center" }}>
                     {["digital marketing agency","e-commerce store","SaaS tool","local restaurant"].map(ex => (
                       <div key={ex} onClick={()=>setInput(ex)}
