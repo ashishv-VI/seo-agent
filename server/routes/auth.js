@@ -1,7 +1,24 @@
-const express   = require("express");
-const router    = express.Router();
+const express = require("express");
+const router  = express.Router();
 const { admin, db, auth } = require("../config/firebase");
-const { verifyToken } = require("../middleware/auth");
+
+// ── Middleware — inline define kiya ───────────────
+async function verifyToken(req, res, next) {
+  try {
+    const header = req.headers.authorization;
+    if (!header || !header.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "No token provided" });
+    }
+    const token   = header.split("Bearer ")[1];
+    const decoded = await auth.verifyIdToken(token);
+    req.user      = decoded;
+    req.uid       = decoded.uid;
+    req.email     = decoded.email;
+    next();
+  } catch (err) {
+    return res.status(401).json({ error: "Invalid token" });
+  }
+}
 
 // ── Register new user ──────────────────────────────
 router.post("/register", async (req, res) => {
@@ -10,15 +27,11 @@ router.post("/register", async (req, res) => {
     if (!email || !password || !name) {
       return res.status(400).json({ error: "All fields required" });
     }
-
-    // Create user in Firebase Auth
     const userRecord = await auth.createUser({
       email,
       password,
       displayName: name,
     });
-
-    // Save user in Firestore
     await db.collection("users").doc(userRecord.uid).set({
       uid:       userRecord.uid,
       email,
@@ -28,13 +41,11 @@ router.post("/register", async (req, res) => {
       apiKeys:   {},
       clients:   [],
     });
-
     return res.status(201).json({
       message: "User created successfully",
       uid:     userRecord.uid,
     });
   } catch (err) {
-    console.error("Register error:", err);
     return res.status(400).json({ error: err.message });
   }
 });
