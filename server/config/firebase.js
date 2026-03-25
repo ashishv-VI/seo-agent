@@ -1,8 +1,6 @@
-const { initializeApp, cert, getApps } = require("firebase-admin/app");
-const { getFirestore, FieldValue }     = require("firebase-admin/firestore");
-const { getAuth }                      = require("firebase-admin/auth");
+const admin = require("firebase-admin");
 
-if (getApps().length === 0) {
+if (!admin.apps.length) {
   let serviceAccount;
 
   if (process.env.FIREBASE_SERVICE_ACCOUNT) {
@@ -28,20 +26,21 @@ if (getApps().length === 0) {
     };
     console.log("✅ Firebase: using individual env vars");
   } else {
-    console.error("❌ No Firebase credentials found. Set FIREBASE_SERVICE_ACCOUNT in Render.");
+    console.error("❌ No Firebase credentials. Set FIREBASE_SERVICE_ACCOUNT in Render.");
     process.exit(1);
   }
 
   try {
-    initializeApp({ credential: cert(serviceAccount) });
+    admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
     console.log("✅ Firebase Admin initialized — project:", serviceAccount.project_id);
   } catch (err) {
-    console.error("❌ Firebase Admin init failed:", err.message);
+    console.error("❌ Firebase init failed:", err.message);
     process.exit(1);
   }
 }
 
-const db   = getFirestore();
-const auth = getAuth();
+const db         = admin.firestore();
+const auth       = admin.auth();
+const FieldValue = admin.firestore.FieldValue;
 
-module.exports = { db, auth, FieldValue };
+module.exports = { admin, db, auth, FieldValue };
