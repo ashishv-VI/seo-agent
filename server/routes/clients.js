@@ -1,6 +1,6 @@
 const express       = require("express");
 const router        = express.Router();
-const { db, admin } = require("../config/firebase");
+const { db, FieldValue } = require("../config/firebase");
 const { verifyToken } = require("../middleware/auth");
 const { runA1 }     = require("../agents/A1_onboarding");
 const { runA2 }     = require("../agents/A2_audit");
@@ -19,7 +19,7 @@ router.post("/", verifyToken, async (req, res) => {
     await clientRef.set({
       clientId,
       ownerId:   req.uid,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp(),
       status:    a1Result.brief.status,
       name:      req.body.businessName || "Unnamed Client",
       website:   a1Result.brief.websiteUrl || "",
@@ -135,7 +135,7 @@ router.put("/:clientId", verifyToken, async (req, res) => {
       website:   a1Result.brief.websiteUrl || doc.data().website,
       status:    a1Result.brief.status,
       "agents.A1": "updated",
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
     });
 
     return res.json({ message: "Client updated", a1Result });

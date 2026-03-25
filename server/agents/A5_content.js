@@ -1,6 +1,6 @@
 const { saveState, getState } = require("../shared-state/stateManager");
 const { callLLM, parseJSON }  = require("../utils/llm");
-const { db, admin }           = require("../config/firebase");
+const { db, FieldValue }      = require("../config/firebase");
 
 /**
  * A5 — Content Optimisation Agent
@@ -111,7 +111,7 @@ Generate optimised content recommendations. Return ONLY valid JSON:
       agent:     "A5",
       status:    "pending",
       data:      contentData.homepageOptimisation,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp(),
     };
     await ref.set(item);
     approvalItems.push(ref.id);
@@ -127,7 +127,7 @@ Generate optimised content recommendations. Return ONLY valid JSON:
       agent:     "A5",
       status:    "pending",
       data:      brief_,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp(),
     });
     approvalItems.push(ref.id);
   }

@@ -1,9 +1,10 @@
-const admin = require("firebase-admin");
+const { initializeApp, cert, getApps } = require("firebase-admin/app");
+const { getFirestore, FieldValue }     = require("firebase-admin/firestore");
+const { getAuth }                      = require("firebase-admin/auth");
 
-if (admin.apps.length === 0) {
+if (getApps().length === 0) {
   let serviceAccount;
 
-  // Option 1: Single JSON env var (recommended — no key formatting issues)
   if (process.env.FIREBASE_SERVICE_ACCOUNT) {
     try {
       serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
@@ -12,9 +13,7 @@ if (admin.apps.length === 0) {
       console.error("❌ FIREBASE_SERVICE_ACCOUNT is not valid JSON:", e.message);
       process.exit(1);
     }
-  }
-  // Option 2: Individual env vars (fallback)
-  else if (process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_PRIVATE_KEY) {
+  } else if (process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_PRIVATE_KEY) {
     serviceAccount = {
       type:                        "service_account",
       project_id:                  process.env.FIREBASE_PROJECT_ID,
@@ -29,13 +28,12 @@ if (admin.apps.length === 0) {
     };
     console.log("✅ Firebase: using individual env vars");
   } else {
-    console.error("❌ No Firebase credentials found.");
-    console.error("   Set FIREBASE_SERVICE_ACCOUNT (paste full JSON) in Render dashboard.");
+    console.error("❌ No Firebase credentials found. Set FIREBASE_SERVICE_ACCOUNT in Render.");
     process.exit(1);
   }
 
   try {
-    admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
+    initializeApp({ credential: cert(serviceAccount) });
     console.log("✅ Firebase Admin initialized — project:", serviceAccount.project_id);
   } catch (err) {
     console.error("❌ Firebase Admin init failed:", err.message);
@@ -43,7 +41,7 @@ if (admin.apps.length === 0) {
   }
 }
 
-const db   = admin.firestore();
-const auth = admin.auth();
+const db   = getFirestore();
+const auth = getAuth();
 
-module.exports = { admin, db, auth };
+module.exports = { db, auth, FieldValue };

@@ -1,6 +1,6 @@
 const express       = require("express");
 const router        = express.Router();
-const { db, admin } = require("../config/firebase");
+const { db, FieldValue } = require("../config/firebase");
 const { verifyToken }        = require("../middleware/auth");
 const { getUserKeys }        = require("../utils/getUserKeys");
 const { canRunAgent, getPipelineStatus, handleFailure } = require("../agents/A0_orchestrator");
@@ -188,7 +188,7 @@ router.post("/:clientId/approvals/:itemId", verifyToken, async (req, res) => {
     const { action, notes } = req.body; // action: "approve" | "reject"
     await db.collection("approval_queue").doc(req.params.itemId).update({
       status:     action === "approve" ? "approved" : "rejected",
-      reviewedAt: admin.firestore.FieldValue.serverTimestamp(),
+      reviewedAt: FieldValue.serverTimestamp(),
       reviewNotes: notes || "",
     });
     return res.json({ message: `Item ${action}d successfully` });
@@ -203,7 +203,7 @@ router.post("/:clientId/alerts/:alertId/resolve", verifyToken, async (req, res) 
     await getClientDoc(req.params.clientId, req.uid);
     await db.collection("alerts").doc(req.params.alertId).update({
       resolved:   true,
-      resolvedAt: admin.firestore.FieldValue.serverTimestamp(),
+      resolvedAt: FieldValue.serverTimestamp(),
     });
     return res.json({ message: "Alert resolved" });
   } catch (e) {

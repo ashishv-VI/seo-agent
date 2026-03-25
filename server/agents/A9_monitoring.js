@@ -1,6 +1,6 @@
 const { saveState, getState } = require("../shared-state/stateManager");
 const { callLLM, parseJSON }  = require("../utils/llm");
-const { db, admin }           = require("../config/firebase");
+const { db, FieldValue }      = require("../config/firebase");
 
 /**
  * A9 — Reporting & Monitoring Agent
@@ -103,7 +103,7 @@ Write an 8-step SEO report. Return ONLY valid JSON:
     agent:      "A9",
     status:     "pending",
     data:       { reportData, gscSummary, generatedAt: new Date().toISOString() },
-    createdAt:  admin.firestore.FieldValue.serverTimestamp(),
+    createdAt:  FieldValue.serverTimestamp(),
   });
 
   const result = {
@@ -140,7 +140,7 @@ async function checkAlerts(clientId, keys) {
         fix:      issue.fix,
         source:   "A2",
         resolved: false,
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        createdAt: FieldValue.serverTimestamp(),
       });
     }
   }
@@ -156,7 +156,7 @@ async function checkAlerts(clientId, keys) {
       fix:     "Run A7 for detailed speed fix recommendations",
       source:  "A7",
       resolved: false,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp(),
     });
   } else if (mobileScore !== null && mobileScore < 70) {
     alerts.push({
@@ -167,7 +167,7 @@ async function checkAlerts(clientId, keys) {
       fix:     "Review A7 speed fix recommendations",
       source:  "A7",
       resolved: false,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp(),
     });
   }
 
