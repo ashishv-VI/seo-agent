@@ -46,6 +46,17 @@ app.get("/health", (req, res) => {
   res.json({ status: "ok" });
 });
 
+// ── Firestore Test (temporary debug) ───────────────
+app.get("/test-db", async (req, res) => {
+  try {
+    const { db } = require("./config/firebase");
+    await db.collection("_test").doc("ping").set({ ping: true, t: new Date().toISOString() });
+    res.json({ status: "✅ Firestore working!" });
+  } catch (e) {
+    res.json({ status: "❌ Firestore FAILED", error: e.message, code: e.code });
+  }
+});
+
 // ── API Routes ─────────────────────────────────────
 app.use("/api/auth",    authRoutes);
 app.use("/api/keys",    keysRoutes);
