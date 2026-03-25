@@ -6,6 +6,7 @@ import Dashboard from "./Dashboard";
 import History from "./History";
 import Markdown from "./Markdown";
 import GscDashboard from "./GscDashboard";
+import ClientManager from "./pages/ClientManager";
 import GA4Dashboard from "./GA4Dashboard";
 import SiteAudit from "./SiteAudit";
 import Compare from "./Compare";
@@ -317,6 +318,9 @@ function MainApp({ onLogout }) {
                 style={{ fontSize:14, cursor:"pointer", color:txt3 }}>🚪</div>
             </div>
 
+            <div style={s.secLabel}>Agency</div>
+            <div onClick={()=>setPage("clients")} style={s.navItem(page==="clients", "#7C3AED")}>🏢 <span>Client Manager</span></div>
+
             <div style={s.secLabel}>Main</div>
             <div onClick={()=>setPage("dashboard")}     style={s.navItem(page==="dashboard",     "#7C3AED")}>🏠 <span>Dashboard</span></div>
             <div onClick={()=>setPage("promptcontent")} style={s.navItem(page==="promptcontent", "#F59E0B")}>⚡ <span>Prompt-to-Content</span></div>
@@ -418,6 +422,7 @@ function MainApp({ onLogout }) {
         </div>
 
         {/* ── Pages ── */}
+        {page==="clients"       && <ClientManager dark={dark} />}
         {page==="dashboard"     && <Dashboard onToolSelect={selectTool} count={count} keys={keys} dark={dark} onPageSelect={setPage} />}
         {page==="promptcontent" && <PromptToContent dark={dark} keys={keys} model={model} />}
         {page==="writer"        && <AiWriter dark={dark} keys={keys} model={model} />}

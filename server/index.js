@@ -2,8 +2,10 @@ require("dotenv").config();
 const express = require("express");
 const cors    = require("cors");
 
-const authRoutes = require("./routes/auth");
-const keysRoutes = require("./routes/keys");
+const authRoutes    = require("./routes/auth");
+const keysRoutes    = require("./routes/keys");
+const clientsRoutes = require("./routes/clients");
+const agentsRoutes  = require("./routes/agents");
 
 const app  = express();
 const PORT = process.env.PORT || 5000;
@@ -44,8 +46,10 @@ app.get("/health", (req, res) => {
 });
 
 // ── API Routes ─────────────────────────────────────
-app.use("/api/auth", authRoutes);
-app.use("/api/keys", keysRoutes);
+app.use("/api/auth",    authRoutes);
+app.use("/api/keys",    keysRoutes);
+app.use("/api/clients", clientsRoutes);
+app.use("/api/agents",  agentsRoutes);
 
 // ── 404 Handler ────────────────────────────────────
 app.use((req, res) => {
