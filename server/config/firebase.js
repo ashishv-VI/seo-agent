@@ -1,4 +1,7 @@
 const admin = require("firebase-admin");
+const fs    = require("fs");
+const path  = require("path");
+const os    = require("os");
 
 if (!admin.apps.length) {
   let serviceAccount;
@@ -6,7 +9,11 @@ if (!admin.apps.length) {
   if (process.env.FIREBASE_SERVICE_ACCOUNT) {
     try {
       serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-      console.log("✅ Firebase: using FIREBASE_SERVICE_ACCOUNT JSON");
+      // Write to temp file so gRPC client can read credentials
+      const tmpFile = path.join(os.tmpdir(), "firebase-sa.json");
+      fs.writeFileSync(tmpFile, JSON.stringify(serviceAccount));
+      process.env.GOOGLE_APPLICATION_CREDENTIALS = tmpFile;
+      console.log("✅ Firebase: using FIREBASE_SERVICE_ACCOUNT JSON (written to temp file for gRPC)");
     } catch (e) {
       console.error("❌ FIREBASE_SERVICE_ACCOUNT is not valid JSON:", e.message);
       process.exit(1);
