@@ -5,7 +5,7 @@ import { auth } from "../config/firebase";
 const AuthContext = createContext(null);
 const provider   = new GoogleAuthProvider();
 provider.addScope("https://www.googleapis.com/auth/webmasters.readonly");
-const API        = "https://seo-agent-backend-8mfz.onrender.com";
+const API        = "https://seo-agent-backend-8m1z.onrender.com";
 
 export function AuthProvider({ children }) {
   const [user,        setUser]        = useState(null);
