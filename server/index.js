@@ -13,6 +13,7 @@ const PORT = process.env.PORT || 5000;
 // ── CORS — Production URLs ─────────────────────────
 const allowedOrigins = [
   process.env.FRONTEND_URL,
+  "https://seo-agent-6jrv.onrender.com",
   "http://localhost:5173",
   "http://localhost:3000",
 ].filter(Boolean);
