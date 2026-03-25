@@ -108,6 +108,13 @@ const CONVERSION_OPTIONS = [
   "Newsletter Signup", "Quote Request", "Foot Traffic / Visit", "Live Chat",
 ];
 
+const AUDIENCE_OPTIONS = [
+  "Local Consumers", "Small Businesses (B2B)", "Enterprise / Corporate",
+  "E-commerce Shoppers", "Home Owners", "Parents / Families",
+  "Young Professionals", "Students", "Healthcare Patients",
+  "Property Investors", "Restaurant / Cafe Goers", "Trade / Contractors",
+];
+
 const COUNTRY_OPTIONS = [
   "United Kingdom", "United States", "Australia", "Canada", "India",
   "Pakistan", "UAE", "South Africa", "Ireland", "New Zealand",
@@ -136,7 +143,7 @@ export default function ClientManager({ dark }) {
   const blankForm = {
     businessName: "", websiteUrl: "", businessDescription: "",
     businessLocation: "", services: [], goals: [],
-    targetAudience: "", conversionGoal: "",
+    targetAudience: [], conversionGoals: [],
     targetLocations: [], competitors: "", primaryKeywords: "",
     notes: "",
   };
@@ -164,9 +171,11 @@ export default function ClientManager({ dark }) {
       const token = await getToken();
       const body  = {
         ...form,
+        conversionGoal:  form.conversionGoals.join(", "),  // A1 expects a string
+        targetAudience:  form.targetAudience.join(", "),   // A1 expects a string
         competitors:     form.competitors.split(",").map(s => s.trim()).filter(Boolean),
         primaryKeywords: form.primaryKeywords.split(",").map(s => s.trim()).filter(Boolean),
-        // services, goals, targetLocations are already arrays
+        // services, goals, targetLocations, conversionGoals are already arrays
       };
       const res  = await fetch(`${API}/api/clients`, {
         method: "POST",
@@ -258,11 +267,10 @@ export default function ClientManager({ dark }) {
                   <option value="Other">Other</option>
                 </select>
               </div>
-              <div>
-                <label style={s.label}>Target Audience *</label>
-                <input style={s.inp} required value={form.targetAudience}
-                  onChange={e => setForm(f => ({...f, targetAudience: e.target.value}))}
-                  placeholder="Small business owners in London" />
+              <div style={{ gridColumn:"span 2" }}>
+                <TagSelect label="Target Audience * (who are this client's customers?)" options={AUDIENCE_OPTIONS}
+                  selected={form.targetAudience} onChange={v => setForm(f => ({...f, targetAudience: v}))}
+                  placeholder="Custom audience (e.g. Dog owners, Gym-goers...)" dark={dark} />
               </div>
 
               <div style={{ gridColumn:"span 2" }}>
@@ -288,12 +296,9 @@ export default function ClientManager({ dark }) {
               </div>
 
               <div style={{ gridColumn:"span 2" }}>
-                <label style={s.label}>Primary Conversion Goal</label>
-                <select style={s.sel} value={form.conversionGoal}
-                  onChange={e => setForm(f => ({...f, conversionGoal: e.target.value}))}>
-                  <option value="">Select conversion goal</option>
-                  {CONVERSION_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
-                </select>
+                <TagSelect label="Conversion Goals (what counts as a win for this client?)" options={CONVERSION_OPTIONS}
+                  selected={form.conversionGoals} onChange={v => setForm(f => ({...f, conversionGoals: v}))}
+                  placeholder="Custom goal..." dark={dark} />
               </div>
 
               {/* ── Section: Target Locations ─────────────────── */}

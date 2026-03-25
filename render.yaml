@@ -1,0 +1,31 @@
+services:
+  # ── Backend API (Node.js) ──────────────────────────────────────
+  - type: web
+    name: seo-agent-backend
+    runtime: node
+    rootDir: server
+    buildCommand: npm install
+    startCommand: node index.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: FRONTEND_URL
+        value: https://seo-agent-6jrv.onrender.com
+      # Set these manually in Render dashboard → Environment:
+      # FIREBASE_PROJECT_ID
+      # FIREBASE_PRIVATE_KEY_ID
+      # FIREBASE_PRIVATE_KEY      (paste with \n for newlines)
+      # FIREBASE_CLIENT_EMAIL
+      # FIREBASE_CLIENT_ID
+      # FIREBASE_CLIENT_CERT_URL
+      # JWT_SECRET
+
+  # ── Frontend (Static Site) ─────────────────────────────────────
+  - type: web
+    name: seo-agent-frontend
+    runtime: static
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    envVars:
+      - key: VITE_API_URL
+        value: https://seo-agent-backend-8mfz.onrender.com
