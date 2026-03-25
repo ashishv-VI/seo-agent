@@ -6,15 +6,31 @@ const { verifyToken }      = require("../middleware/auth");
 router.post("/register", async (req, res) => {
   try {
     const { email, password, name } = req.body;
-    if (!email || !password || !name) {
-      return res.status(400).json({ error: "All fields required" });
+    if (!email || !name) return res.status(400).json({ error: "Email and name required" });
+
+    let uid;
+    // Try to create new Firebase Auth user (email/password registration)
+    if (password && !password.startsWith("google-oauth-")) {
+      const userRecord = await auth.createUser({ email, password, displayName: name });
+      uid = userRecord.uid;
+    } else {
+      // Google OAuth — get uid from token
+      const header = req.headers.authorization;
+      if (header?.startsWith("Bearer ")) {
+        const decoded = await auth.verifyIdToken(header.split("Bearer ")[1]);
+        uid = decoded.uid;
+      } else {
+        return res.status(400).json({ error: "No token for Google user" });
+      }
     }
-    const userRecord = await auth.createUser({ email, password, displayName: name });
-    await db.collection("users").doc(userRecord.uid).set({
-      uid: userRecord.uid, email, name,
+
+    // Upsert user document (set with merge — safe for new and existing users)
+    await db.collection("users").doc(uid).set({
+      uid, email, name,
       plan: "free", createdAt: FieldValue.serverTimestamp(), apiKeys: {}, clients: [],
-    });
-    return res.status(201).json({ message: "User created successfully", uid: userRecord.uid });
+    }, { merge: true });
+
+    return res.status(201).json({ message: "User ready", uid });
   } catch (err) {
     console.error("Register error:", err.message);
     return res.status(400).json({ error: err.message });

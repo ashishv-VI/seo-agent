@@ -24,6 +24,19 @@ export function AuthProvider({ children }) {
     const result     = await signInWithPopup(auth, provider);
     const credential = GoogleAuthProvider.credentialFromResult(result);
     setGoogleToken(credential?.accessToken || null);
+    // Auto-create user document if first Google login
+    try {
+      const t = await result.user.getIdToken();
+      await fetch(API + "/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + t },
+        body: JSON.stringify({
+          email: result.user.email,
+          password: "google-oauth-" + result.user.uid,
+          name: result.user.displayName || result.user.email,
+        }),
+      });
+    } catch(_) {} // Ignore — user may already exist
     return result;
   };
   const logout         = ()        => { setGoogleToken(null); return signOut(auth); };
