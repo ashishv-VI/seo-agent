@@ -50,7 +50,7 @@ function AppInner() {
 
 // ── Main App ───────────────────────────────────────
 function MainApp({ onLogout }) {
-  const { user } = useAuth();
+  const { user, googleToken } = useAuth();
   const [tool, setTool]       = useState(null);
   const [page, setPage]       = useState("dashboard");
   const [input, setInput]     = useState("");
@@ -421,7 +421,7 @@ function MainApp({ onLogout }) {
         {page==="dashboard"     && <Dashboard onToolSelect={selectTool} count={count} keys={keys} dark={dark} onPageSelect={setPage} />}
         {page==="promptcontent" && <PromptToContent dark={dark} keys={keys} model={model} />}
         {page==="writer"        && <AiWriter dark={dark} keys={keys} model={model} />}
-        {page==="gsc"           && <GscDashboard dark={dark} googleKey={keys.google} />}
+        {page==="gsc"           && <GscDashboard dark={dark} gscToken={googleToken} />}
         {page==="ga4"           && <GA4Dashboard dark={dark} googleKey={keys.google} keys={keys} model={model} />}
         {page==="audit"         && <SiteAudit dark={dark} googleKey={keys.google} groqKey={keys.groq} geminiKey={keys.gemini} model={model} />}
         {page==="compare"       && <Compare dark={dark} googleKey={keys.google} />}

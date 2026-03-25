@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-export default function GscDashboard({ dark, googleKey }) {
+export default function GscDashboard({ dark, gscToken }) {
   const [siteUrl, setSiteUrl]     = useState("");
   const [loading, setLoading]     = useState(false);
   const [data, setData]           = useState(null);
@@ -19,7 +19,7 @@ export default function GscDashboard({ dark, googleKey }) {
 
   async function fetchGSC() {
     if (!siteUrl.trim()) return;
-    if (!googleKey) { setError("Google API Key needed — add in Settings!"); return; }
+    if (!gscToken) { setError("Google login required — please sign out and login again with Google to use Search Console."); return; }
     setLoading(true); setError(""); setData(null);
 
     const url       = siteUrl.startsWith("http") ? siteUrl : `https://${siteUrl}`;
@@ -32,8 +32,8 @@ export default function GscDashboard({ dark, googleKey }) {
       return JSON.stringify(body);
     };
 
-    const apiUrl = `https://searchconsole.googleapis.com/webmasters/v3/sites/${encodeURIComponent(url)}/searchAnalytics/query?key=${googleKey}`;
-    const headers = { "Content-Type":"application/json" };
+    const apiUrl = `https://searchconsole.googleapis.com/webmasters/v3/sites/${encodeURIComponent(url)}/searchAnalytics/query`;
+    const headers = { "Content-Type":"application/json", "Authorization": `Bearer ${gscToken}` };
 
     try {
       const [queryRes, pageRes, countryRes, deviceRes, dateRes] = await Promise.all([
