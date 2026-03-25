@@ -1,5 +1,5 @@
 {
-  "name": "seo-agent-backend",
+  "name": "server",
   "version": "1.0.0",
   "description": "SEO Agent Backend API",
   "main": "index.js",
@@ -11,13 +11,13 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
-    "bcryptjs": "^2.4.3",
-    "cors": "^2.8.5",
-    "dotenv": "^16.0.3",
-    "express": "^4.18.2",
-    "firebase-admin": "^11.11.0",
-    "jsonwebtoken": "^9.0.0",
-    "nodemailer": "^6.9.3",
-    "stripe": "^12.18.0"
+    "bcryptjs": "^3.0.3",
+    "cors": "^2.8.6",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "firebase-admin": "^13.7.0",
+    "jsonwebtoken": "^9.0.3",
+    "nodemailer": "^8.0.3",
+    "stripe": "^20.4.1"
   }
 }

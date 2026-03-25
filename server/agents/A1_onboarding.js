@@ -10,6 +10,7 @@ async function runA1(clientId, rawData) {
     businessName,
     websiteUrl,
     businessDescription,
+    businessLocation,
     services = [],
     targetAudience,
     goals = [],
@@ -38,6 +39,7 @@ async function runA1(clientId, rawData) {
     businessName,
     websiteUrl: websiteUrl?.startsWith("http") ? websiteUrl : `https://${websiteUrl}`,
     businessDescription,
+    businessLocation: businessLocation || "Not specified",
     services,
 
     // Strategy
