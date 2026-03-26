@@ -264,6 +264,48 @@ router.post("/:clientId/approvals/:itemId/revision", verifyToken, async (req, re
   }
 });
 
+// ── AI Generate Fix for a specific issue ──────────
+router.post("/:clientId/generate-fix", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const keys    = await getUserKeys(req.uid);
+    const { callLLM, parseJSON } = require("../utils/llm");
+    const { getState } = require("../shared-state/stateManager");
+
+    const { type, detail, current, context } = req.body;
+    const brief = context || await getState(req.params.clientId, "A1_brief") || {};
+
+    const prompt = `You are a senior SEO consultant. Generate an exact, ready-to-implement fix for this issue.
+
+Business: ${brief.businessName || "N/A"}
+Website: ${brief.websiteUrl || "N/A"}
+Services: ${(brief.services || []).join(", ") || "N/A"}
+Issue Type: ${type}
+Issue: ${detail}
+Current Value: ${current || "N/A"}
+
+Return ONLY valid JSON (no markdown):
+{
+  "fix": "concise exact fix instruction (1-2 sentences)",
+  "explanation": "why this fix improves SEO",
+  "implementation": "step-by-step how to apply (2-4 steps)",
+  "codeSnippet": "ready-to-paste HTML/code or null"
+}`;
+
+    const response = await callLLM(prompt, keys, { maxTokens: 600 });
+    const result   = parseJSON(response);
+    return res.json({
+      success:        true,
+      fix:            result.fix            || detail,
+      explanation:    result.explanation    || "",
+      implementation: result.implementation || "",
+      codeSnippet:    result.codeSnippet    || null,
+    });
+  } catch (e) {
+    return res.status(500).json({ error: e.message || "Fix generation failed" });
+  }
+});
+
 // ── Get rank history for client ────────────────────
 router.get("/:clientId/rank-history", verifyToken, async (req, res) => {
   try {

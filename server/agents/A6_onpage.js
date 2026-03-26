@@ -1,6 +1,18 @@
 const { saveState, getState } = require("../shared-state/stateManager");
 const { callLLM, parseJSON }  = require("../utils/llm");
 
+// Deep-sanitize object before writing to Firestore — removes all undefined values
+function sanitize(obj) {
+  if (obj === undefined || obj === null) return null;
+  if (typeof obj !== "object")           return obj;
+  if (Array.isArray(obj))                return obj.map(sanitize);
+  return Object.fromEntries(
+    Object.entries(obj)
+      .filter(([, v]) => v !== undefined)
+      .map(([k, v]) => [k, sanitize(v)])
+  );
+}
+
 /**
  * A6 — On-Page & Tag Management Agent
  * Runs in parallel with A5 — no dependency on content
@@ -262,14 +274,14 @@ Return ONLY valid JSON:
         ...schema,
         valid:           hasContext && hasType,
         validationError: !hasContext ? "Missing @context: schema.org" : !hasType ? "Missing @type" : null,
-        parsedFields:    { type: parsed["@type"], name: parsed.name, hasUrl: !!parsed.url },
+        parsedFields:    { type: parsed["@type"] || null, name: parsed.name || null, hasUrl: !!parsed.url },
       };
     } catch (e) {
       // Try to salvage — strip trailing commas and retry
       try {
         const fixed  = schema.jsonLd.replace(/,\s*([}\]])/g, "$1");
         const parsed = JSON.parse(fixed);
-        return { ...schema, jsonLd: fixed, valid: true, validationError: null, autoFixed: true, parsedFields: { type: parsed["@type"] } };
+        return { ...schema, jsonLd: fixed, valid: true, validationError: null, autoFixed: true, parsedFields: { type: parsed["@type"] || null } };
       } catch {
         return { ...schema, valid: false, validationError: `Parse error: ${e.message}` };
       }
@@ -315,7 +327,7 @@ Return ONLY valid JSON:
     generatedAt: new Date().toISOString(),
   };
 
-  await saveState(clientId, "A6_onpage", result);
+  await saveState(clientId, "A6_onpage", sanitize(result));
   return { success: true, onpage: result };
 }
 

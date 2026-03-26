@@ -374,14 +374,11 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
       )}
 
       {activeTab==="actionplan" && (
-        <>
-          <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:12 }}>
-            <button onClick={exportPDF} style={{ padding:"8px 18px", borderRadius:8, border:"none", background:"#059669", color:"#fff", fontWeight:600, fontSize:12, cursor:"pointer" }}>
-              📄 Download PDF Report
-            </button>
-          </div>
-          <ActionPlanView state={state} dark={dark} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2} txt3={txt3} />
-        </>
+        <ActionPlanView
+          state={state} dark={dark} bg2={bg2} bg3={bg3} bdr={bdr}
+          txt={txt} txt2={txt2} txt3={txt3}
+          clientId={clientId} getToken={getToken} API={API} exportPDF={exportPDF}
+        />
       )}
       {activeTab==="approvals" && <ApprovalQueue dark={dark} clientId={clientId} />}
       {activeTab==="alerts"    && <AlertCenter   dark={dark} clientId={clientId} />}
@@ -433,239 +430,314 @@ function getStateSuffix(id) {
   return { A1:"brief", A2:"audit", A3:"keywords", A4:"competitor", A5:"content", A6:"onpage", A7:"technical", A8:"geo", A9:"report" }[id] || id;
 }
 
-// ── Action Plan View ───────────────────────────────
-function ActionPlanView({ state, bg2, bg3, bdr, txt, txt2, txt3 }) {
-  const audit    = state.A2_audit    || {};
-  const keywords = state.A3_keywords || {};
+// ── Smart SEO Command Center ───────────────────────
+function ActionPlanView({ state, bg2, bg3, bdr, txt, txt2, txt3, clientId, getToken, API, exportPDF }) {
+  const [viewMode,   setViewMode]   = useState("business"); // business | expert
+  const [done,       setDone]       = useState(new Set());
+  const [copied,     setCopied]     = useState(null);
+  const [generating, setGenerating] = useState(null);
+  const [generated,  setGenerated]  = useState({});
+
+  const audit    = state.A2_audit      || {};
+  const keywords = state.A3_keywords   || {};
   const comp     = state.A4_competitor || {};
-  const onpage   = state.A6_onpage   || {};
-  const geo      = state.A8_geo      || {};
-  const report   = state.A9_report   || {};
+  const geo      = state.A8_geo        || {};
+  const report   = state.A9_report     || {};
+  const brief    = state.A1_brief      || {};
 
-  const p1Issues   = audit.issues?.p1 || [];
-  const p2Issues   = audit.issues?.p2 || [];
-  const topKws     = [...(keywords.clusters?.generic||[]), ...(keywords.clusters?.longtail||[])].filter(k=>k.priority==="high").slice(0,5);
-  const quickWins  = comp.analysis?.quickWins || [];
-  const gaps       = keywords.gaps || [];
-  const geoActions = geo.offPage?.citationTargets || [];
-  const next3      = report.reportData?.next3Actions || [];
+  // ── Build impact-scored master task list ──────────
+  const allTasks = [];
 
-  // Build priority task list
-  const tasks = [];
-  p1Issues.slice(0,3).forEach(i => tasks.push({ priority:"🔴 Critical", label: i.detail, fix: i.fix, type:"technical" }));
-  quickWins.slice(0,3).forEach(w => tasks.push({ priority:"🟡 Quick Win", label: `Rank for "${w.keyword}"`, fix: w.action, type:"seo" }));
-  gaps.slice(0,2).forEach(g => tasks.push({ priority:"🔵 Content", label: `Create content: "${g.keyword}"`, fix: g.recommendedAction, type:"content" }));
-  p2Issues.slice(0,2).forEach(i => tasks.push({ priority:"⚪ Important", label: i.detail, fix: i.fix, type:"technical" }));
+  (audit.issues?.p1 || []).forEach((issue, i) => allTasks.push({
+    id: `p1_${i}`, category: "technical", tier: "critical",
+    label: issue.detail,
+    businessLabel: `Fix: ${issue.detail?.split("(")[0]?.trim() || issue.detail}`,
+    why: "This is a critical technical issue that directly blocks search engine crawling and hurts your rankings.",
+    fix: issue.fix,
+    impact: Math.max(90 - i * 3, 78),
+    color: "#DC2626", bgColor: "#DC262608", tierLabel: "🔴 Critical",
+  }));
 
-  const Card = ({ children, style }) => (
-    <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:12, padding:16, marginBottom:12, ...style }}>{children}</div>
-  );
-  const SectionTitle = ({ icon, title, color="#7C3AED" }) => (
-    <div style={{ fontSize:12, fontWeight:700, color, textTransform:"uppercase", letterSpacing:1, marginBottom:10, display:"flex", alignItems:"center", gap:6 }}>
-      <span>{icon}</span>{title}
-    </div>
-  );
+  (comp.analysis?.quickWins || []).slice(0, 4).forEach((w, i) => allTasks.push({
+    id: `qw_${i}`, category: "seo", tier: "quick_win",
+    label: `Rank for "${w.keyword}"`,
+    businessLabel: `Get found when customers search "${w.keyword}"`,
+    why: "Your competitors rank for this keyword — you're losing traffic you could easily capture right now.",
+    fix: w.action, expectedOutcome: w.expectedOutcome,
+    impact: Math.max(78 - i * 3, 60),
+    color: "#D97706", bgColor: "#D9770608", tierLabel: "⚡ Quick Win",
+  }));
+
+  (keywords.gaps || []).slice(0, 3).forEach((g, i) => allTasks.push({
+    id: `gap_${i}`, category: "content", tier: "content",
+    label: `Create content: "${g.keyword}"`,
+    businessLabel: `Write a page for "${g.keyword}"`,
+    why: g.reason || "No page exists for this search term — you're invisible to customers searching for it.",
+    fix: g.recommendedAction,
+    impact: Math.max(62 - i * 3, 48),
+    color: "#0891B2", bgColor: "#0891B208", tierLabel: "📝 Content Gap",
+  }));
+
+  (audit.issues?.p2 || []).slice(0, 4).forEach((issue, i) => allTasks.push({
+    id: `p2_${i}`, category: "technical", tier: "important",
+    label: issue.detail,
+    businessLabel: issue.detail?.split("(")[0]?.trim() || issue.detail,
+    why: "An important SEO issue that affects your search visibility and page experience scores.",
+    fix: issue.fix,
+    impact: Math.max(55 - i * 3, 38),
+    color: "#D97706", bgColor: "#D9770608", tierLabel: "🟡 Important",
+  }));
+
+  (keywords.cannibalization || []).slice(0, 2).forEach((c, i) => allTasks.push({
+    id: `can_${i}`, category: "seo", tier: "important",
+    label: `Fix keyword cannibalization: ${c.page}`,
+    businessLabel: "Multiple pages competing for the same searches",
+    why: "When multiple pages target the same keyword they split authority and cancel each other out in Google.",
+    fix: c.fix,
+    impact: Math.max(44 - i * 3, 32),
+    color: "#D97706", bgColor: "#D9770608", tierLabel: "⚠️ Cannibalization",
+  }));
+
+  (geo.offPage?.citationTargets || []).slice(0, 3).forEach((c, i) => allTasks.push({
+    id: `geo_${i}`, category: "local", tier: "local",
+    label: `List on ${c.directory}`,
+    businessLabel: `Get listed on ${c.directory} to appear in local searches`,
+    why: "Local directory listings boost your visibility in Google Maps and local search results.",
+    fix: c.url ? `Submit to ${c.directory} at ${c.url}` : `Create a listing on ${c.directory}`,
+    impact: Math.max(42 - i * 3, 28),
+    color: "#059669", bgColor: "#05966908", tierLabel: "🌍 Local SEO",
+  }));
+
+  allTasks.sort((a, b) => b.impact - a.impact);
+
+  const top3      = allTasks.slice(0, 3);
+  const rest      = allTasks.slice(3);
+  const remaining = rest.filter(t => !done.has(t.id));
+  const doneCount = done.size;
+  const total     = allTasks.length;
+  const next3     = report.reportData?.next3Actions || [];
+
+  const hs         = audit.healthScore || 0;
+  const scoreColor = hs >= 80 ? "#059669" : hs >= 50 ? "#D97706" : "#DC2626";
+
+  function copyFix(fix, id) {
+    navigator.clipboard?.writeText(fix || "");
+    setCopied(id);
+    setTimeout(() => setCopied(null), 2000);
+  }
+
+  function toggleDone(id) {
+    setDone(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  }
+
+  async function generateFix(task, key) {
+    setGenerating(key);
+    try {
+      const token = await getToken();
+      const res = await fetch(`${API}/api/agents/${clientId}/generate-fix`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          type: task.category, detail: task.label, current: "",
+          context: { businessName: brief.businessName, websiteUrl: brief.websiteUrl, services: brief.services },
+        }),
+      });
+      const data = await res.json();
+      if (data.fix) setGenerated(g => ({ ...g, [key]: data }));
+    } catch {}
+    setGenerating(null);
+  }
+
+  // ── Render helpers ─────────────────────────────────
+  function ImpactCard({ task, taskKey, prominent = false }) {
+    const isDone = done.has(task.id);
+    const gen    = generated[taskKey];
+    return (
+      <div style={{
+        background: bg2, border: `1px solid ${bdr}`, borderLeft: `4px solid ${task.color}`,
+        borderRadius: 12, padding: prominent ? 18 : 14, marginBottom: 10,
+        opacity: isDone ? 0.45 : 1, transition: "opacity 0.3s",
+      }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 10, padding: "3px 10px", borderRadius: 10, background: `${task.color}22`, color: task.color, fontWeight: 700 }}>{task.tierLabel}</span>
+            <span style={{ fontSize: 10, padding: "3px 10px", borderRadius: 10, background: "#7C3AED22", color: "#A78BFA", fontWeight: 700 }}>Impact: {task.impact}</span>
+          </div>
+          {isDone && <span style={{ fontSize: 10, color: "#059669", fontWeight: 700 }}>✅ Done</span>}
+        </div>
+
+        <div style={{ fontSize: prominent ? 14 : 13, fontWeight: 700, color: txt, marginBottom: 6 }}>
+          {viewMode === "business" ? (task.businessLabel || task.label) : task.label}
+        </div>
+
+        <div style={{ fontSize: 12, color: txt2, marginBottom: 8, lineHeight: 1.55 }}>
+          <span style={{ color: task.color, fontWeight: 600 }}>Why: </span>{task.why}
+        </div>
+
+        {task.expectedOutcome && (
+          <div style={{ fontSize: 11, color: "#059669", marginBottom: 8 }}>📈 Expected: {task.expectedOutcome}</div>
+        )}
+
+        <div style={{ fontSize: 12, color: txt, padding: "8px 12px", background: bg3, borderRadius: 8, marginBottom: 12 }}>
+          <span style={{ fontWeight: 600, color: txt2 }}>Fix: </span>{task.fix}
+        </div>
+
+        {gen && (
+          <div style={{ marginBottom: 12, padding: "10px 12px", background: "#7C3AED11", borderRadius: 8, border: "1px solid #7C3AED33" }}>
+            <div style={{ fontSize: 10, color: "#A78BFA", fontWeight: 700, marginBottom: 6 }}>🤖 AI-Generated Fix</div>
+            <div style={{ fontSize: 12, color: txt, marginBottom: 4 }}>{gen.fix}</div>
+            {gen.codeSnippet && (
+              <pre style={{ fontSize: 10, color: "#059669", background: bg3, borderRadius: 6, padding: 8, overflow: "auto", margin: "6px 0 0", whiteSpace: "pre-wrap" }}>{gen.codeSnippet}</pre>
+            )}
+            {gen.implementation && (
+              <div style={{ fontSize: 11, color: txt2, marginTop: 6 }}>{gen.implementation}</div>
+            )}
+          </div>
+        )}
+
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button onClick={() => copyFix(task.fix, task.id)}
+            style={{ padding: "6px 14px", borderRadius: 8, border: `1px solid ${bdr}`, background: copied === task.id ? "#05966922" : "transparent", color: copied === task.id ? "#059669" : txt2, fontSize: 11, cursor: "pointer", fontWeight: 500 }}>
+            {copied === task.id ? "✅ Copied!" : "📋 Copy Fix"}
+          </button>
+          <button onClick={() => generateFix(task, taskKey)} disabled={generating === taskKey}
+            style={{ padding: "6px 14px", borderRadius: 8, border: "1px solid #7C3AED44", background: "transparent", color: "#A78BFA", fontSize: 11, cursor: generating === taskKey ? "not-allowed" : "pointer", fontWeight: 500 }}>
+            {generating === taskKey ? "⏳ Generating..." : "🤖 AI Fix"}
+          </button>
+          <button onClick={() => toggleDone(task.id)}
+            style={{ padding: "6px 14px", borderRadius: 8, border: "1px solid #05966444", background: isDone ? "#05966922" : "transparent", color: "#059669", fontSize: 11, cursor: "pointer", fontWeight: 500 }}>
+            {isDone ? "↩️ Undo" : "✅ Mark Done"}
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
-      {/* Health Score Bar */}
-      {audit.healthScore && (
-        <Card>
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
-            <div style={{ fontSize:14, fontWeight:700, color:txt }}>Site Health Score</div>
-            <div style={{ fontSize:28, fontWeight:800, color: audit.healthScore>=80?"#059669":audit.healthScore>=50?"#D97706":"#DC2626" }}>
-              {audit.healthScore}<span style={{ fontSize:14, color:txt2 }}>/100</span>
+      {/* ── Header ───────────────────────────────────── */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+        <div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: txt }}>🎯 SEO Command Center</div>
+          <div style={{ fontSize: 12, color: txt2, marginTop: 2 }}>AI-prioritized actions sorted by business impact</div>
+        </div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          {/* Business / Expert toggle */}
+          <div style={{ display: "flex", background: bg3, borderRadius: 20, padding: 2, border: `1px solid ${bdr}` }}>
+            {[["business", "📊 Summary"], ["expert", "⚙️ Technical"]].map(([m, label]) => (
+              <button key={m} onClick={() => setViewMode(m)}
+                style={{ padding: "5px 14px", borderRadius: 18, border: "none", fontSize: 11, fontWeight: 600, cursor: "pointer",
+                  background: viewMode === m ? "#7C3AED" : "transparent",
+                  color: viewMode === m ? "#fff" : txt2 }}>
+                {label}
+              </button>
+            ))}
+          </div>
+          {exportPDF && (
+            <button onClick={exportPDF}
+              style={{ padding: "7px 16px", borderRadius: 8, border: `1px solid ${bdr}`, background: bg2, color: txt2, fontSize: 11, cursor: "pointer", fontWeight: 600 }}>
+              📄 PDF
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* ── Dashboard Row ─────────────────────────────── */}
+      <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: 12, marginBottom: 14 }}>
+        {/* Health Ring */}
+        {hs > 0 && (
+          <div style={{ background: bg2, border: `1px solid ${bdr}`, borderRadius: 12, padding: "16px 20px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+            <div style={{
+              width: 80, height: 80, borderRadius: "50%",
+              background: `conic-gradient(${scoreColor} ${hs * 3.6}deg, ${bg3} 0deg)`,
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}>
+              <div style={{ width: 62, height: 62, borderRadius: "50%", background: bg2, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+                <div style={{ fontSize: 20, fontWeight: 800, color: scoreColor, lineHeight: 1 }}>{hs}</div>
+                <div style={{ fontSize: 8, color: txt2 }}>/ 100</div>
+              </div>
             </div>
+            <div style={{ fontSize: 10, color: txt2, marginTop: 8, fontWeight: 600 }}>Site Health</div>
           </div>
-          <div style={{ background:bg3, borderRadius:20, height:8, overflow:"hidden" }}>
-            <div style={{ width:`${audit.healthScore}%`, height:"100%", borderRadius:20, background: audit.healthScore>=80?"#059669":audit.healthScore>=50?"#D97706":"#DC2626", transition:"width 0.5s" }} />
-          </div>
-          <div style={{ display:"flex", gap:16, marginTop:10, flexWrap:"wrap" }}>
+        )}
+
+        {/* Stats + Verdict */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {[
-              {l:"P1 Critical",  v:audit.summary?.p1Count||0,        c:"#DC2626"},
-              {l:"P2 Important", v:audit.summary?.p2Count||0,        c:"#D97706"},
-              {l:"Pages Crawled",v:audit.summary?.pagesCrawled||1,   c:"#0891B2"},
-              {l:"Broken Links", v:audit.summary?.brokenLinks||0,    c: (audit.summary?.brokenLinks||0)>0?"#DC2626":"#059669"},
-              {l:"E-E-A-T",      v:`${audit.summary?.eeatScore||0}/8`, c: (audit.summary?.eeatScore||0)>=6?"#059669":(audit.summary?.eeatScore||0)>=4?"#D97706":"#DC2626"},
-              {l:"Thin Pages",   v:audit.summary?.thinPages||0,      c: (audit.summary?.thinPages||0)>0?"#D97706":"#059669"},
-              {l:"Keywords",     v:keywords.totalKeywords||0,        c:"#7C3AED"},
-              {l:"Cannibalization",v:(keywords.cannibalization||[]).length, c: (keywords.cannibalization||[]).length>0?"#D97706":"#059669"},
-            ].map(i=>(
-              <div key={i.l} style={{ textAlign:"center" }}>
-                <div style={{ fontSize:18, fontWeight:700, color:i.c }}>{i.v}</div>
-                <div style={{ fontSize:10, color:txt2 }}>{i.l}</div>
+              { l: "Critical",   v: audit.summary?.p1Count || 0,    c: "#DC2626" },
+              { l: "Important",  v: audit.summary?.p2Count || 0,    c: "#D97706" },
+              { l: "Keywords",   v: keywords.totalKeywords || 0,    c: "#7C3AED" },
+              { l: "Completed",  v: doneCount,                       c: "#059669" },
+            ].map(i => (
+              <div key={i.l} style={{ background: bg2, border: `1px solid ${bdr}`, borderRadius: 8, padding: "8px 14px", textAlign: "center", flex: 1, minWidth: 70 }}>
+                <div style={{ fontSize: 18, fontWeight: 700, color: i.c }}>{i.v}</div>
+                <div style={{ fontSize: 10, color: txt2 }}>{i.l}</div>
               </div>
             ))}
           </div>
-        </Card>
-      )}
-
-      {/* A9 Verdict */}
-      {report.reportData?.verdict && (
-        <Card style={{ borderLeft:"4px solid #7C3AED" }}>
-          <SectionTitle icon="📊" title="SEO Verdict" />
-          <div style={{ fontSize:13, color:txt, lineHeight:1.6 }}>{report.reportData.verdict}</div>
-        </Card>
-      )}
-
-      {/* This Week's Priority Actions */}
-      {tasks.length > 0 && (
-        <Card>
-          <SectionTitle icon="🎯" title="This Week's Action Plan" color="#059669" />
-          {tasks.map((t,i) => (
-            <div key={i} style={{ display:"flex", gap:10, padding:"10px 0", borderBottom:`1px solid ${bdr}` }}>
-              <div style={{ fontSize:18, lineHeight:1, marginTop:2 }}>{["1️⃣","2️⃣","3️⃣","4️⃣","5️⃣","6️⃣","7️⃣","8️⃣"][i]||"•"}</div>
-              <div style={{ flex:1 }}>
-                <div style={{ fontSize:12, fontWeight:600, color:txt, marginBottom:3 }}>{t.label}</div>
-                <div style={{ fontSize:11, color:txt2 }}>→ {t.fix}</div>
+          {report.reportData?.verdict && (
+            <div style={{ background: bg2, border: `1px solid ${bdr}`, borderRadius: 8, padding: "10px 14px", borderLeft: "3px solid #7C3AED", flex: 1 }}>
+              <div style={{ fontSize: 10, color: "#A78BFA", fontWeight: 700, marginBottom: 4, textTransform: "uppercase", letterSpacing: 0.5 }}>🤖 AI Verdict</div>
+              <div style={{ fontSize: 12, color: txt, lineHeight: 1.6 }}>
+                {viewMode === "business"
+                  ? (report.reportData.verdict?.split(".").slice(0, 2).join(".") + ".")
+                  : report.reportData.verdict}
               </div>
-              <span style={{ fontSize:10, padding:"2px 8px", borderRadius:10, background:bg3, color:txt2, whiteSpace:"nowrap", alignSelf:"flex-start" }}>{t.priority}</span>
             </div>
-          ))}
-        </Card>
+          )}
+        </div>
+      </div>
+
+      {/* ── Progress bar ──────────────────────────────── */}
+      {total > 0 && (
+        <div style={{ background: bg2, border: `1px solid ${bdr}`, borderRadius: 10, padding: "10px 14px", marginBottom: 16, display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ fontSize: 12, color: txt2, whiteSpace: "nowrap" }}>{doneCount} / {total} actions complete</div>
+          <div style={{ flex: 1, height: 6, background: bg3, borderRadius: 3, overflow: "hidden" }}>
+            <div style={{ width: `${total > 0 ? (doneCount / total) * 100 : 0}%`, height: "100%", background: "#059669", borderRadius: 3, transition: "width 0.4s" }} />
+          </div>
+          <div style={{ fontSize: 11, color: "#059669", fontWeight: 700, whiteSpace: "nowrap" }}>{total > 0 ? Math.round((doneCount / total) * 100) : 0}%</div>
+        </div>
       )}
 
-      {/* Next 3 Actions from A9 */}
+      {/* ── Top 3 Impact Actions ──────────────────────── */}
+      {top3.length > 0 && (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: txt2, textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>
+            ⚡ Top Impact Actions — Fix These First
+          </div>
+          {top3.map((task, i) => <ImpactCard key={task.id} task={task} taskKey={`top_${i}`} prominent />)}
+        </div>
+      )}
+
+      {/* ── A9 Strategic Priorities ───────────────────── */}
       {next3.length > 0 && (
-        <Card>
-          <SectionTitle icon="🚀" title="Top 3 SEO Priorities (AI Analysis)" color="#0891B2" />
-          {next3.map((a,i) => (
-            <div key={i} style={{ padding:"10px 12px", background:bg3, borderRadius:8, marginBottom:8 }}>
-              <div style={{ fontSize:13, fontWeight:700, color:txt, marginBottom:4 }}>{i+1}. {a.action}</div>
-              <div style={{ fontSize:12, color:txt2 }}>{a.why}</div>
-              {a.how && <div style={{ fontSize:11, color:"#0891B2", marginTop:4 }}>How: {a.how}</div>}
+        <div style={{ background: bg2, border: `1px solid ${bdr}`, borderRadius: 12, padding: 16, marginBottom: 14 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#0891B2", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>🚀 AI Strategic Priorities</div>
+          {next3.map((a, i) => (
+            <div key={i} style={{ padding: "10px 12px", background: bg3, borderRadius: 8, marginBottom: 8 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: txt, marginBottom: 4 }}>{i + 1}. {a.action}</div>
+              <div style={{ fontSize: 12, color: txt2, marginBottom: 2 }}>{a.why}</div>
+              {a.how && <div style={{ fontSize: 11, color: "#0891B2", marginTop: 4 }}>How: {a.how}</div>}
             </div>
           ))}
-        </Card>
+        </div>
       )}
 
-      {/* Critical Technical Issues */}
-      {p1Issues.length > 0 && (
-        <Card>
-          <SectionTitle icon="🔴" title={`Critical Issues — Fix First (${p1Issues.length})`} color="#DC2626" />
-          {p1Issues.map((issue,i) => (
-            <div key={i} style={{ padding:"10px 12px", borderRadius:8, marginBottom:6, background:bg3, borderLeft:"3px solid #DC2626" }}>
-              <div style={{ fontSize:12, fontWeight:600, color:txt, marginBottom:4 }}>{issue.detail}</div>
-              <div style={{ fontSize:11, color:"#059669" }}>✅ Fix: {issue.fix}</div>
-            </div>
-          ))}
-        </Card>
+      {/* ── Remaining actions ─────────────────────────── */}
+      {remaining.length > 0 && (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: txt2, textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>
+            All Actions ({remaining.length} remaining)
+          </div>
+          {remaining.map((task, i) => <ImpactCard key={task.id} task={task} taskKey={`rest_${i}`} />)}
+        </div>
       )}
 
-      {/* Top Keyword Opportunities */}
-      {topKws.length > 0 && (
-        <Card>
-          <SectionTitle icon="🔍" title="Top Keyword Opportunities" color="#7C3AED" />
-          {topKws.map((k,i) => (
-            <div key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 10px", background:bg3, borderRadius:8, marginBottom:6 }}>
-              <div>
-                <div style={{ fontSize:12, fontWeight:600, color:txt }}>{k.keyword}</div>
-                <div style={{ fontSize:11, color:txt2 }}>Page: {k.suggestedPage} · {k.notes}</div>
-              </div>
-              <div style={{ display:"flex", gap:6 }}>
-                <span style={{ fontSize:10, padding:"2px 8px", borderRadius:10, background:"#7C3AED22", color:"#A78BFA" }}>{k.difficulty}</span>
-                <span style={{ fontSize:10, padding:"2px 8px", borderRadius:10, background:"#05966922", color:"#059669" }}>{k.intent}</span>
-              </div>
-            </div>
-          ))}
-        </Card>
-      )}
-
-      {/* Competitor Quick Wins */}
-      {quickWins.length > 0 && (
-        <Card>
-          <SectionTitle icon="🏆" title="Competitor Quick Wins" color="#D97706" />
-          {quickWins.map((w,i) => (
-            <div key={i} style={{ padding:"10px 12px", background:bg3, borderRadius:8, marginBottom:6 }}>
-              <div style={{ fontSize:12, fontWeight:600, color:txt, marginBottom:3 }}>Keyword: "{w.keyword}"</div>
-              <div style={{ fontSize:12, color:"#059669", marginBottom:2 }}>→ {w.action}</div>
-              <div style={{ fontSize:11, color:txt2 }}>Expected: {w.expectedOutcome}</div>
-            </div>
-          ))}
-        </Card>
-      )}
-
-      {/* Content Gaps */}
-      {gaps.length > 0 && (
-        <Card>
-          <SectionTitle icon="📝" title={`Content to Create (${gaps.length} gaps)`} color="#0891B2" />
-          {gaps.slice(0,5).map((g,i) => (
-            <div key={i} style={{ padding:"8px 12px", background:bg3, borderRadius:8, marginBottom:6 }}>
-              <div style={{ fontSize:12, fontWeight:600, color:txt }}>{g.keyword}</div>
-              <div style={{ fontSize:11, color:txt2 }}>{g.reason}</div>
-              <div style={{ fontSize:11, color:"#0891B2" }}>Action: {g.recommendedAction}</div>
-            </div>
-          ))}
-        </Card>
-      )}
-
-      {/* Keyword Cannibalization */}
-      {(keywords.cannibalization||[]).length > 0 && (
-        <Card>
-          <SectionTitle icon="⚠️" title={`Keyword Cannibalization (${keywords.cannibalization.length} pages)`} color="#D97706" />
-          {keywords.cannibalization.map((c,i) => (
-            <div key={i} style={{ padding:"10px 12px", background:bg3, borderRadius:8, marginBottom:6, borderLeft:"3px solid #D97706" }}>
-              <div style={{ fontSize:12, fontWeight:600, color:txt, marginBottom:3 }}>{c.page} — {c.keywordCount} keywords competing <span style={{ fontSize:10, color:"#D97706" }}>({c.risk} risk)</span></div>
-              <div style={{ fontSize:11, color:txt2, marginBottom:4 }}>Keywords: {c.keywords.slice(0,4).join(", ")}{c.keywords.length>4?`... +${c.keywords.length-4} more`:""}</div>
-              <div style={{ fontSize:11, color:"#059669" }}>→ {c.fix}</div>
-            </div>
-          ))}
-        </Card>
-      )}
-
-      {/* Broken Links */}
-      {(audit.checks?.brokenLinks||[]).length > 0 && (
-        <Card>
-          <SectionTitle icon="🔗" title={`Broken Links (${audit.checks.brokenLinks.length})`} color="#DC2626" />
-          {audit.checks.brokenLinks.map((l,i) => (
-            <div key={i} style={{ display:"flex", justifyContent:"space-between", padding:"6px 10px", background:bg3, borderRadius:6, marginBottom:4 }}>
-              <span style={{ fontSize:11, color:txt2, wordBreak:"break-all", flex:1 }}>{l.url}</span>
-              <span style={{ fontSize:10, color:"#DC2626", fontWeight:700, marginLeft:8 }}>{l.status}</span>
-            </div>
-          ))}
-        </Card>
-      )}
-
-      {/* Multi-page Audit */}
-      {(audit.checks?.pageAudits||[]).length > 0 && (
-        <Card>
-          <SectionTitle icon="📄" title={`Inner Pages Audit (${audit.checks.pageAudits.length} pages)`} color="#0891B2" />
-          {audit.checks.pageAudits.map((pg,i) => (
-            <div key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 10px", background:bg3, borderRadius:8, marginBottom:6 }}>
-              <div style={{ flex:1 }}>
-                <div style={{ fontSize:11, color:"#0891B2", marginBottom:2 }}>{pg.url.replace(/^https?:\/\/[^/]+/,"") || "/"}</div>
-                <div style={{ fontSize:10, color: pg.title==="(missing)"?"#DC2626":txt2 }}>{pg.title?.slice(0,50)}{pg.title?.length>50?"...":""}</div>
-              </div>
-              <div style={{ display:"flex", gap:6, marginLeft:10 }}>
-                <span style={{ fontSize:9, padding:"2px 6px", borderRadius:6, background: pg.hasH1?"#05966922":"#DC262611", color: pg.hasH1?"#059669":"#DC2626" }}>H1</span>
-                <span style={{ fontSize:9, padding:"2px 6px", borderRadius:6, background: pg.hasMeta?"#05966922":"#DC262611", color: pg.hasMeta?"#059669":"#DC2626" }}>Meta</span>
-                {pg.issues > 0 && <span style={{ fontSize:9, padding:"2px 6px", borderRadius:6, background:"#DC262611", color:"#DC2626" }}>{pg.issues} issues</span>}
-              </div>
-            </div>
-          ))}
-        </Card>
-      )}
-
-      {/* Local SEO */}
-      {geoActions.length > 0 && (
-        <Card>
-          <SectionTitle icon="🌍" title="Local SEO — Citation Targets" color="#059669" />
-          {geoActions.slice(0,5).map((c,i) => (
-            <div key={i} style={{ display:"flex", justifyContent:"space-between", padding:"8px 10px", background:bg3, borderRadius:8, marginBottom:6 }}>
-              <div>
-                <div style={{ fontSize:12, fontWeight:600, color:txt }}>{c.directory}</div>
-                <div style={{ fontSize:11, color:txt2 }}>{c.url}</div>
-              </div>
-              <span style={{ fontSize:10, padding:"2px 8px", borderRadius:10, background:"#05966922", color:"#059669" }}>{c.priority}</span>
-            </div>
-          ))}
-        </Card>
-      )}
-
-      {tasks.length === 0 && !audit.healthScore && (
-        <div style={{ textAlign:"center", padding:60, color:txt3 }}>
-          <div style={{ fontSize:32, marginBottom:12 }}>📊</div>
-          <div style={{ color:txt2 }}>Run A2 Audit and A3 Keywords to see your action plan</div>
+      {allTasks.length === 0 && !hs && (
+        <div style={{ textAlign: "center", padding: 60, color: txt3 }}>
+          <div style={{ fontSize: 32, marginBottom: 12 }}>🚀</div>
+          <div style={{ color: txt2 }}>Run the full AI analysis to see your prioritised command center</div>
         </div>
       )}
     </div>

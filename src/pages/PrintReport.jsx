@@ -2,6 +2,15 @@
  * PrintReport — White-label PDF-ready SEO Report
  * Opens in new window → user clicks Print → Save as PDF
  */
+
+const PRINT_CSS = `
+  @media print {
+    @page { margin: 18mm 14mm; size: A4; }
+    body  { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .no-break { page-break-inside: avoid; }
+  }
+`;
+
 export default function PrintReport({ client, state }) {
   const audit    = state.A2_audit    || {};
   const keywords = state.A3_keywords || {};
@@ -12,30 +21,64 @@ export default function PrintReport({ client, state }) {
 
   const issueColor = { p1:"#DC2626", p2:"#D97706", p3:"#6B7280" };
   const scoreColor = s => s >= 80 ? "#059669" : s >= 50 ? "#D97706" : "#DC2626";
+  const hs = audit.healthScore || 0;
+  const sc = scoreColor(hs);
+
+  // Growth projection — estimated score improvements per fix category
+  const projections = [
+    { label: "Current Score",        value: hs,             color: sc },
+    { label: "After P1 Fixes",       value: Math.min(hs + 18, 100), color: "#D97706" },
+    { label: "After Content Gaps",   value: Math.min(hs + 28, 100), color: "#0891B2" },
+    { label: "After Full Optimise",  value: Math.min(hs + 42, 100), color: "#059669" },
+  ];
 
   return (
+    <>
+      <style>{PRINT_CSS}</style>
     <div style={{ fontFamily:"'Segoe UI',Arial,sans-serif", color:"#1a1a18", background:"#fff", maxWidth:900, margin:"0 auto", padding:"40px 48px" }}>
 
       {/* Cover */}
-      <div style={{ borderBottom:"3px solid #7C3AED", paddingBottom:32, marginBottom:40 }}>
-        <div style={{ fontSize:11, color:"#7C3AED", fontWeight:700, letterSpacing:2, textTransform:"uppercase", marginBottom:8 }}>SEO Audit Report</div>
-        <div style={{ fontSize:32, fontWeight:800, color:"#1a1a18", marginBottom:4 }}>{client?.name}</div>
-        <div style={{ fontSize:16, color:"#555", marginBottom:16 }}>{client?.website}</div>
-        <div style={{ display:"flex", gap:32 }}>
-          <div><div style={{ fontSize:11, color:"#888" }}>Generated</div><div style={{ fontSize:13, fontWeight:600 }}>{new Date().toLocaleDateString("en-IN", { day:"numeric", month:"long", year:"numeric" })}</div></div>
-          <div><div style={{ fontSize:11, color:"#888" }}>Industry</div><div style={{ fontSize:13, fontWeight:600 }}>{client?.industry || "—"}</div></div>
-          <div><div style={{ fontSize:11, color:"#888" }}>Location</div><div style={{ fontSize:13, fontWeight:600 }}>{(client?.targetLocations||[]).join(", ") || "—"}</div></div>
-        </div>
-      </div>
+      <div style={{ borderBottom:"3px solid #7C3AED", paddingBottom:32, marginBottom:40 }} className="no-break">
+        {/* Header row */}
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:24 }}>
+          <div>
+            <div style={{ fontSize:11, color:"#7C3AED", fontWeight:700, letterSpacing:2, textTransform:"uppercase", marginBottom:10 }}>AI SEO Audit Report</div>
+            <div style={{ fontSize:32, fontWeight:800, color:"#1a1a18", marginBottom:4 }}>{client?.name}</div>
+            <div style={{ fontSize:15, color:"#7C3AED", marginBottom:12 }}>{client?.website}</div>
+            <div style={{ display:"flex", gap:24 }}>
+              <div><div style={{ fontSize:10, color:"#888" }}>Generated</div><div style={{ fontSize:12, fontWeight:600 }}>{new Date().toLocaleDateString("en-GB", { day:"numeric", month:"long", year:"numeric" })}</div></div>
+              <div><div style={{ fontSize:10, color:"#888" }}>Industry</div><div style={{ fontSize:12, fontWeight:600 }}>{client?.industry || "—"}</div></div>
+              <div><div style={{ fontSize:10, color:"#888" }}>Location</div><div style={{ fontSize:12, fontWeight:600 }}>{(client?.targetLocations||[]).join(", ") || "—"}</div></div>
+            </div>
+          </div>
+
+          {/* Health Ring */}
+          {hs > 0 && (
+            <div style={{ textAlign:"center" }}>
+              <div style={{
+                width:90, height:90, borderRadius:"50%", margin:"0 auto 8px",
+                background:`conic-gradient(${sc} ${hs * 3.6}deg, #f0f0f0 0deg)`,
+                display:"flex", alignItems:"center", justifyContent:"center",
+              }}>
+                <div style={{ width:70, height:70, borderRadius:"50%", background:"#fff", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center" }}>
+                  <div style={{ fontSize:22, fontWeight:800, color:sc, lineHeight:1 }}>{hs}</div>
+                  <div style={{ fontSize:8, color:"#888" }}>/100</div>
+                </div>
+              </div>
+              <div style={{ fontSize:10, color:"#888", fontWeight:600 }}>Site Health Score</div>
+            </div>
+          )}
+        </div>{/* end cover header row */}
+      </div>{/* end cover section */}
 
       {/* Executive Summary */}
       <Section title="Executive Summary">
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:16, marginBottom:20 }}>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:14, marginBottom:20 }}>
           {[
-            { l:"Health Score", v: audit.healthScore ? `${audit.healthScore}/100` : "—", c: scoreColor(audit.healthScore||0) },
-            { l:"Critical Issues", v: audit.summary?.p1Count ?? "—", c:"#DC2626" },
-            { l:"Keywords Mapped", v: keywords.totalKeywords ?? "—", c:"#7C3AED" },
-            { l:"Pages Crawled", v: audit.summary?.pagesCrawled ?? 1, c:"#0891B2" },
+            { l:"Health Score",   v: hs ? `${hs}/100` : "—",               c: sc },
+            { l:"Critical Issues",v: audit.summary?.p1Count ?? "—",         c:"#DC2626" },
+            { l:"Keywords Mapped",v: keywords.totalKeywords ?? "—",         c:"#7C3AED" },
+            { l:"E-E-A-T Score",  v: audit.summary?.eeatScore != null ? `${audit.summary.eeatScore}/8` : "—", c: (audit.summary?.eeatScore||0)>=6?"#059669":"#D97706" },
           ].map(i => (
             <div key={i.l} style={{ border:`1px solid #e0e0e0`, borderRadius:8, padding:"14px 12px", textAlign:"center", borderTop:`3px solid ${i.c}` }}>
               <div style={{ fontSize:26, fontWeight:800, color:i.c }}>{i.v}</div>
@@ -44,16 +87,22 @@ export default function PrintReport({ client, state }) {
           ))}
         </div>
 
-        {/* Health bar */}
-        {audit.healthScore && (
-          <div style={{ marginBottom:16 }}>
-            <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
-              <span style={{ fontSize:12, color:"#555" }}>Site Health Score</span>
-              <span style={{ fontSize:14, fontWeight:700, color:scoreColor(audit.healthScore) }}>{audit.healthScore}/100</span>
-            </div>
-            <div style={{ background:"#f0f0f0", borderRadius:20, height:10, overflow:"hidden" }}>
-              <div style={{ width:`${audit.healthScore}%`, height:"100%", background:scoreColor(audit.healthScore), borderRadius:20 }} />
-            </div>
+        {/* Growth projection bars */}
+        {hs > 0 && (
+          <div style={{ marginBottom:20 }} className="no-break">
+            <div style={{ fontSize:11, fontWeight:700, color:"#7C3AED", textTransform:"uppercase", letterSpacing:1, marginBottom:10 }}>📈 30-Day Score Projection</div>
+            {projections.map((p,i) => (
+              <div key={i} style={{ marginBottom:8 }}>
+                <div style={{ display:"flex", justifyContent:"space-between", marginBottom:3 }}>
+                  <span style={{ fontSize:11, color:"#555" }}>{p.label}</span>
+                  <span style={{ fontSize:12, fontWeight:700, color:p.color }}>{p.value}/100</span>
+                </div>
+                <div style={{ background:"#f0f0f0", borderRadius:20, height:8, overflow:"hidden" }}>
+                  <div style={{ width:`${p.value}%`, height:"100%", background:p.color, borderRadius:20 }} />
+                </div>
+              </div>
+            ))}
+            <div style={{ fontSize:10, color:"#888", marginTop:6, fontStyle:"italic" }}>* Projections based on fixing identified issues. Actual results depend on implementation speed and competition.</div>
           </div>
         )}
 
@@ -252,12 +301,36 @@ export default function PrintReport({ client, state }) {
         </Section>
       )}
 
+      {/* Weekly Action Plan */}
+      {(report.reportData?.next3Actions||[]).length > 0 && (
+        <Section title="30-Day Action Plan">
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(2,1fr)", gap:12 }}>
+            {[
+              { week:"Week 1", color:"#DC2626", tasks: (audit.issues?.p1||[]).slice(0,2).map(i=>i.detail) },
+              { week:"Week 2", color:"#D97706", tasks: (audit.issues?.p2||[]).slice(0,2).map(i=>i.detail) },
+              { week:"Week 3", color:"#0891B2", tasks: (keywords.gaps||[]).slice(0,2).map(g=>`Create: ${g.keyword}`) },
+              { week:"Week 4", color:"#7C3AED", tasks: (comp.analysis?.quickWins||[]).slice(0,2).map(w=>`Target: ${w.keyword}`) },
+            ].map(week => (
+              <div key={week.week} style={{ border:`1px solid #e0e0e0`, borderRadius:8, padding:"12px 14px", borderTop:`3px solid ${week.color}` }}>
+                <div style={{ fontSize:12, fontWeight:700, color:week.color, marginBottom:8 }}>{week.week}</div>
+                {week.tasks.length === 0
+                  ? <div style={{ fontSize:11, color:"#aaa" }}>No tasks assigned</div>
+                  : week.tasks.map((t,i) => (
+                    <div key={i} style={{ fontSize:11, color:"#444", marginBottom:4, paddingLeft:8, borderLeft:`2px solid ${week.color}44` }}>• {t}</div>
+                  ))}
+              </div>
+            ))}
+          </div>
+        </Section>
+      )}
+
       {/* Footer */}
       <div style={{ borderTop:"2px solid #e0e0e0", paddingTop:20, marginTop:40, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
         <div style={{ fontSize:11, color:"#888" }}>Generated by SEO AI Agent · {new Date().toLocaleDateString()}</div>
         <div style={{ fontSize:11, color:"#888" }}>Confidential — {client?.name}</div>
       </div>
     </div>
+    </>
   );
 }
 
