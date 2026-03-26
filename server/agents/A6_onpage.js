@@ -148,15 +148,17 @@ async function runA6(clientId, keys) {
 
   // ── SERP Preview ─────────────────────────────────
   const serpData = checks.serpPreview || {};
+  const titleStr = serpData.title || "";
+  const descStr  = serpData.description || "";
   const serpPreview = {
-    title:           serpData.title,
-    titleDisplay:    serpData.title?.slice(0, 60) + (serpData.titleLength > 60 ? "..." : ""),
-    titleLength:     serpData.titleLength,
-    titleStatus:     serpData.titleLength > 60 ? "too_long" : serpData.titleLength < 30 ? "too_short" : "good",
-    description:     serpData.description,
-    descDisplay:     serpData.description?.slice(0, 155) + (serpData.descLength > 155 ? "..." : ""),
-    descLength:      serpData.descLength,
-    descStatus:      serpData.descLength > 155 ? "too_long" : serpData.descLength < 70 ? "too_short" : "good",
+    title:           titleStr,
+    titleDisplay:    titleStr.slice(0, 60) + (titleStr.length > 60 ? "..." : ""),
+    titleLength:     titleStr.length,
+    titleStatus:     titleStr.length > 60 ? "too_long" : titleStr.length > 0 && titleStr.length < 30 ? "too_short" : titleStr.length === 0 ? "missing" : "good",
+    description:     descStr,
+    descDisplay:     descStr.slice(0, 155) + (descStr.length > 155 ? "..." : ""),
+    descLength:      descStr.length,
+    descStatus:      descStr.length > 155 ? "too_long" : descStr.length > 0 && descStr.length < 70 ? "too_short" : descStr.length === 0 ? "missing" : "good",
     url:             serpData.url || siteUrl,
     urlDisplay:      (serpData.url || siteUrl).replace(/^https?:\/\//, ""),
   };

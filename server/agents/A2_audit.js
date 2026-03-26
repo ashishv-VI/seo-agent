@@ -165,7 +165,7 @@ async function runA2(clientId) {
           }
         } catch { /* skip malformed */ }
       }
-      const pagesToCrawl = [...foundLinks].slice(0, 6);
+      const pagesToCrawl = [...foundLinks].slice(0, 4);
       checks.internalLinksFound = pagesToCrawl.length;
 
       // Crawl each page in parallel (with timeout)
@@ -201,8 +201,8 @@ async function runA2(clientId) {
         }
       }
 
-      // Check all href links for broken status (sampled)
-      const allHrefs = [...foundLinks].slice(0, 20);
+      // Check all href links for broken status (sampled — exclude already crawled)
+      const allHrefs = [...foundLinks].filter(u => !pagesToCrawl.includes(u)).slice(0, 12);
       const brokenChecks = await Promise.allSettled(
         allHrefs.map(async url => {
           const res = await fetch(url, { method:"HEAD", signal: AbortSignal.timeout(5000), redirect:"follow" });
@@ -295,12 +295,14 @@ function parseOnPage(html, pageUrl) {
   const title = titleMatch ? titleMatch[1].trim() : null;
   checks.title = { exists: !!title, value: title, length: title?.length || 0 };
 
+  let pageLabel = "/";
+  try { pageLabel = new URL(pageUrl).pathname || "/"; } catch { pageLabel = "/"; }
   if (!title) {
-    issues.p1.push({ type: "missing_title", detail: "Homepage has no title tag", fix: "Add a keyword-optimised title tag (50-60 characters)" });
+    issues.p1.push({ type: "missing_title", detail: `Page ${pageLabel} has no title tag`, fix: "Add a keyword-optimised title tag (50-60 characters)" });
   } else if (title.length < 10) {
-    issues.p2.push({ type: "short_title", detail: `Title too short: "${title}" (${title.length} chars)`, fix: "Expand title to 50-60 characters with primary keyword" });
+    issues.p2.push({ type: "short_title", detail: `Title too short on ${pageLabel}: "${title}" (${title.length} chars)`, fix: "Expand title to 50-60 characters with primary keyword" });
   } else if (title.length > 70) {
-    issues.p2.push({ type: "long_title", detail: `Title too long: ${title.length} chars (max 60)`, fix: "Shorten title to under 60 characters" });
+    issues.p2.push({ type: "long_title", detail: `Title too long on ${pageLabel}: ${title.length} chars (max 60)`, fix: "Shorten title to under 60 characters" });
   }
 
   // Meta description
@@ -310,7 +312,7 @@ function parseOnPage(html, pageUrl) {
   checks.metaDescription = { exists: !!desc, value: desc, length: desc?.length || 0 };
 
   if (!desc) {
-    issues.p2.push({ type: "missing_meta_desc", detail: "No meta description on homepage", fix: "Add a compelling meta description (140-155 characters)" });
+    issues.p2.push({ type: "missing_meta_desc", detail: `No meta description on ${pageLabel}`, fix: "Add a compelling meta description (140-155 characters)" });
   } else if (desc.length > 165) {
     issues.p3.push({ type: "long_meta_desc", detail: `Meta description too long: ${desc.length} chars`, fix: "Shorten to 140-155 characters" });
   }
@@ -322,9 +324,9 @@ function parseOnPage(html, pageUrl) {
   checks.h1 = { count: h1Count, value: h1Text };
 
   if (h1Count === 0) {
-    issues.p1.push({ type: "missing_h1", detail: "No H1 tag found on homepage", fix: "Add one H1 tag with the primary keyword" });
+    issues.p1.push({ type: "missing_h1", detail: `No H1 tag found on ${pageLabel}`, fix: "Add one H1 tag with the primary keyword" });
   } else if (h1Count > 1) {
-    issues.p2.push({ type: "multiple_h1", detail: `${h1Count} H1 tags found — should be exactly 1`, fix: "Keep only one H1 per page" });
+    issues.p2.push({ type: "multiple_h1", detail: `${h1Count} H1 tags on ${pageLabel} — should be exactly 1`, fix: "Keep only one H1 per page" });
   }
 
   // Canonical tag

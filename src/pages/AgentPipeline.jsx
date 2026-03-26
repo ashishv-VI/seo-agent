@@ -42,7 +42,10 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
 
   function exportPDF() {
     setPrintMode(true);
-    setTimeout(() => { window.print(); setPrintMode(false); }, 400);
+    const restore = () => { setPrintMode(false); window.removeEventListener("afterprint", restore); };
+    window.addEventListener("afterprint", restore);
+    // Give React 400ms to render the print view, then open dialog
+    setTimeout(() => window.print(), 400);
   }
 
   async function load() {
@@ -651,7 +654,6 @@ function FullAuditView({ audit, bg2, bg3, bdr, txt, txt2 }) {
   const robots = c.robotsTxt || {};
   const sitemap = c.sitemap || {};
   const [showAltUrls, setShowAltUrls] = useState(false);
-  const [copiedSchema, setCopiedSchema] = useState(null);
 
   const statusBadge = (ok, okText, failText) => (
     <span style={{ fontSize:10, padding:"2px 8px", borderRadius:10, background: ok?"#05966922":"#DC262611", color: ok?"#059669":"#DC2626" }}>
