@@ -149,13 +149,14 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
 
       {/* Tabs */}
       <div style={{ display:"flex", gap:8, marginBottom:20, flexWrap:"wrap" }}>
+        {(isComplete("A2") || isComplete("A3")) && <div style={{...s.tab(activeTab==="actionplan"), background: activeTab==="actionplan"?"#059669":"transparent", color: activeTab==="actionplan"?"#fff":txt2, border:`1px solid ${activeTab==="actionplan"?"#059669":bdr}`}} onClick={()=>setActiveTab("actionplan")}>🎯 Action Plan</div>}
         <div style={s.tab(activeTab==="pipeline")} onClick={()=>setActiveTab("pipeline")}>🔗 Pipeline</div>
         <div style={s.tab(activeTab==="approvals")} onClick={()=>setActiveTab("approvals")}>
           ✅ Approvals {approvalCount > 0 && <span style={{ marginLeft:4, background:"#D97706", color:"#fff", borderRadius:10, fontSize:9, padding:"1px 5px" }}>{approvalCount}</span>}
         </div>
         <div style={s.tab(activeTab==="alerts")} onClick={()=>setActiveTab("alerts")}>
-        🚨 Alerts {alertCount > 0 && <span style={{ marginLeft:4, background:"#DC2626", color:"#fff", borderRadius:10, fontSize:9, padding:"1px 5px" }}>{alertCount}</span>}
-      </div>
+          🚨 Alerts {alertCount > 0 && <span style={{ marginLeft:4, background:"#DC2626", color:"#fff", borderRadius:10, fontSize:9, padding:"1px 5px" }}>{alertCount}</span>}
+        </div>
         {isComplete("A2") && <div style={s.tab(activeTab==="audit")} onClick={()=>setActiveTab("audit")}>🏥 Audit</div>}
         {isComplete("A3") && <div style={s.tab(activeTab==="keywords")} onClick={()=>setActiveTab("keywords")}>🔍 Keywords</div>}
         {isComplete("A4") && <div style={s.tab(activeTab==="competitor")} onClick={()=>setActiveTab("competitor")}>🕵️ Competitor</div>}
@@ -261,6 +262,7 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
         </>
       )}
 
+      {activeTab==="actionplan" && <ActionPlanView state={state} dark={dark} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2} txt3={txt3} />}
       {activeTab==="approvals" && <ApprovalQueue dark={dark} clientId={clientId} />}
       {activeTab==="alerts"    && <AlertCenter   dark={dark} clientId={clientId} />}
 
@@ -294,6 +296,189 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
 
 function getStateSuffix(id) {
   return { A1:"brief", A2:"audit", A3:"keywords", A4:"competitor", A5:"content", A6:"onpage", A7:"technical", A8:"geo", A9:"report" }[id] || id;
+}
+
+// ── Action Plan View ───────────────────────────────
+function ActionPlanView({ state, bg2, bg3, bdr, txt, txt2, txt3 }) {
+  const audit    = state.A2_audit    || {};
+  const keywords = state.A3_keywords || {};
+  const comp     = state.A4_competitor || {};
+  const onpage   = state.A6_onpage   || {};
+  const geo      = state.A8_geo      || {};
+  const report   = state.A9_report   || {};
+
+  const p1Issues   = audit.issues?.p1 || [];
+  const p2Issues   = audit.issues?.p2 || [];
+  const topKws     = [...(keywords.clusters?.generic||[]), ...(keywords.clusters?.longtail||[])].filter(k=>k.priority==="high").slice(0,5);
+  const quickWins  = comp.analysis?.quickWins || [];
+  const gaps       = keywords.gaps || [];
+  const geoActions = geo.offPage?.citationTargets || [];
+  const next3      = report.reportData?.next3Actions || [];
+
+  // Build priority task list
+  const tasks = [];
+  p1Issues.slice(0,3).forEach(i => tasks.push({ priority:"🔴 Critical", label: i.detail, fix: i.fix, type:"technical" }));
+  quickWins.slice(0,3).forEach(w => tasks.push({ priority:"🟡 Quick Win", label: `Rank for "${w.keyword}"`, fix: w.action, type:"seo" }));
+  gaps.slice(0,2).forEach(g => tasks.push({ priority:"🔵 Content", label: `Create content: "${g.keyword}"`, fix: g.recommendedAction, type:"content" }));
+  p2Issues.slice(0,2).forEach(i => tasks.push({ priority:"⚪ Important", label: i.detail, fix: i.fix, type:"technical" }));
+
+  const Card = ({ children, style }) => (
+    <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:12, padding:16, marginBottom:12, ...style }}>{children}</div>
+  );
+  const SectionTitle = ({ icon, title, color="#7C3AED" }) => (
+    <div style={{ fontSize:12, fontWeight:700, color, textTransform:"uppercase", letterSpacing:1, marginBottom:10, display:"flex", alignItems:"center", gap:6 }}>
+      <span>{icon}</span>{title}
+    </div>
+  );
+
+  return (
+    <div>
+      {/* Health Score Bar */}
+      {audit.healthScore && (
+        <Card>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+            <div style={{ fontSize:14, fontWeight:700, color:txt }}>Site Health Score</div>
+            <div style={{ fontSize:28, fontWeight:800, color: audit.healthScore>=80?"#059669":audit.healthScore>=50?"#D97706":"#DC2626" }}>
+              {audit.healthScore}<span style={{ fontSize:14, color:txt2 }}>/100</span>
+            </div>
+          </div>
+          <div style={{ background:bg3, borderRadius:20, height:8, overflow:"hidden" }}>
+            <div style={{ width:`${audit.healthScore}%`, height:"100%", borderRadius:20, background: audit.healthScore>=80?"#059669":audit.healthScore>=50?"#D97706":"#DC2626", transition:"width 0.5s" }} />
+          </div>
+          <div style={{ display:"flex", gap:16, marginTop:10 }}>
+            {[{l:"P1 Critical",v:audit.summary?.p1Count||0,c:"#DC2626"},{l:"P2 Important",v:audit.summary?.p2Count||0,c:"#D97706"},{l:"P3 Minor",v:audit.summary?.p3Count||0,c:"#6B7280"},{l:"Keywords",v:(keywords.totalKeywords||0),c:"#7C3AED"},{l:"Competitors",v:comp.summary?.keywordsChecked||0,c:"#0891B2"}].map(i=>(
+              <div key={i.l} style={{ textAlign:"center" }}>
+                <div style={{ fontSize:18, fontWeight:700, color:i.c }}>{i.v}</div>
+                <div style={{ fontSize:10, color:txt2 }}>{i.l}</div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {/* A9 Verdict */}
+      {report.reportData?.verdict && (
+        <Card style={{ borderLeft:"4px solid #7C3AED" }}>
+          <SectionTitle icon="📊" title="SEO Verdict" />
+          <div style={{ fontSize:13, color:txt, lineHeight:1.6 }}>{report.reportData.verdict}</div>
+        </Card>
+      )}
+
+      {/* This Week's Priority Actions */}
+      {tasks.length > 0 && (
+        <Card>
+          <SectionTitle icon="🎯" title="This Week's Action Plan" color="#059669" />
+          {tasks.map((t,i) => (
+            <div key={i} style={{ display:"flex", gap:10, padding:"10px 0", borderBottom:`1px solid ${bdr}` }}>
+              <div style={{ fontSize:18, lineHeight:1, marginTop:2 }}>{["1️⃣","2️⃣","3️⃣","4️⃣","5️⃣","6️⃣","7️⃣","8️⃣"][i]||"•"}</div>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:12, fontWeight:600, color:txt, marginBottom:3 }}>{t.label}</div>
+                <div style={{ fontSize:11, color:txt2 }}>→ {t.fix}</div>
+              </div>
+              <span style={{ fontSize:10, padding:"2px 8px", borderRadius:10, background:bg3, color:txt2, whiteSpace:"nowrap", alignSelf:"flex-start" }}>{t.priority}</span>
+            </div>
+          ))}
+        </Card>
+      )}
+
+      {/* Next 3 Actions from A9 */}
+      {next3.length > 0 && (
+        <Card>
+          <SectionTitle icon="🚀" title="Top 3 SEO Priorities (AI Analysis)" color="#0891B2" />
+          {next3.map((a,i) => (
+            <div key={i} style={{ padding:"10px 12px", background:bg3, borderRadius:8, marginBottom:8 }}>
+              <div style={{ fontSize:13, fontWeight:700, color:txt, marginBottom:4 }}>{i+1}. {a.action}</div>
+              <div style={{ fontSize:12, color:txt2 }}>{a.why}</div>
+              {a.how && <div style={{ fontSize:11, color:"#0891B2", marginTop:4 }}>How: {a.how}</div>}
+            </div>
+          ))}
+        </Card>
+      )}
+
+      {/* Critical Technical Issues */}
+      {p1Issues.length > 0 && (
+        <Card>
+          <SectionTitle icon="🔴" title={`Critical Issues — Fix First (${p1Issues.length})`} color="#DC2626" />
+          {p1Issues.map((issue,i) => (
+            <div key={i} style={{ padding:"10px 12px", borderRadius:8, marginBottom:6, background:bg3, borderLeft:"3px solid #DC2626" }}>
+              <div style={{ fontSize:12, fontWeight:600, color:txt, marginBottom:4 }}>{issue.detail}</div>
+              <div style={{ fontSize:11, color:"#059669" }}>✅ Fix: {issue.fix}</div>
+            </div>
+          ))}
+        </Card>
+      )}
+
+      {/* Top Keyword Opportunities */}
+      {topKws.length > 0 && (
+        <Card>
+          <SectionTitle icon="🔍" title="Top Keyword Opportunities" color="#7C3AED" />
+          {topKws.map((k,i) => (
+            <div key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 10px", background:bg3, borderRadius:8, marginBottom:6 }}>
+              <div>
+                <div style={{ fontSize:12, fontWeight:600, color:txt }}>{k.keyword}</div>
+                <div style={{ fontSize:11, color:txt2 }}>Page: {k.suggestedPage} · {k.notes}</div>
+              </div>
+              <div style={{ display:"flex", gap:6 }}>
+                <span style={{ fontSize:10, padding:"2px 8px", borderRadius:10, background:"#7C3AED22", color:"#A78BFA" }}>{k.difficulty}</span>
+                <span style={{ fontSize:10, padding:"2px 8px", borderRadius:10, background:"#05966922", color:"#059669" }}>{k.intent}</span>
+              </div>
+            </div>
+          ))}
+        </Card>
+      )}
+
+      {/* Competitor Quick Wins */}
+      {quickWins.length > 0 && (
+        <Card>
+          <SectionTitle icon="🏆" title="Competitor Quick Wins" color="#D97706" />
+          {quickWins.map((w,i) => (
+            <div key={i} style={{ padding:"10px 12px", background:bg3, borderRadius:8, marginBottom:6 }}>
+              <div style={{ fontSize:12, fontWeight:600, color:txt, marginBottom:3 }}>Keyword: "{w.keyword}"</div>
+              <div style={{ fontSize:12, color:"#059669", marginBottom:2 }}>→ {w.action}</div>
+              <div style={{ fontSize:11, color:txt2 }}>Expected: {w.expectedOutcome}</div>
+            </div>
+          ))}
+        </Card>
+      )}
+
+      {/* Content Gaps */}
+      {gaps.length > 0 && (
+        <Card>
+          <SectionTitle icon="📝" title={`Content to Create (${gaps.length} gaps)`} color="#0891B2" />
+          {gaps.slice(0,5).map((g,i) => (
+            <div key={i} style={{ padding:"8px 12px", background:bg3, borderRadius:8, marginBottom:6 }}>
+              <div style={{ fontSize:12, fontWeight:600, color:txt }}>{g.keyword}</div>
+              <div style={{ fontSize:11, color:txt2 }}>{g.reason}</div>
+              <div style={{ fontSize:11, color:"#0891B2" }}>Action: {g.recommendedAction}</div>
+            </div>
+          ))}
+        </Card>
+      )}
+
+      {/* Local SEO */}
+      {geoActions.length > 0 && (
+        <Card>
+          <SectionTitle icon="🌍" title="Local SEO — Citation Targets" color="#059669" />
+          {geoActions.slice(0,5).map((c,i) => (
+            <div key={i} style={{ display:"flex", justifyContent:"space-between", padding:"8px 10px", background:bg3, borderRadius:8, marginBottom:6 }}>
+              <div>
+                <div style={{ fontSize:12, fontWeight:600, color:txt }}>{c.directory}</div>
+                <div style={{ fontSize:11, color:txt2 }}>{c.url}</div>
+              </div>
+              <span style={{ fontSize:10, padding:"2px 8px", borderRadius:10, background:"#05966922", color:"#059669" }}>{c.priority}</span>
+            </div>
+          ))}
+        </Card>
+      )}
+
+      {tasks.length === 0 && !audit.healthScore && (
+        <div style={{ textAlign:"center", padding:60, color:txt3 }}>
+          <div style={{ fontSize:32, marginBottom:12 }}>📊</div>
+          <div style={{ color:txt2 }}>Run A2 Audit and A3 Keywords to see your action plan</div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ── Mini summary components ────────────────────────
