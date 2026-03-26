@@ -15,6 +15,15 @@ router.post("/", verifyToken, async (req, res) => {
     // Run A1 agent to structure the brief
     const a1Result = await runA1(clientId, req.body);
 
+    // Auto sign-off: the brief is built from the onboarding form — no separate human review
+    // needed to start the technical audit. This unblocks the automated pipeline immediately.
+    if (a1Result.success) {
+      a1Result.brief.signedOff    = true;
+      a1Result.brief.autoSignedOff = true;
+      a1Result.brief.signedOffAt  = new Date().toISOString();
+      await saveState(clientId, "A1_brief", a1Result.brief);
+    }
+
     // Save client record
     await clientRef.set({
       clientId,
@@ -24,7 +33,7 @@ router.post("/", verifyToken, async (req, res) => {
       name:      req.body.businessName || "Unnamed Client",
       website:   a1Result.brief.websiteUrl || "",
       agents: {
-        A1: a1Result.brief.status,
+        A1: a1Result.brief.status === "complete" ? "signed_off" : a1Result.brief.status,
         A2: "pending",
         A3: "pending",
         A4: "pending",

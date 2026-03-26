@@ -1,10 +1,17 @@
-const { getClientState, saveState } = require("../shared-state/stateManager");
-const { db }                         = require("../config/firebase");
+const { getClientState, saveState, updateState } = require("../shared-state/stateManager");
+const { db }                                     = require("../config/firebase");
 
 /**
  * A0 — Orchestrator
  * Manages agent status, enforces dependency chain, detects failures
- * Dependency chain: A1 → A2 → A3 → A4 → A5+A6+A7 (parallel) → A8 → A9
+ *
+ * Automated pipeline execution order (mirrors how real SEO agencies work):
+ *   Stage 0: A1 auto sign-off (brief data comes from onboarding form)
+ *   Stage 1: A2 (Technical Audit) + A7 (CWV/Performance) — parallel, both just need URL
+ *   Stage 2: A3 (Keyword Intelligence) — needs A2 audit findings to map keywords → pages
+ *   Stage 3: A4 (Competitor) + A5 (Content) — parallel, both need A3 keyword targets
+ *   Stage 4: A6 (On-Page Fixes) + A8 (Local/GEO) — parallel, A6 needs A2+A3, A8 needs A2
+ *   Stage 5: A9 (Strategy Report) — synthesises all agent outputs
  */
 
 const DEPENDENCY_CHAIN = {
@@ -23,14 +30,13 @@ const TIER = {
   A0: 1, A1: 1, A2: 1, A3: 1, A4: 2, A5: 2, A6: 2, A7: 2, A8: 2, A9: 2,
 };
 
-// Check if an agent can run based on its dependencies
+// ── Check if an agent can run based on its dependencies ──────────────────────
 async function canRunAgent(clientId, agentId) {
   const client = await db.collection("clients").doc(clientId).get();
   if (!client.exists) return { canRun: false, reason: "Client not found" };
 
-  const agents = client.data().agents || {};
-  const deps   = DEPENDENCY_CHAIN[agentId] || [];
-  const state  = await getClientState(clientId);
+  const deps  = DEPENDENCY_CHAIN[agentId] || [];
+  const state = await getClientState(clientId);
 
   for (const dep of deps) {
     const depState = state[`${dep}_${getStateSuffix(dep)}`];
@@ -52,7 +58,7 @@ function getStateSuffix(agentId) {
   return map[agentId] || agentId.toLowerCase();
 }
 
-// Get full pipeline status for a client
+// ── Get full pipeline status for a client ────────────────────────────────────
 async function getPipelineStatus(clientId) {
   const client = await db.collection("clients").doc(clientId).get();
   if (!client.exists) return null;
@@ -76,20 +82,27 @@ async function getPipelineStatus(clientId) {
     };
   }
 
-  return { pipeline, clientName: client.data().name, website: client.data().website };
+  const data = client.data();
+  return {
+    pipeline,
+    clientName:          data.name,
+    website:             data.website,
+    pipelineStatus:      data.pipelineStatus || "idle",
+    pipelineStartedAt:   data.pipelineStartedAt || null,
+    pipelineCompletedAt: data.pipelineCompletedAt || null,
+    pipelineError:       data.pipelineError || null,
+  };
 }
 
-// Handle agent failure
+// ── Handle agent failure ─────────────────────────────────────────────────────
 async function handleFailure(clientId, agentId, error) {
   const tier = TIER[agentId];
 
   if (tier === 1) {
-    // Hard block — downstream agents must pause
     await db.collection("clients").doc(clientId).update({
       [`agents.${agentId}`]: "failed",
       orchestratorAlert: `TIER 1 FAILURE: ${agentId} failed — ${error}. Human intervention required.`,
     });
-    // Save alert
     await db.collection("alerts").add({
       clientId,
       tier:     "P1",
@@ -102,7 +115,6 @@ async function handleFailure(clientId, agentId, error) {
     });
     return { blocked: true, message: `Tier 1 failure in ${agentId} — chain blocked` };
   } else {
-    // Degraded mode — flag raised, chain continues
     await db.collection("clients").doc(clientId).update({
       [`agents.${agentId}`]: "failed",
     });
@@ -120,4 +132,111 @@ async function handleFailure(clientId, agentId, error) {
   }
 }
 
-module.exports = { canRunAgent, getPipelineStatus, handleFailure, DEPENDENCY_CHAIN };
+// ── Full automated pipeline ──────────────────────────────────────────────────
+// Uses lazy requires to avoid circular dependency issues.
+// Called fire-and-forget from the /run-pipeline route — does NOT block the HTTP response.
+async function runFullPipeline(clientId, keys) {
+  // Lazy-load agent runners to avoid circular dependency
+  const { runA2 } = require("./A2_audit");
+  const { runA3 } = require("./A3_keywords");
+  const { runA4 } = require("./A4_competitor");
+  const { runA5 } = require("./A5_content");
+  const { runA6 } = require("./A6_onpage");
+  const { runA7 } = require("./A7_technical");
+  const { runA8 } = require("./A8_geo");
+  const { generateReport } = require("./A9_monitoring");
+
+  const mark = async (agentId, status) => {
+    await db.collection("clients").doc(clientId).update({ [`agents.${agentId}`]: status });
+  };
+
+  // Wrapper: mark running → call agent fn → mark complete/failed
+  // Returns true on success, false on failure (pipeline continues for non-critical agents)
+  const exec = async (agentId, fn) => {
+    try {
+      await mark(agentId, "running");
+      const result = await fn(clientId, keys);
+      if (!result.success) {
+        await handleFailure(clientId, agentId, result.error || "Agent returned failure");
+        return false;
+      }
+      await mark(agentId, "complete");
+      return true;
+    } catch (err) {
+      await handleFailure(clientId, agentId, err.message);
+      return false;
+    }
+  };
+
+  try {
+    // ── Stage 0: Auto sign-off A1 ─────────────────────────────────────────
+    // The brief was structured from the onboarding form — no human review needed
+    // to start the technical audit. Sign-off unblocks all downstream agents.
+    await updateState(clientId, "A1_brief", { signedOff: true, autoSignedOff: true, signedOffAt: new Date().toISOString() });
+    await mark("A1", "signed_off");
+
+    // ── Stage 1: Technical foundation (parallel) ──────────────────────────
+    // A2 = full technical audit (crawl, broken links, on-page checks)
+    // A7 = Core Web Vitals & performance (PageSpeed API)
+    // Both only need the website URL — can run simultaneously
+    const [a2ok] = await Promise.all([
+      exec("A2", runA2),
+      exec("A7", runA7),
+    ]);
+
+    // A2 is critical — keyword mapping depends on knowing what pages exist
+    // and what technical issues need fixing. Abort if it fails.
+    if (!a2ok) {
+      await db.collection("clients").doc(clientId).update({
+        pipelineStatus: "failed",
+        pipelineError:  "Technical Audit (A2) failed — cannot proceed without site data",
+        pipelineCompletedAt: new Date().toISOString(),
+      });
+      return;
+    }
+
+    // ── Stage 2: Keyword Intelligence ─────────────────────────────────────
+    // A3 uses A2 audit findings (crawled pages, existing on-page signals)
+    // to map target keywords to the right pages — avoids cannibalization
+    await exec("A3", runA3);
+
+    // ── Stage 3: Competitive intelligence + Content strategy (parallel) ───
+    // A4 = competitor gap analysis (uses A3 keyword targets)
+    // A5 = content optimisation recommendations (uses A3 keyword clusters)
+    // Both need A3 data but are independent of each other
+    await Promise.all([
+      exec("A4", runA4),
+      exec("A5", runA5),
+    ]);
+
+    // ── Stage 4: On-page fixes + Local/GEO signals (parallel) ────────────
+    // A6 = on-page tag fixes, schema markup, internal link map (uses A2+A3+A5)
+    // A8 = local SEO, citations, Google Business Profile (uses A2 + brief)
+    // Independent of each other — parallelise for speed
+    await Promise.all([
+      exec("A6", runA6),
+      exec("A8", runA8),
+    ]);
+
+    // ── Stage 5: Strategy Report ──────────────────────────────────────────
+    // A9 synthesises all agent outputs into a prioritised action plan
+    // with month-by-month execution roadmap
+    await exec("A9", (id, k) => generateReport(id, k, null));
+
+    await db.collection("clients").doc(clientId).update({
+      pipelineStatus:      "complete",
+      pipelineCompletedAt: new Date().toISOString(),
+      pipelineError:       null,
+    });
+
+  } catch (err) {
+    console.error(`[A0] Pipeline fatal error for ${clientId}:`, err.message);
+    await db.collection("clients").doc(clientId).update({
+      pipelineStatus:      "failed",
+      pipelineError:       `Fatal error: ${err.message}`,
+      pipelineCompletedAt: new Date().toISOString(),
+    });
+  }
+}
+
+module.exports = { canRunAgent, getPipelineStatus, handleFailure, runFullPipeline, DEPENDENCY_CHAIN };

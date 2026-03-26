@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAuth } from "../context/AuthContext";
 import ApprovalQueue from "./ApprovalQueue";
 import AlertCenter from "./AlertCenter";
@@ -27,6 +27,9 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
   const [activeTab, setActiveTab] = useState("pipeline");
   const [expandedAgent, setExpandedAgent] = useState(null);
   const [alertCount,    setAlertCount]    = useState(0);
+  const [pipelineStatus, setPipelineStatus] = useState("idle"); // idle | running | complete | failed
+  const pollRef     = useRef(null);
+  const loadLatest  = useRef(null); // always points to the latest load fn for use in setInterval
 
   const bg   = dark ? "#0a0a0a" : "#f5f5f0";
   const bg2  = dark ? "#111"    : "#ffffff";
@@ -48,8 +51,8 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
     setTimeout(() => window.print(), 400);
   }
 
-  async function load() {
-    setLoading(true);
+  async function load(silent = false) {
+    if (!silent) setLoading(true);
     setError("");
     try {
       const token = await getToken();
@@ -61,16 +64,59 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
       const clientData   = await clientRes.json();
       const pipelineData = await pipelineRes.json();
       const alertsData   = await alertsRes.json();
-      if (!clientRes.ok)   throw new Error(clientData.error || "Failed to load client");
+      if (!clientRes.ok) throw new Error(clientData.error || "Failed to load client");
       setClient(clientData.client);
       setState(clientData.state || {});
       setPipeline(pipelineData.pipeline || {});
       setAlertCount((alertsData.alerts || []).filter(a => !a.resolved).length);
+
+      const ps = pipelineData.pipelineStatus || clientData.client?.pipelineStatus || "idle";
+      setPipelineStatus(ps);
+
+      // Auto-resume polling if page is refreshed while pipeline is still running
+      if (ps === "running" && !pollRef.current) {
+        pollRef.current = setInterval(() => loadLatest.current(true), 4000);
+      }
+      // Stop polling when done, auto-navigate to results
+      if (ps === "complete" || ps === "failed") {
+        if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+        if (ps === "complete") setActiveTab("actionplan");
+      }
     } catch (e) { setError(e.message || "Failed to load pipeline"); }
-    setLoading(false);
+    if (!silent) setLoading(false);
   }
 
-  useEffect(() => { load(); }, [clientId]);
+  // Keep loadLatest ref up-to-date so the setInterval always calls the current version
+  loadLatest.current = load;
+
+  useEffect(() => {
+    load();
+    return () => { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; } };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientId]);
+
+  async function runFullAnalysis() {
+    setError("");
+    try {
+      const token = await getToken();
+      const res = await fetch(`${API}/api/agents/${clientId}/run-pipeline`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: "{}",
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error || "Failed to start pipeline"); return; }
+
+      setPipelineStatus("running");
+      setActiveTab("pipeline");
+
+      // Poll every 4 seconds for live progress (always calls latest load via ref)
+      if (pollRef.current) clearInterval(pollRef.current);
+      pollRef.current = setInterval(() => loadLatest.current(true), 4000);
+    } catch (e) {
+      setError(e.message || "Failed to start pipeline");
+    }
+  }
 
   async function signOff() {
     setRunning("signoff"); setError("");
@@ -160,7 +206,20 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
           <div style={{ fontSize:16, fontWeight:700, color:txt }}>{client?.name}</div>
           <div style={{ fontSize:11, color:txt2 }}>{client?.website}</div>
         </div>
-        {running && <div style={{ fontSize:12, color:"#D97706" }}>⏳ {running} running...</div>}
+        {pipelineStatus === "running" ? (
+          <div style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 16px", borderRadius:20, background:"#D9770611", border:"1px solid #D9770644" }}>
+            <span style={{ fontSize:12, color:"#D97706", animation:"spin 1s linear infinite" }}>⏳</span>
+            <span style={{ fontSize:12, color:"#D97706", fontWeight:600 }}>Analysing...</span>
+          </div>
+        ) : (
+          <button
+            onClick={runFullAnalysis}
+            disabled={!!running}
+            style={{ padding:"10px 20px", borderRadius:20, border:"none", background:"linear-gradient(135deg,#7C3AED,#059669)", color:"#fff", fontWeight:700, fontSize:13, cursor:"pointer", boxShadow:"0 2px 12px #7C3AED44" }}
+          >
+            {pipelineStatus === "complete" ? "🔄 Re-run Analysis" : "🚀 Run Full SEO Analysis"}
+          </button>
+        )}
       </div>
 
       {error && <div style={{ padding:"10px 14px", borderRadius:8, background:"#DC262611", color:"#DC2626", fontSize:12, marginBottom:14 }}>{error}<button onClick={()=>setError("")} style={{ marginLeft:10, background:"none", border:"none", color:"#DC2626", cursor:"pointer" }}>×</button></div>}
@@ -186,6 +245,54 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
       {/* Pipeline Tab */}
       {activeTab==="pipeline" && (
         <>
+          {/* Live Progress Banner */}
+          {pipelineStatus === "running" && (
+            <div style={{ padding:"14px 18px", borderRadius:10, background:"#D9770611", border:"1px solid #D9770633", marginBottom:14 }}>
+              <div style={{ fontSize:13, fontWeight:700, color:"#D97706", marginBottom:8 }}>AI agents are running — results appear as each stage completes</div>
+              <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                {[
+                  { label:"Technical Audit", agents:["A2","A7"] },
+                  { label:"Keywords",        agents:["A3"] },
+                  { label:"Competitor + Content", agents:["A4","A5"] },
+                  { label:"On-Page + Local", agents:["A6","A8"] },
+                  { label:"Strategy Report", agents:["A9"] },
+                ].map(stage => {
+                  const statuses = stage.agents.map(id => client?.agents?.[id] || "pending");
+                  const allDone  = statuses.every(s => ["complete","failed"].includes(s));
+                  const anyRun   = statuses.some(s => s === "running");
+                  const color    = allDone ? "#059669" : anyRun ? "#D97706" : txt3;
+                  const icon     = allDone ? "✅" : anyRun ? "⏳" : "⬜";
+                  return (
+                    <div key={stage.label} style={{ fontSize:11, padding:"4px 10px", borderRadius:12, background:allDone?"#05966920":anyRun?"#D9770620":bg3, color, border:`1px solid ${allDone?"#05966940":anyRun?"#D9770640":bdr}` }}>
+                      {icon} {stage.label}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          {pipelineStatus === "failed" && (
+            <div style={{ padding:"12px 16px", borderRadius:10, background:"#DC262611", border:"1px solid #DC262633", marginBottom:14 }}>
+              <div style={{ fontSize:13, fontWeight:700, color:"#DC2626" }}>Pipeline encountered an error</div>
+              <div style={{ fontSize:12, color:txt2, marginTop:4 }}>Some agents may have completed. Check individual agent status below. Re-run to retry.</div>
+            </div>
+          )}
+          {pipelineStatus === "idle" && !Object.values(client?.agents || {}).some(s => ["complete","signed_off"].includes(s)) && (
+            <div style={{ padding:"24px", borderRadius:12, background:bg2, border:`2px dashed ${bdr}`, textAlign:"center", marginBottom:14 }}>
+              <div style={{ fontSize:32, marginBottom:12 }}>🚀</div>
+              <div style={{ fontSize:15, fontWeight:700, color:txt, marginBottom:8 }}>Ready to analyse {client?.website}</div>
+              <div style={{ fontSize:13, color:txt2, marginBottom:20, maxWidth:400, margin:"0 auto 20px" }}>
+                One click runs all 8 AI agents in the optimal sequence — technical audit, keywords, competitor analysis, content, on-page fixes, local SEO, and strategy report.
+              </div>
+              <button
+                onClick={runFullAnalysis}
+                style={{ padding:"12px 32px", borderRadius:24, border:"none", background:"linear-gradient(135deg,#7C3AED,#059669)", color:"#fff", fontWeight:700, fontSize:14, cursor:"pointer", boxShadow:"0 4px 20px #7C3AED44" }}
+              >
+                🚀 Run Full SEO Analysis
+              </button>
+            </div>
+          )}
+
           {/* Visual Pipeline */}
           <div style={s.card}>
             <div style={{ fontSize:12, fontWeight:600, color:txt, marginBottom:12 }}>Agent Status Overview</div>
@@ -228,33 +335,16 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
                       </div>
                     </div>
                   </div>
-                  <div style={{ display:"flex", gap:8 }}>
-                    {/* A1 special actions */}
-                    {ag.id === "A1" && !briefDone && isComplete("A1") && (
-                      <button onClick={e=>{e.stopPropagation(); signOff();}} disabled={running==="signoff"}
-                        style={s.btn("#059669", running==="signoff")}>
-                        {running==="signoff" ? "..." : "✅ Sign Off"}
-                      </button>
+                  <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                    {/* Running spinner for active agent */}
+                    {status === "running" && (
+                      <span style={{ fontSize:12, color:"#D97706" }}>⏳ running</span>
                     )}
-                    {/* A2 special action */}
-                    {ag.id === "A2" && briefDone && !isComplete("A2") && (
-                      <button onClick={e=>{e.stopPropagation(); runAudit();}} disabled={!!running}
-                        style={s.btn("#7C3AED", !!running)}>
-                        {running==="A2" ? "⏳ Running..." : "▶ Run Audit"}
-                      </button>
-                    )}
-                    {/* A3-A9 run buttons */}
-                    {["A3","A4","A5","A6","A7","A8","A9"].includes(ag.id) && !isComplete(ag.id) && (
-                      <button onClick={e=>{e.stopPropagation(); runAgent(ag.id);}}
-                        disabled={!canRun(ag.id)}
-                        style={s.btn("#7C3AED", !canRun(ag.id))}>
-                        {running===ag.id ? "⏳ Running..." : `▶ Run ${ag.id}`}
-                      </button>
-                    )}
-                    {isComplete(ag.id) && ag.id !== "A1" && (
+                    {/* Re-run individual agent when already complete (power user escape hatch) */}
+                    {isComplete(ag.id) && ag.id !== "A1" && pipelineStatus !== "running" && (
                       <button onClick={e=>{e.stopPropagation(); ag.id === "A2" ? runAudit() : runAgent(ag.id);}}
                         disabled={!!running}
-                        style={{ padding:"6px 12px", borderRadius:8, border:`1px solid ${bdr}`, background:"transparent", color:txt2, fontSize:11, cursor:"pointer" }}>
+                        style={{ padding:"5px 10px", borderRadius:8, border:`1px solid ${bdr}`, background:"transparent", color:txt2, fontSize:10, cursor:"pointer" }}>
                         🔄 Re-run
                       </button>
                     )}

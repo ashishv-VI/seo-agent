@@ -3,7 +3,7 @@ const router        = express.Router();
 const { db, FieldValue } = require("../config/firebase");
 const { verifyToken }        = require("../middleware/auth");
 const { getUserKeys }        = require("../utils/getUserKeys");
-const { canRunAgent, getPipelineStatus, handleFailure } = require("../agents/A0_orchestrator");
+const { canRunAgent, getPipelineStatus, handleFailure, runFullPipeline } = require("../agents/A0_orchestrator");
 const { runA3 }              = require("../agents/A3_keywords");
 const { runA4 }              = require("../agents/A4_competitor");
 const { runA5 }              = require("../agents/A5_content");
@@ -40,6 +40,43 @@ async function runAgent(clientId, agentId, runFn, keys, res) {
     return res.status(500).json({ error: err.message });
   }
 }
+
+// ── POST Run Full Pipeline (fire-and-forget) ───────
+router.post("/:clientId/run-pipeline", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const keys = await getUserKeys(req.uid);
+
+    // Reset all downstream agents to pending so frontend shows fresh state
+    await db.collection("clients").doc(req.params.clientId).update({
+      "agents.A2": "pending",
+      "agents.A3": "pending",
+      "agents.A4": "pending",
+      "agents.A5": "pending",
+      "agents.A6": "pending",
+      "agents.A7": "pending",
+      "agents.A8": "pending",
+      "agents.A9": "pending",
+      pipelineStatus:    "running",
+      pipelineStartedAt: new Date().toISOString(),
+      pipelineError:     null,
+    });
+
+    // Fire-and-forget: respond immediately so HTTP doesn't timeout on Render free tier
+    // Pipeline continues running in the background and updates Firestore as each agent completes
+    runFullPipeline(req.params.clientId, keys).catch(err => {
+      console.error(`[run-pipeline] Background error for ${req.params.clientId}:`, err.message);
+    });
+
+    return res.json({
+      started:   true,
+      clientId:  req.params.clientId,
+      message:   "Full SEO analysis pipeline started — poll /pipeline for live status",
+    });
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
 
 // ── GET Pipeline Status (A0) ───────────────────────
 router.get("/:clientId/pipeline", verifyToken, async (req, res) => {
