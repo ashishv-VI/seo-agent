@@ -7,6 +7,9 @@ const PRINT_CSS = `
   @media print {
     @page { margin: 18mm 14mm; size: A4; }
     body  { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    body * { visibility: hidden !important; }
+    .print-report { position: fixed !important; left: 0; top: 0; width: 100%; }
+    .print-report, .print-report * { visibility: visible !important; }
     .no-break { page-break-inside: avoid; }
   }
 `;
@@ -38,13 +41,13 @@ export default function PrintReport({ client, state }) {
     <div style={{ fontFamily:"'Segoe UI',Arial,sans-serif", color:"#1a1a18", background:"#fff", maxWidth:900, margin:"0 auto", padding:"40px 48px" }}>
 
       {/* Cover */}
-      <div style={{ borderBottom:"3px solid #7C3AED", paddingBottom:32, marginBottom:40 }} className="no-break">
+      <div style={{ borderBottom:"3px solid #443DCB", paddingBottom:32, marginBottom:40 }} className="no-break">
         {/* Header row */}
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:24 }}>
           <div>
-            <div style={{ fontSize:11, color:"#7C3AED", fontWeight:700, letterSpacing:2, textTransform:"uppercase", marginBottom:10 }}>AI SEO Audit Report</div>
+            <div style={{ fontSize:11, color:"#443DCB", fontWeight:700, letterSpacing:2, textTransform:"uppercase", marginBottom:10 }}>AI SEO Audit Report</div>
             <div style={{ fontSize:32, fontWeight:800, color:"#1a1a18", marginBottom:4 }}>{client?.name}</div>
-            <div style={{ fontSize:15, color:"#7C3AED", marginBottom:12 }}>{client?.website}</div>
+            <div style={{ fontSize:15, color:"#443DCB", marginBottom:12 }}>{client?.website}</div>
             <div style={{ display:"flex", gap:24 }}>
               <div><div style={{ fontSize:10, color:"#888" }}>Generated</div><div style={{ fontSize:12, fontWeight:600 }}>{new Date().toLocaleDateString("en-GB", { day:"numeric", month:"long", year:"numeric" })}</div></div>
               <div><div style={{ fontSize:10, color:"#888" }}>Industry</div><div style={{ fontSize:12, fontWeight:600 }}>{client?.industry || "—"}</div></div>
@@ -77,7 +80,7 @@ export default function PrintReport({ client, state }) {
           {[
             { l:"Health Score",   v: hs ? `${hs}/100` : "—",               c: sc },
             { l:"Critical Issues",v: audit.summary?.p1Count ?? "—",         c:"#DC2626" },
-            { l:"Keywords Mapped",v: keywords.totalKeywords ?? "—",         c:"#7C3AED" },
+            { l:"Keywords Mapped",v: keywords.totalKeywords ?? "—",         c:"#443DCB" },
             { l:"E-E-A-T Score",  v: audit.summary?.eeatScore != null ? `${audit.summary.eeatScore}/8` : "—", c: (audit.summary?.eeatScore||0)>=6?"#059669":"#D97706" },
           ].map(i => (
             <div key={i.l} style={{ border:`1px solid #e0e0e0`, borderRadius:8, padding:"14px 12px", textAlign:"center", borderTop:`3px solid ${i.c}` }}>
@@ -90,7 +93,7 @@ export default function PrintReport({ client, state }) {
         {/* Growth projection bars */}
         {hs > 0 && (
           <div style={{ marginBottom:20 }} className="no-break">
-            <div style={{ fontSize:11, fontWeight:700, color:"#7C3AED", textTransform:"uppercase", letterSpacing:1, marginBottom:10 }}>📈 30-Day Score Projection</div>
+            <div style={{ fontSize:11, fontWeight:700, color:"#443DCB", textTransform:"uppercase", letterSpacing:1, marginBottom:10 }}>📈 30-Day Score Projection</div>
             {projections.map((p,i) => (
               <div key={i} style={{ marginBottom:8 }}>
                 <div style={{ display:"flex", justifyContent:"space-between", marginBottom:3 }}>
@@ -118,8 +121,8 @@ export default function PrintReport({ client, state }) {
 
         {/* AI Verdict */}
         {report.reportData?.verdict && (
-          <div style={{ background:"#7C3AED11", borderLeft:"4px solid #7C3AED", borderRadius:"0 8px 8px 0", padding:"12px 16px", marginTop:16 }}>
-            <div style={{ fontSize:10, color:"#7C3AED", fontWeight:700, marginBottom:4, textTransform:"uppercase" }}>AI SEO Verdict</div>
+          <div style={{ background:"#443DCB11", borderLeft:"4px solid #443DCB", borderRadius:"0 8px 8px 0", padding:"12px 16px", marginTop:16 }}>
+            <div style={{ fontSize:10, color:"#443DCB", fontWeight:700, marginBottom:4, textTransform:"uppercase" }}>AI SEO Verdict</div>
             <div style={{ fontSize:13, color:"#1a1a18", lineHeight:1.6 }}>{report.reportData.verdict}</div>
           </div>
         )}
@@ -186,7 +189,7 @@ export default function PrintReport({ client, state }) {
       <Section title="Keyword Strategy">
         <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:12, marginBottom:16 }}>
           {[
-            { l:"Total Keywords", v:keywords.totalKeywords||0, c:"#7C3AED" },
+            { l:"Total Keywords", v:keywords.totalKeywords||0, c:"#443DCB" },
             { l:"Content Gaps", v:(keywords.gaps||[]).length, c:"#DC2626" },
             { l:"Cannibalization Risks", v:(keywords.cannibalization||[]).length, c:"#D97706" },
           ].map(i => (
@@ -200,7 +203,7 @@ export default function PrintReport({ client, state }) {
         {/* Top keywords table */}
         {(keywords.keywordMap||[]).filter(k=>k.priority==="high").length > 0 && (
           <>
-            <div style={{ fontSize:11, fontWeight:700, color:"#7C3AED", textTransform:"uppercase", marginBottom:8 }}>High Priority Keywords</div>
+            <div style={{ fontSize:11, fontWeight:700, color:"#443DCB", textTransform:"uppercase", marginBottom:8 }}>High Priority Keywords</div>
             <table style={{ width:"100%", borderCollapse:"collapse", fontSize:11 }}>
               <thead>
                 <tr style={{ background:"#f5f5f5" }}>
@@ -211,7 +214,7 @@ export default function PrintReport({ client, state }) {
                 {keywords.keywordMap.filter(k=>k.priority==="high").slice(0,12).map((k,i) => (
                   <tr key={i} style={{ borderBottom:"1px solid #f0f0f0" }}>
                     <td style={{ padding:"6px 8px", fontWeight:500 }}>{k.keyword}</td>
-                    <td style={{ padding:"6px 8px" }}><span style={{ fontSize:10, padding:"2px 6px", borderRadius:8, background:"#7C3AED22", color:"#7C3AED" }}>{k.intent}</span></td>
+                    <td style={{ padding:"6px 8px" }}><span style={{ fontSize:10, padding:"2px 6px", borderRadius:8, background:"#443DCB22", color:"#443DCB" }}>{k.intent}</span></td>
                     <td style={{ padding:"6px 8px" }}>{k.difficulty}</td>
                     <td style={{ padding:"6px 8px", color:"#0891B2" }}>{k.suggestedPage}</td>
                   </tr>
@@ -266,7 +269,7 @@ export default function PrintReport({ client, state }) {
                 <tr key={i} style={{ borderBottom:"1px solid #f0f0f0" }}>
                   <td style={{ padding:"6px 8px", color:"#0891B2" }}>{l.fromPage}</td>
                   <td style={{ padding:"6px 8px", color:"#0891B2" }}>{l.toPage}</td>
-                  <td style={{ padding:"6px 8px", fontWeight:500, color:"#7C3AED" }}>"{l.anchorText}"</td>
+                  <td style={{ padding:"6px 8px", fontWeight:500, color:"#443DCB" }}>"{l.anchorText}"</td>
                   <td style={{ padding:"6px 8px", color:"#555", fontSize:10 }}>{l.why}</td>
                 </tr>
               ))}
@@ -309,7 +312,7 @@ export default function PrintReport({ client, state }) {
               { week:"Week 1", color:"#DC2626", tasks: (audit.issues?.p1||[]).slice(0,2).map(i=>i.detail) },
               { week:"Week 2", color:"#D97706", tasks: (audit.issues?.p2||[]).slice(0,2).map(i=>i.detail) },
               { week:"Week 3", color:"#0891B2", tasks: (keywords.gaps||[]).slice(0,2).map(g=>`Create: ${g.keyword}`) },
-              { week:"Week 4", color:"#7C3AED", tasks: (comp.analysis?.quickWins||[]).slice(0,2).map(w=>`Target: ${w.keyword}`) },
+              { week:"Week 4", color:"#443DCB", tasks: (comp.analysis?.quickWins||[]).slice(0,2).map(w=>`Target: ${w.keyword}`) },
             ].map(week => (
               <div key={week.week} style={{ border:`1px solid #e0e0e0`, borderRadius:8, padding:"12px 14px", borderTop:`3px solid ${week.color}` }}>
                 <div style={{ fontSize:12, fontWeight:700, color:week.color, marginBottom:8 }}>{week.week}</div>
@@ -337,7 +340,7 @@ export default function PrintReport({ client, state }) {
 function Section({ title, children }) {
   return (
     <div style={{ marginBottom:36 }}>
-      <div style={{ fontSize:16, fontWeight:800, color:"#1a1a18", borderBottom:"2px solid #7C3AED", paddingBottom:8, marginBottom:16 }}>{title}</div>
+      <div style={{ fontSize:16, fontWeight:800, color:"#1a1a18", borderBottom:"2px solid #443DCB", paddingBottom:8, marginBottom:16 }}>{title}</div>
       {children}
     </div>
   );

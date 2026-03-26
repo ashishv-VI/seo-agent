@@ -69,7 +69,7 @@ const CSS = `
   /* ── Buttons ─────────────────────────────────── */
   .btn-main{
     width:100%; padding:14px; border-radius:12px; border:none;
-    background:linear-gradient(135deg,#7C3AED 0%,#6D28D9 50%,#4F46E5 100%);
+    background:linear-gradient(135deg,#443DCB 0%,#6D28D9 50%,#3730B8 100%);
     color:#fff; font-weight:700; font-size:14.5px; letter-spacing:.3px;
     cursor:pointer; font-family:'Inter',sans-serif;
     position:relative; overflow:hidden;
@@ -167,7 +167,7 @@ function MiniBarChart({ color = "#A78BFA" }) {
 }
 
 /* ─── CSS donut chart ────────────────────────────────────────────────────── */
-function DonutChart({ value = 73, size = 54, color = "#EC4899", label }) {
+function DonutChart({ value = 73, size = 54, color = "#EA2227", label }) {
   const deg = (value / 100) * 360;
   return (
     <div style={{ display:"flex", alignItems:"center", gap:12 }}>
@@ -252,17 +252,17 @@ function CircuitOverlay() {
 /* ─── City bokeh spots ───────────────────────────────────────────────────── */
 function CityLights() {
   const spots = [
-    { top:"8%",  left:"15%",  size:6,  color:"#EC4899", anim:"city-flicker 3s .2s infinite" },
+    { top:"8%",  left:"15%",  size:6,  color:"#EA2227", anim:"city-flicker 3s .2s infinite" },
     { top:"12%", left:"45%",  size:4,  color:"#F97316", anim:"city-flicker 4s 1s infinite" },
     { top:"18%", left:"72%",  size:8,  color:"#3B82F6", anim:"city-flicker 2.5s .5s infinite" },
     { top:"25%", left:"28%",  size:5,  color:"#A78BFA", anim:"city-flicker 5s 0s infinite" },
     { top:"55%", left:"10%",  size:7,  color:"#F59E0B", anim:"city-flicker 3.5s .8s infinite" },
-    { top:"62%", left:"55%",  size:4,  color:"#EC4899", anim:"city-flicker 4.5s .3s infinite" },
+    { top:"62%", left:"55%",  size:4,  color:"#EA2227", anim:"city-flicker 4.5s .3s infinite" },
     { top:"70%", left:"80%",  size:6,  color:"#10B981", anim:"city-flicker 3s 1.5s infinite" },
     { top:"80%", left:"35%",  size:5,  color:"#3B82F6", anim:"city-flicker 2s .7s infinite" },
     { top:"85%", left:"65%",  size:8,  color:"#F97316", anim:"city-flicker 4s .2s infinite" },
     { top:"40%", left:"88%",  size:4,  color:"#A78BFA", anim:"city-flicker 3.5s 1.2s infinite" },
-    { top:"50%", left:"3%",   size:5,  color:"#EC4899", anim:"city-flicker 5s .6s infinite" },
+    { top:"50%", left:"3%",   size:5,  color:"#EA2227", anim:"city-flicker 5s .6s infinite" },
     { top:"33%", left:"62%",  size:3,  color:"#F59E0B", anim:"city-flicker 2.5s .9s infinite" },
   ];
   return (
@@ -409,7 +409,7 @@ export default function Login() {
           {/* Card 3 — Donut chart */}
           <div className="glass-card" style={{ bottom:"24%", right:"8%", animation:"float-up 5.5s ease-in-out .4s infinite" }}>
             <div style={{ fontSize:10, color:"rgba(255,255,255,0.4)", marginBottom:10 }}>🎯 Keyword Win Rate</div>
-            <DonutChart value={73} size={52} color="#EC4899" label="Ranked in top 10"/>
+            <DonutChart value={73} size={52} color="#EA2227" label="Ranked in top 10"/>
           </div>
 
           {/* Card 4 — Mini chart */}
@@ -436,14 +436,14 @@ export default function Login() {
             <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:36 }}>
               <div style={{
                 width:46, height:46, borderRadius:14,
-                background:"linear-gradient(135deg,#7C3AED,#4F46E5)",
+                background:"linear-gradient(135deg,#443DCB,#3730B8)",
                 display:"flex", alignItems:"center", justifyContent:"center",
                 fontSize:22, fontWeight:900, color:"#fff",
                 boxShadow:"0 4px 24px rgba(124,58,237,0.55), inset 0 1px 0 rgba(255,255,255,0.2)",
               }}>S</div>
               <div>
                 <div style={{ fontSize:17, fontWeight:800, color:"#f5f5f5", letterSpacing:.2 }}>SEO Agent</div>
-                <div style={{ fontSize:10, color:"#7C3AED", fontWeight:700, letterSpacing:1.5, textTransform:"uppercase" }}>AI-Powered Platform</div>
+                <div style={{ fontSize:10, color:"#443DCB", fontWeight:700, letterSpacing:1.5, textTransform:"uppercase" }}>AI-Powered Platform</div>
               </div>
             </div>
 
@@ -481,24 +481,6 @@ export default function Login() {
                   </div>
                 </div>
               ))}
-            </div>
-
-            {/* Social proof */}
-            <div style={{ display:"flex", alignItems:"center", gap:12, marginTop:36, paddingTop:24, borderTop:"1px solid rgba(255,255,255,0.06)" }}>
-              <div style={{ display:"flex" }}>
-                {["#7C3AED","#EC4899","#3B82F6","#10B981","#F97316"].map((c,i) => (
-                  <div key={i} style={{
-                    width:28, height:28, borderRadius:"50%", background:c,
-                    border:"2px solid #07070f", marginLeft:i>0?-8:0,
-                    display:"flex", alignItems:"center", justifyContent:"center",
-                    fontSize:11, color:"#fff", fontWeight:700,
-                  }}>{String.fromCharCode(65+i)}</div>
-                ))}
-              </div>
-              <div>
-                <div style={{ fontSize:12, fontWeight:600, color:"rgba(255,255,255,0.7)" }}>Trusted by 200+ SEO agencies</div>
-                <div style={{ fontSize:10, color:"rgba(255,255,255,0.3)" }}>⭐⭐⭐⭐⭐ 4.9 / 5 average rating</div>
-              </div>
             </div>
           </div>
         </div>
@@ -544,7 +526,7 @@ export default function Login() {
               <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:18 }}>
                 <div style={{
                   width:32, height:32, borderRadius:9,
-                  background:"linear-gradient(135deg,#7C3AED,#4F46E5)",
+                  background:"linear-gradient(135deg,#443DCB,#3730B8)",
                   display:"flex", alignItems:"center", justifyContent:"center",
                   fontSize:14, fontWeight:900, color:"#fff",
                 }}>S</div>
