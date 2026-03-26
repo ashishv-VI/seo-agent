@@ -11,7 +11,10 @@ async function callLLM(prompt, keys, options = {}) {
         headers: { "Authorization": `Bearer ${keys.groq}`, "Content-Type": "application/json" },
         body: JSON.stringify({
           model:       options.model || "llama-3.1-8b-instant",
-          messages:    [{ role: "user", content: prompt }],
+          messages:    [
+            ...(options.systemPrompt ? [{ role: "system", content: options.systemPrompt }] : []),
+            { role: "user", content: prompt },
+          ],
           max_tokens:  options.maxTokens || 3000,
           temperature: options.temperature || 0.3,
         }),
@@ -35,6 +38,7 @@ async function callLLM(prompt, keys, options = {}) {
           method:  "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
+            ...(options.systemPrompt ? { systemInstruction: { parts: [{ text: options.systemPrompt }] } } : {}),
             contents:         [{ parts: [{ text: prompt }] }],
             generationConfig: { maxOutputTokens: options.maxTokens || 3000, temperature: options.temperature || 0.3 },
           }),

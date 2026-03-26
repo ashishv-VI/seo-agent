@@ -7,6 +7,7 @@ const authRoutes    = require("./routes/auth");
 const keysRoutes    = require("./routes/keys");
 const clientsRoutes = require("./routes/clients");
 const agentsRoutes  = require("./routes/agents");
+const chatRoutes    = require("./routes/chat");
 
 const app  = express();
 const PORT = process.env.PORT || 5000;
@@ -63,6 +64,7 @@ app.use("/api/auth",    authRoutes);
 app.use("/api/keys",    keysRoutes);
 app.use("/api/clients", clientsRoutes);
 app.use("/api/agents",  agentsRoutes);
+app.use("/api/chat",   chatRoutes);
 
 // ── Monthly pipeline scheduler ────────────────────
 // Checks once per hour — runs pipeline for clients whose last run was 30+ days ago

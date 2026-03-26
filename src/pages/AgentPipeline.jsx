@@ -3,6 +3,7 @@ import { useAuth } from "../context/AuthContext";
 import ApprovalQueue from "./ApprovalQueue";
 import AlertCenter from "./AlertCenter";
 import PrintReport from "./PrintReport";
+import AIChatBot from "../components/AIChatBot";
 
 const ALL_AGENTS = [
   { id:"A1", label:"Client Brief",       icon:"📋", phase:1 },
@@ -422,6 +423,8 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
       {activeTab==="report" && state.A9_report && (
         <FullReportView report={state.A9_report} dark={dark} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2} />
       )}
+
+      <AIChatBot dark={dark} clientId={clientId} getToken={getToken} API={API} />
     </div>
   );
 }
