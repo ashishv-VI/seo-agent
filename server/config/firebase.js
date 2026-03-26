@@ -1,45 +1,42 @@
-const admin = require("firebase-admin");
-const fs    = require("fs");
-const path  = require("path");
-const os    = require("os");
+const fs   = require("fs");
+const path = require("path");
+const os   = require("os");
 
-if (!admin.apps.length) {
-  let serviceAccount;
-
-  if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-    try {
-      serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-      // Write to temp file so gRPC client can read credentials
-      const tmpFile = path.join(os.tmpdir(), "firebase-sa.json");
-      fs.writeFileSync(tmpFile, JSON.stringify(serviceAccount));
-      process.env.GOOGLE_APPLICATION_CREDENTIALS = tmpFile;
-      console.log("✅ Firebase: using FIREBASE_SERVICE_ACCOUNT JSON (written to temp file for gRPC)");
-    } catch (e) {
-      console.error("❌ FIREBASE_SERVICE_ACCOUNT is not valid JSON:", e.message);
-      process.exit(1);
-    }
-  } else if (process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_PRIVATE_KEY) {
-    serviceAccount = {
-      type:                        "service_account",
-      project_id:                  process.env.FIREBASE_PROJECT_ID,
-      private_key_id:              process.env.FIREBASE_PRIVATE_KEY_ID,
-      private_key:                 process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, "\n"),
-      client_email:                process.env.FIREBASE_CLIENT_EMAIL,
-      client_id:                   process.env.FIREBASE_CLIENT_ID,
-      auth_uri:                    "https://accounts.google.com/o/oauth2/auth",
-      token_uri:                   "https://oauth2.googleapis.com/token",
-      auth_provider_x509_cert_url: "https://www.googleapis.com/oauth2/v1/certs",
-      client_x509_cert_url:        process.env.FIREBASE_CLIENT_CERT_URL,
-    };
-    console.log("✅ Firebase: using individual env vars");
-  } else {
-    console.error("❌ No Firebase credentials. Set FIREBASE_SERVICE_ACCOUNT in Render.");
+// ── STEP 1: Write credentials to file BEFORE loading firebase-admin ──────────
+// gRPC resolves GOOGLE_APPLICATION_CREDENTIALS at load time, not runtime.
+// Setting the env var after require() is too late.
+if (process.env.FIREBASE_SERVICE_ACCOUNT && !process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+  try {
+    const tmpFile = path.join(os.tmpdir(), "gcp-sa.json");
+    fs.writeFileSync(tmpFile, process.env.FIREBASE_SERVICE_ACCOUNT);
+    process.env.GOOGLE_APPLICATION_CREDENTIALS = tmpFile;
+    console.log("✅ GOOGLE_APPLICATION_CREDENTIALS set:", tmpFile);
+  } catch (e) {
+    console.error("❌ Could not write credentials file:", e.message);
     process.exit(1);
   }
+}
 
+// ── STEP 2: NOW load firebase-admin (gRPC sees the env var) ──────────────────
+const admin = require("firebase-admin");
+
+if (!admin.apps.length) {
   try {
-    admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
-    console.log("✅ Firebase Admin initialized — project:", serviceAccount.project_id);
+    let projectId;
+    if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+      projectId = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT).project_id;
+    } else if (process.env.FIREBASE_PROJECT_ID) {
+      projectId = process.env.FIREBASE_PROJECT_ID;
+    } else {
+      console.error("❌ No Firebase project ID found.");
+      process.exit(1);
+    }
+
+    admin.initializeApp({
+      credential: admin.credential.applicationDefault(),
+      projectId,
+    });
+    console.log("✅ Firebase Admin initialized — project:", projectId);
   } catch (err) {
     console.error("❌ Firebase init failed:", err.message);
     process.exit(1);
@@ -47,7 +44,6 @@ if (!admin.apps.length) {
 }
 
 const db         = admin.firestore();
-db.settings({ preferRest: true });  // Use REST instead of gRPC — fixes UNAUTHENTICATED on Render
 const auth       = admin.auth();
 const FieldValue = admin.firestore.FieldValue;
 
