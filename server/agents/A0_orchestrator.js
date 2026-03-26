@@ -63,12 +63,12 @@ async function getPipelineStatus(clientId) {
   const pipeline = {};
   for (const [agentId, deps] of Object.entries(DEPENDENCY_CHAIN)) {
     const agentStatus = agents[agentId] || "pending";
-    const { canRun }  = await canRunAgent(clientId, agentId);
+    const { canRun, reason } = await canRunAgent(clientId, agentId);
     const stateKey    = `${agentId}_${getStateSuffix(agentId)}`;
-
     pipeline[agentId] = {
       status:    agentStatus,
       canRun,
+      reason:    reason || null,
       tier:      TIER[agentId] || 2,
       deps,
       hasData:   !!state[stateKey],

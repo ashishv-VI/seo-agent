@@ -39,6 +39,7 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
 
   async function load() {
     setLoading(true);
+    setError("");
     try {
       const token = await getToken();
       const [clientRes, pipelineRes, alertsRes] = await Promise.all([
@@ -49,11 +50,12 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
       const clientData   = await clientRes.json();
       const pipelineData = await pipelineRes.json();
       const alertsData   = await alertsRes.json();
+      if (!clientRes.ok)   throw new Error(clientData.error || "Failed to load client");
       setClient(clientData.client);
       setState(clientData.state || {});
       setPipeline(pipelineData.pipeline || {});
       setAlertCount((alertsData.alerts || []).filter(a => !a.resolved).length);
-    } catch { setError("Failed to load pipeline"); }
+    } catch (e) { setError(e.message || "Failed to load pipeline"); }
     setLoading(false);
   }
 
