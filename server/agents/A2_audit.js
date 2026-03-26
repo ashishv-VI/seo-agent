@@ -58,6 +58,7 @@ async function runA2(clientId) {
 
     // Parse HTML for on-page checks
     const html = await res.text();
+    checks._homepageHtml = html; // used by multi-page crawler below
     const onPage = parseOnPage(html, res.url);
     Object.assign(checks, onPage.checks);
     onPage.issues.p1.forEach(i => issues.p1.push(i));
@@ -144,6 +145,114 @@ async function runA2(clientId) {
     checks.sitemap = { exists: false, error: "Could not fetch" };
   }
 
+  // ── 5. Multi-Page Crawler ──────────────────────────
+  const pageAudits   = [];
+  const brokenLinks  = [];
+  const internalLinks = checks.internalLinks || [];
+
+  if (checks.isAccessible) {
+    try {
+      // Extract internal links from homepage HTML
+      const homepageHtml = checks._homepageHtml || "";
+      const domain       = new URL(siteUrl).hostname;
+      const linkMatches  = homepageHtml.matchAll(/href=["']([^"'#?][^"']*)["']/gi);
+      const foundLinks   = new Set();
+      for (const m of linkMatches) {
+        try {
+          const abs = new URL(m[1], siteUrl).href;
+          if (new URL(abs).hostname === domain && abs !== siteUrl && !abs.endsWith(".pdf") && !abs.endsWith(".zip")) {
+            foundLinks.add(abs);
+          }
+        } catch { /* skip malformed */ }
+      }
+      const pagesToCrawl = [...foundLinks].slice(0, 6);
+      checks.internalLinksFound = pagesToCrawl.length;
+
+      // Crawl each page in parallel (with timeout)
+      const crawlResults = await Promise.allSettled(
+        pagesToCrawl.map(async url => {
+          const t0  = Date.now();
+          const res = await fetch(url, { redirect:"follow", signal: AbortSignal.timeout(7000), headers:{ "User-Agent":"SEO-Agent-Audit/1.0" } });
+          const responseTime = Date.now() - t0;
+          if (!res.ok) return { url, status: res.status, broken: true };
+          const html     = await res.text();
+          const onPage   = parseOnPage(html, url);
+          return { url, status: res.status, broken: false, responseTime, checks: onPage.checks, issues: onPage.issues };
+        })
+      );
+
+      for (const r of crawlResults) {
+        if (r.status === "fulfilled" && r.value) {
+          const pg = r.value;
+          if (pg.broken) {
+            brokenLinks.push({ url: pg.url, status: pg.status });
+          } else {
+            pageAudits.push({
+              url:          pg.url,
+              title:        pg.checks?.title?.value || "(missing)",
+              titleLength:  pg.checks?.title?.length || 0,
+              hasH1:        (pg.checks?.h1?.count || 0) > 0,
+              hasMeta:      pg.checks?.metaDescription?.exists || false,
+              hasCanonical: pg.checks?.canonical?.exists || false,
+              altMissing:   pg.checks?.altTextAudit?.missingAlt || 0,
+              issues:       [...(pg.issues?.p1||[]), ...(pg.issues?.p2||[])].length,
+            });
+          }
+        }
+      }
+
+      // Check all href links for broken status (sampled)
+      const allHrefs = [...foundLinks].slice(0, 20);
+      const brokenChecks = await Promise.allSettled(
+        allHrefs.map(async url => {
+          const res = await fetch(url, { method:"HEAD", signal: AbortSignal.timeout(5000), redirect:"follow" });
+          return { url, status: res.status, ok: res.ok };
+        })
+      );
+      for (const r of brokenChecks) {
+        if (r.status === "fulfilled" && !r.value.ok) {
+          if (!brokenLinks.find(b => b.url === r.value.url))
+            brokenLinks.push({ url: r.value.url, status: r.value.status });
+        }
+      }
+
+      if (brokenLinks.length > 0) {
+        issues.p1.push({
+          type:   "broken_links",
+          detail: `${brokenLinks.length} broken link(s) found on the site`,
+          fix:    "Fix or remove all broken links — they hurt crawlability and UX",
+          urls:   brokenLinks.map(b => `${b.url} [${b.status}]`).slice(0, 10),
+        });
+      }
+
+      // Pages missing titles
+      const noTitle = pageAudits.filter(p => p.title === "(missing)");
+      if (noTitle.length > 0) {
+        issues.p2.push({
+          type:   "inner_pages_no_title",
+          detail: `${noTitle.length} inner page(s) have no title tag`,
+          fix:    "Add unique, keyword-rich title tags to every page",
+          urls:   noTitle.map(p => p.url),
+        });
+      }
+
+      // Pages missing H1
+      const noH1 = pageAudits.filter(p => !p.hasH1);
+      if (noH1.length > 0) {
+        issues.p2.push({
+          type:   "inner_pages_no_h1",
+          detail: `${noH1.length} inner page(s) missing H1 tag`,
+          fix:    "Add one keyword-optimised H1 to every page",
+          urls:   noH1.map(p => p.url),
+        });
+      }
+    } catch { /* multi-page crawl failed silently */ }
+  }
+
+  checks.pageAudits  = pageAudits;
+  checks.brokenLinks = brokenLinks;
+  delete checks._homepageHtml;
+
   // ── Build Result ───────────────────────────────────
   const totalIssues = issues.p1.length + issues.p2.length + issues.p3.length;
   const healthScore = Math.max(0, 100 - (issues.p1.length * 20) - (issues.p2.length * 10) - (issues.p3.length * 3));
@@ -156,9 +265,11 @@ async function runA2(clientId) {
     issues,
     checks,
     summary: {
-      p1Count:  issues.p1.length,
-      p2Count:  issues.p2.length,
-      p3Count:  issues.p3.length,
+      p1Count:      issues.p1.length,
+      p2Count:      issues.p2.length,
+      p3Count:      issues.p3.length,
+      pagesCrawled: pageAudits.length + 1,
+      brokenLinks:  brokenLinks.length,
       message:  issues.p1.length > 0
         ? `${issues.p1.length} critical issue(s) blocking rankings — fix immediately`
         : issues.p2.length > 0

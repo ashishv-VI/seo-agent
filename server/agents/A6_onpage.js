@@ -161,14 +161,52 @@ async function runA6(clientId, keys) {
     urlDisplay:      (serpData.url || siteUrl).replace(/^https?:\/\//, ""),
   };
 
+  // ── Internal Link Opportunities ─────────────────
+  const pageAudits   = audit.checks?.pageAudits || [];
+  const keywordMap   = keywords?.keywordMap || [];
+  const internalLinkOpps = [];
+
+  // Build page → primary keyword mapping
+  const pageKwMap = {};
+  for (const kw of keywordMap) {
+    const page = kw.suggestedPage || "/";
+    if (!pageKwMap[page]) pageKwMap[page] = kw.keyword;
+  }
+
+  // For each crawled inner page, suggest links to other pages
+  const knownPages = ["/", ...pageAudits.map(p => {
+    try { return new URL(p.url).pathname; } catch { return null; }
+  }).filter(Boolean)];
+
+  for (let i = 0; i < Math.min(knownPages.length, 5); i++) {
+    for (let j = 0; j < Math.min(knownPages.length, 5); j++) {
+      if (i === j) continue;
+      const fromPage = knownPages[i];
+      const toPage   = knownPages[j];
+      const anchor   = pageKwMap[toPage];
+      if (anchor && fromPage !== toPage) {
+        internalLinkOpps.push({
+          fromPage,
+          toPage,
+          anchorText:  anchor,
+          why:         `${fromPage} page should link to ${toPage} using "${anchor}" — passes authority and helps Google understand site structure`,
+        });
+        if (internalLinkOpps.length >= 8) break;
+      }
+    }
+    if (internalLinkOpps.length >= 8) break;
+  }
+
   // ── LLM: Schema markup + tracking + JSON-LD ──────
-  const prompt = `You are an SEO technical specialist. Based on this site, provide schema markup with ready-to-use JSON-LD code.
+  const crawledPageList = pageAudits.map(p => p.url).join(", ") || "(only homepage)";
+  const prompt = `You are an SEO technical specialist. Based on this site, provide schema markup with ready-to-use JSON-LD code and internal linking suggestions.
 
 Business: ${brief.businessName}
 Website: ${siteUrl}
 Services: ${(brief.services || []).join(", ")}
 Locations: ${(brief.targetLocations || []).join(", ")}
 H1: ${h1Text || "(missing)"}
+Pages found: ${crawledPageList}
 Issues: ${[...issues.p1, ...issues.p2].map(i => i.type).join(", ")}
 
 Return ONLY valid JSON:
@@ -179,6 +217,15 @@ Return ONLY valid JSON:
       "page": "/page",
       "reason": "why this schema will help rankings",
       "jsonLd": "{\"@context\":\"https://schema.org\",\"@type\":\"...\",\"name\":\"...\"}"
+    }
+  ],
+  "internalLinkSuggestions": [
+    {
+      "fromPage": "/page-that-should-have-link",
+      "toPage": "/page-to-link-to",
+      "anchorText": "exact anchor text to use",
+      "placement": "where in the content to place it",
+      "why": "SEO reason"
     }
   ],
   "trackingSetup": {
@@ -200,12 +247,18 @@ Return ONLY valid JSON:
     recommendations = { schemaMarkup: [], trackingSetup: {}, openGraph: { needed: true, tags: [] } };
   }
 
+  const allInternalLinks = [
+    ...internalLinkOpps,
+    ...(recommendations.internalLinkSuggestions || []),
+  ].slice(0, 10);
+
   const result = {
     status:          "complete",
     fixQueue,
     recommendations,
     serpPreview,
     h1Analysis,
+    internalLinks:   allInternalLinks,
     totalFixes:      fixQueue.length,
     summary: {
       p1Fixes:       fixQueue.filter(f => f.priority === "p1").length,

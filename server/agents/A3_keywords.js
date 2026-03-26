@@ -98,15 +98,55 @@ Generate 5-8 keywords per cluster. Make them realistic and specific to the busin
     ...(keywordData.localVariants || []).map(k => ({ ...k, cluster: "local" })),
   ];
 
+  // ── Keyword Cannibalization Detection ─────────────
+  // Group keywords by suggestedPage — if 3+ different intent/cluster keywords
+  // target the same page, flag cannibalization risk
+  const pageKeywordMap = {};
+  for (const kw of allKeywords) {
+    const page = kw.suggestedPage || "/";
+    if (!pageKeywordMap[page]) pageKeywordMap[page] = [];
+    pageKeywordMap[page].push({ keyword: kw.keyword, intent: kw.intent, cluster: kw.cluster, difficulty: kw.difficulty });
+  }
+
+  const cannibalization = [];
+  for (const [page, kws] of Object.entries(pageKeywordMap)) {
+    if (kws.length < 3) continue;
+    // Multiple intents on same page = cannibalization risk
+    const intents = [...new Set(kws.map(k => k.intent))];
+    const clusters = [...new Set(kws.map(k => k.cluster))];
+    if (intents.length >= 2 || kws.length >= 4) {
+      cannibalization.push({
+        page,
+        keywords:     kws.map(k => k.keyword),
+        keywordCount: kws.length,
+        intents,
+        risk:         kws.length >= 5 ? "high" : "medium",
+        fix:          `Split keywords across dedicated pages. Keep only 1-2 primary keywords per page. Create separate pages for: ${kws.slice(0,2).map(k=>k.keyword).join(", ")}`,
+      });
+    }
+  }
+
+  // ── Topical Authority Map ──────────────────────────
+  // Group by topic clusters to show coverage gaps
+  const topicClusters = {};
+  for (const kw of allKeywords) {
+    const topic = kw.notes?.split(" ")[0] || kw.cluster;
+    if (!topicClusters[topic]) topicClusters[topic] = [];
+    topicClusters[topic].push(kw.keyword);
+  }
+
   const result = {
-    status:       "complete",
-    totalKeywords: allKeywords.length,
-    clusters:     keywordData,
-    keywordMap:   allKeywords,
-    gaps:         keywordData.gaps || [],
+    status:         "complete",
+    totalKeywords:  allKeywords.length,
+    clusters:       keywordData,
+    keywordMap:     allKeywords,
+    gaps:           keywordData.gaps || [],
     serpData,
-    hasSerpData:  Object.keys(serpData).length > 0,
-    generatedAt:  new Date().toISOString(),
+    hasSerpData:    Object.keys(serpData).length > 0,
+    cannibalization,
+    hasCannibalization: cannibalization.length > 0,
+    pageKeywordMap,
+    generatedAt:    new Date().toISOString(),
   };
 
   await saveState(clientId, "A3_keywords", result);

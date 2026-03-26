@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
 import ApprovalQueue from "./ApprovalQueue";
 import AlertCenter from "./AlertCenter";
+import PrintReport from "./PrintReport";
 
 const ALL_AGENTS = [
   { id:"A1", label:"Client Brief",       icon:"📋", phase:1 },
@@ -36,6 +37,13 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
   const txt3 = dark ? "#444"    : "#bbb";
 
   async function getToken() { return user?.getIdToken?.() || ""; }
+
+  const [printMode, setPrintMode] = useState(false);
+
+  function exportPDF() {
+    setPrintMode(true);
+    setTimeout(() => { window.print(); setPrintMode(false); }, 400);
+  }
 
   async function load() {
     setLoading(true);
@@ -126,6 +134,13 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
   };
 
   if (loading) return <div style={{...s.wrap, display:"flex", alignItems:"center", justifyContent:"center", color:txt3}}>Loading pipeline...</div>;
+
+  // Print mode — show white-label report for browser print/save-as-PDF
+  if (printMode) return (
+    <div className="print-report" style={{ position:"fixed", inset:0, zIndex:9999, background:"#fff", overflowY:"auto" }}>
+      <PrintReport client={client} state={state} />
+    </div>
+  );
 
   const brief       = state.A1_brief  || {};
   const briefDone   = brief.signedOff === true || agentStatus("A1") === "signed_off";
@@ -263,7 +278,16 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
         </>
       )}
 
-      {activeTab==="actionplan" && <ActionPlanView state={state} dark={dark} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2} txt3={txt3} />}
+      {activeTab==="actionplan" && (
+        <>
+          <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:12 }}>
+            <button onClick={exportPDF} style={{ padding:"8px 18px", borderRadius:8, border:"none", background:"#059669", color:"#fff", fontWeight:600, fontSize:12, cursor:"pointer" }}>
+              📄 Download PDF Report
+            </button>
+          </div>
+          <ActionPlanView state={state} dark={dark} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2} txt3={txt3} />
+        </>
+      )}
       {activeTab==="approvals" && <ApprovalQueue dark={dark} clientId={clientId} />}
       {activeTab==="alerts"    && <AlertCenter   dark={dark} clientId={clientId} />}
 
@@ -351,8 +375,15 @@ function ActionPlanView({ state, bg2, bg3, bdr, txt, txt2, txt3 }) {
           <div style={{ background:bg3, borderRadius:20, height:8, overflow:"hidden" }}>
             <div style={{ width:`${audit.healthScore}%`, height:"100%", borderRadius:20, background: audit.healthScore>=80?"#059669":audit.healthScore>=50?"#D97706":"#DC2626", transition:"width 0.5s" }} />
           </div>
-          <div style={{ display:"flex", gap:16, marginTop:10 }}>
-            {[{l:"P1 Critical",v:audit.summary?.p1Count||0,c:"#DC2626"},{l:"P2 Important",v:audit.summary?.p2Count||0,c:"#D97706"},{l:"P3 Minor",v:audit.summary?.p3Count||0,c:"#6B7280"},{l:"Keywords",v:(keywords.totalKeywords||0),c:"#7C3AED"},{l:"Competitors",v:comp.summary?.keywordsChecked||0,c:"#0891B2"}].map(i=>(
+          <div style={{ display:"flex", gap:16, marginTop:10, flexWrap:"wrap" }}>
+            {[
+              {l:"P1 Critical",  v:audit.summary?.p1Count||0,        c:"#DC2626"},
+              {l:"P2 Important", v:audit.summary?.p2Count||0,        c:"#D97706"},
+              {l:"Pages Crawled",v:audit.summary?.pagesCrawled||1,   c:"#0891B2"},
+              {l:"Broken Links", v:audit.summary?.brokenLinks||0,    c: (audit.summary?.brokenLinks||0)>0?"#DC2626":"#059669"},
+              {l:"Keywords",     v:keywords.totalKeywords||0,        c:"#7C3AED"},
+              {l:"Cannibalization",v:(keywords.cannibalization||[]).length, c: (keywords.cannibalization||[]).length>0?"#D97706":"#059669"},
+            ].map(i=>(
               <div key={i.l} style={{ textAlign:"center" }}>
                 <div style={{ fontSize:18, fontWeight:700, color:i.c }}>{i.v}</div>
                 <div style={{ fontSize:10, color:txt2 }}>{i.l}</div>
@@ -461,6 +492,53 @@ function ActionPlanView({ state, bg2, bg3, bdr, txt, txt2, txt3 }) {
         </Card>
       )}
 
+      {/* Keyword Cannibalization */}
+      {(keywords.cannibalization||[]).length > 0 && (
+        <Card>
+          <SectionTitle icon="⚠️" title={`Keyword Cannibalization (${keywords.cannibalization.length} pages)`} color="#D97706" />
+          {keywords.cannibalization.map((c,i) => (
+            <div key={i} style={{ padding:"10px 12px", background:bg3, borderRadius:8, marginBottom:6, borderLeft:"3px solid #D97706" }}>
+              <div style={{ fontSize:12, fontWeight:600, color:txt, marginBottom:3 }}>{c.page} — {c.keywordCount} keywords competing <span style={{ fontSize:10, color:"#D97706" }}>({c.risk} risk)</span></div>
+              <div style={{ fontSize:11, color:txt2, marginBottom:4 }}>Keywords: {c.keywords.slice(0,4).join(", ")}{c.keywords.length>4?`... +${c.keywords.length-4} more`:""}</div>
+              <div style={{ fontSize:11, color:"#059669" }}>→ {c.fix}</div>
+            </div>
+          ))}
+        </Card>
+      )}
+
+      {/* Broken Links */}
+      {(audit.checks?.brokenLinks||[]).length > 0 && (
+        <Card>
+          <SectionTitle icon="🔗" title={`Broken Links (${audit.checks.brokenLinks.length})`} color="#DC2626" />
+          {audit.checks.brokenLinks.map((l,i) => (
+            <div key={i} style={{ display:"flex", justifyContent:"space-between", padding:"6px 10px", background:bg3, borderRadius:6, marginBottom:4 }}>
+              <span style={{ fontSize:11, color:txt2, wordBreak:"break-all", flex:1 }}>{l.url}</span>
+              <span style={{ fontSize:10, color:"#DC2626", fontWeight:700, marginLeft:8 }}>{l.status}</span>
+            </div>
+          ))}
+        </Card>
+      )}
+
+      {/* Multi-page Audit */}
+      {(audit.checks?.pageAudits||[]).length > 0 && (
+        <Card>
+          <SectionTitle icon="📄" title={`Inner Pages Audit (${audit.checks.pageAudits.length} pages)`} color="#0891B2" />
+          {audit.checks.pageAudits.map((pg,i) => (
+            <div key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 10px", background:bg3, borderRadius:8, marginBottom:6 }}>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:11, color:"#0891B2", marginBottom:2 }}>{pg.url.replace(/^https?:\/\/[^/]+/,"") || "/"}</div>
+                <div style={{ fontSize:10, color: pg.title==="(missing)"?"#DC2626":txt2 }}>{pg.title?.slice(0,50)}{pg.title?.length>50?"...":""}</div>
+              </div>
+              <div style={{ display:"flex", gap:6, marginLeft:10 }}>
+                <span style={{ fontSize:9, padding:"2px 6px", borderRadius:6, background: pg.hasH1?"#05966922":"#DC262611", color: pg.hasH1?"#059669":"#DC2626" }}>H1</span>
+                <span style={{ fontSize:9, padding:"2px 6px", borderRadius:6, background: pg.hasMeta?"#05966922":"#DC262611", color: pg.hasMeta?"#059669":"#DC2626" }}>Meta</span>
+                {pg.issues > 0 && <span style={{ fontSize:9, padding:"2px 6px", borderRadius:6, background:"#DC262611", color:"#DC2626" }}>{pg.issues} issues</span>}
+              </div>
+            </div>
+          ))}
+        </Card>
+      )}
+
       {/* Local SEO */}
       {geoActions.length > 0 && (
         <Card>
@@ -518,7 +596,13 @@ function AuditSummary({ audit, txt, txt2, bg2 }) {
 }
 
 function KeywordSummary({ kw, txt, txt2 }) {
-  return <div style={{ fontSize:12, color:txt2 }}>{kw.totalKeywords} keywords mapped · {kw.gaps?.length || 0} gaps identified · SerpAPI data: {kw.hasSerpData ? "✅" : "❌ (add SerpAPI key)"}</div>;
+  return (
+    <div style={{ fontSize:12, color:txt2 }}>
+      {kw.totalKeywords} keywords mapped · {kw.gaps?.length || 0} gaps
+      {kw.hasCannibalization && <span style={{ color:"#D97706", marginLeft:8 }}>· ⚠️ {kw.cannibalization?.length} cannibalization risks</span>}
+      <span style={{ marginLeft:8 }}>· SerpAPI: {kw.hasSerpData ? "✅" : "❌"}</span>
+    </div>
+  );
 }
 
 function CompetitorSummary({ comp, txt, txt2 }) {
