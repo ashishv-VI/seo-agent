@@ -231,7 +231,7 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
                         {running===ag.id ? "⏳ Running..." : `▶ Run ${ag.id}`}
                       </button>
                     )}
-                    {isComplete(ag.id) && (
+                    {isComplete(ag.id) && ag.id !== "A1" && (
                       <button onClick={e=>{e.stopPropagation(); ag.id === "A2" ? runAudit() : runAgent(ag.id);}}
                         disabled={!!running}
                         style={{ padding:"6px 12px", borderRadius:8, border:`1px solid ${bdr}`, background:"transparent", color:txt2, fontSize:11, cursor:"pointer" }}>
