@@ -45,6 +45,7 @@ if (!admin.apps.length) {
 }
 
 const db         = admin.firestore();
+db.settings({ preferRest: true });   // Force REST transport — bypasses gRPC auth issues
 const auth       = admin.auth();
 const FieldValue = admin.firestore.FieldValue;
 
