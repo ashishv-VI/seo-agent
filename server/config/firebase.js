@@ -47,6 +47,7 @@ if (!admin.apps.length) {
 }
 
 const db         = admin.firestore();
+db.settings({ preferRest: true });  // Use REST instead of gRPC — fixes UNAUTHENTICATED on Render
 const auth       = admin.auth();
 const FieldValue = admin.firestore.FieldValue;
 
