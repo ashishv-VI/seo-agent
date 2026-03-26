@@ -237,9 +237,11 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
         {isComplete("A2") && <div style={s.tab(activeTab==="audit")} onClick={()=>setActiveTab("audit")}>🏥 Audit</div>}
         {isComplete("A3") && <div style={s.tab(activeTab==="keywords")} onClick={()=>setActiveTab("keywords")}>🔍 Keywords</div>}
         {isComplete("A4") && <div style={s.tab(activeTab==="competitor")} onClick={()=>setActiveTab("competitor")}>🕵️ Competitor</div>}
+        {isComplete("A5") && <div style={s.tab(activeTab==="content")} onClick={()=>setActiveTab("content")}>✍️ Content</div>}
         {isComplete("A6") && <div style={s.tab(activeTab==="onpage")} onClick={()=>setActiveTab("onpage")}>🏷️ On-Page</div>}
         {isComplete("A7") && <div style={s.tab(activeTab==="technical")} onClick={()=>setActiveTab("technical")}>⚡ CWV</div>}
         {isComplete("A8") && <div style={s.tab(activeTab==="geo")} onClick={()=>setActiveTab("geo")}>🌍 GEO</div>}
+        {isComplete("A9") && <div style={s.tab(activeTab==="report")} onClick={()=>setActiveTab("report")}>📊 Report</div>}
       </div>
 
       {/* Pipeline Tab */}
@@ -413,6 +415,16 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
       {activeTab==="geo" && state.A8_geo && (
         <FullGeoView geo={state.A8_geo} dark={dark} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2} />
       )}
+
+      {/* Content Tab */}
+      {activeTab==="content" && state.A5_content && (
+        <FullContentView content={state.A5_content} dark={dark} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2} />
+      )}
+
+      {/* Report Tab */}
+      {activeTab==="report" && state.A9_report && (
+        <FullReportView report={state.A9_report} dark={dark} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2} />
+      )}
     </div>
   );
 }
@@ -474,6 +486,8 @@ function ActionPlanView({ state, bg2, bg3, bdr, txt, txt2, txt3 }) {
               {l:"P2 Important", v:audit.summary?.p2Count||0,        c:"#D97706"},
               {l:"Pages Crawled",v:audit.summary?.pagesCrawled||1,   c:"#0891B2"},
               {l:"Broken Links", v:audit.summary?.brokenLinks||0,    c: (audit.summary?.brokenLinks||0)>0?"#DC2626":"#059669"},
+              {l:"E-E-A-T",      v:`${audit.summary?.eeatScore||0}/8`, c: (audit.summary?.eeatScore||0)>=6?"#059669":(audit.summary?.eeatScore||0)>=4?"#D97706":"#DC2626"},
+              {l:"Thin Pages",   v:audit.summary?.thinPages||0,      c: (audit.summary?.thinPages||0)>0?"#D97706":"#059669"},
               {l:"Keywords",     v:keywords.totalKeywords||0,        c:"#7C3AED"},
               {l:"Cannibalization",v:(keywords.cannibalization||[]).length, c: (keywords.cannibalization||[]).length>0?"#D97706":"#059669"},
             ].map(i=>(
@@ -840,6 +854,37 @@ function FullAuditView({ audit, bg2, bg3, bdr, txt, txt2 }) {
         </div>
       </div>
 
+      {/* E-E-A-T + Redirect Chain + Image Optimization */}
+      {(c.eeat || c.redirectChain?.depth > 0 || c.imageOptimization) && (
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:10, marginBottom:12 }}>
+          {c.eeat && (
+            <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, padding:14 }}>
+              <div style={{ fontSize:11, fontWeight:700, color:txt2, marginBottom:8 }}>🏆 E-E-A-T Score</div>
+              <div style={{ fontSize:22, fontWeight:800, color: c.eeat.score>=6?"#059669":c.eeat.score>=4?"#D97706":"#DC2626" }}>{c.eeat.score}<span style={{ fontSize:13, color:txt2 }}>/{c.eeat.maxScore}</span></div>
+              <div style={{ marginTop:6, display:"flex", flexWrap:"wrap", gap:3 }}>
+                {[["About",c.eeat.hasAboutPage],["Contact",c.eeat.hasContactPage],["Privacy",c.eeat.hasPrivacyPolicy],["Schema",c.eeat.hasSchemaOrg],["Author",c.eeat.hasAuthorBio],["Social",c.eeat.hasSocialLinks]].map(([l,v])=>(
+                  <span key={l} style={{ fontSize:9, padding:"1px 6px", borderRadius:8, background:v?"#05966922":"#DC262611", color:v?"#059669":"#DC2626" }}>{v?"✅":"❌"} {l}</span>
+                ))}
+              </div>
+            </div>
+          )}
+          {c.redirectChain && (
+            <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, padding:14 }}>
+              <div style={{ fontSize:11, fontWeight:700, color:txt2, marginBottom:8 }}>↪️ Redirect Chain</div>
+              <div style={{ fontSize:22, fontWeight:800, color: c.redirectChain.depth>=3?"#DC2626":c.redirectChain.depth>=1?"#D97706":"#059669" }}>{c.redirectChain.depth} hops</div>
+              <div style={{ fontSize:10, color:txt2, marginTop:4 }}>{c.redirectChain.depth===0?"✅ No redirects":c.redirectChain.depth>=3?"🔴 Chain too long — fix immediately":"🟡 Single redirect is acceptable"}</div>
+            </div>
+          )}
+          {c.imageOptimization && (
+            <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, padding:14 }}>
+              <div style={{ fontSize:11, fontWeight:700, color:txt2, marginBottom:8 }}>🖼️ Image Optimization</div>
+              <div style={{ fontSize:11, color:c.imageOptimization.nonWebpImages>3?"#D97706":"#059669" }}>WebP: {c.imageOptimization.nonWebpImages>0?`${c.imageOptimization.nonWebpImages} old format`:"✅ Good"}</div>
+              <div style={{ fontSize:11, color:c.imageOptimization.missingDimensions>5?"#DC2626":"#059669", marginTop:4 }}>Dimensions: {c.imageOptimization.missingDimensions>0?`${c.imageOptimization.missingDimensions} missing`:"✅ All set"}</div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Issues by Priority */}
       {["p1","p2","p3"].map(tier => (
         <div key={tier} style={{ marginBottom:14 }}>
@@ -876,12 +921,29 @@ function FullKeywordsView({ kw, bg2, bg3, bdr, txt, txt2 }) {
         </div>
       ))}
       {(kw.gaps||[]).length > 0 && (
-        <div>
+        <div style={{ marginBottom:16 }}>
           <div style={{ fontSize:11, fontWeight:700, color:"#DC2626", textTransform:"uppercase", marginBottom:8 }}>Content Gaps ({kw.gaps.length})</div>
           {kw.gaps.map((g,i)=>(
             <div key={i} style={{ background:bg3, borderRadius:8, padding:"8px 12px", marginBottom:6 }}>
               <div style={{ fontSize:12, color:txt, fontWeight:500 }}>{g.keyword}</div>
               <div style={{ fontSize:11, color:txt2 }}>{g.reason} → {g.recommendedAction}</div>
+            </div>
+          ))}
+        </div>
+      )}
+      {(kw.snippetOpportunities||[]).length > 0 && (
+        <div>
+          <div style={{ fontSize:11, fontWeight:700, color:"#0891B2", textTransform:"uppercase", marginBottom:8 }}>⭐ Featured Snippet Opportunities ({kw.snippetOpportunities.length})</div>
+          {kw.snippetOpportunities.map((s,i)=>(
+            <div key={i} style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:8, padding:"10px 12px", marginBottom:6 }}>
+              <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
+                <span style={{ fontSize:12, color:txt, fontWeight:600 }}>{s.keyword}</span>
+                <div style={{ display:"flex", gap:6 }}>
+                  <span style={{ fontSize:10, padding:"2px 8px", borderRadius:10, background:"#0891B222", color:"#0891B2" }}>{s.snippetType?.replace("_"," ")}</span>
+                  <span style={{ fontSize:10, padding:"2px 8px", borderRadius:10, background:bg3, color:txt2 }}>{s.targetPage}</span>
+                </div>
+              </div>
+              <div style={{ fontSize:11, color:txt2 }}>{s.strategy}</div>
             </div>
           ))}
         </div>
@@ -923,11 +985,12 @@ function FullCompetitorView({ comp, bg2, bg3, bdr, txt, txt2 }) {
 
 function FullOnPageView({ op, bg2, bg3, bdr, txt, txt2 }) {
   const [copiedIdx, setCopiedIdx] = useState(null);
-  const serpPrev = op.serpPreview || {};
-  const h1       = op.h1Analysis  || {};
-  const schema   = op.recommendations?.schemaMarkup || [];
-  const tracking = op.recommendations?.trackingSetup || {};
-  const fixQueue = op.fixQueue || [];
+  const serpPrev    = op.serpPreview || {};
+  const h1          = op.h1Analysis  || {};
+  const schema      = op.recommendations?.schemaMarkup || [];
+  const tracking    = op.recommendations?.trackingSetup || {};
+  const fixQueue    = op.fixQueue || [];
+  const pageAuth    = op.pageAuthority || [];
 
   const priColor = { p1:"#DC2626", p2:"#D97706", p3:"#6B7280" };
 
@@ -1010,7 +1073,15 @@ function FullOnPageView({ op, bg2, bg3, bdr, txt, txt2 }) {
           {schema.map((s,i) => (
             <div key={i} style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:8, padding:"12px 14px", marginBottom:8 }}>
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
-                <span style={{ fontSize:12, fontWeight:600, color:"#7C3AED" }}>{s.type} — {s.page}</span>
+                <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                  <span style={{ fontSize:12, fontWeight:600, color:"#7C3AED" }}>{s.type} — {s.page}</span>
+                  {s.valid === false
+                    ? <span style={{ fontSize:9, padding:"1px 6px", borderRadius:6, background:"#DC262611", color:"#DC2626" }}>❌ Invalid JSON-LD</span>
+                    : s.valid === true
+                    ? <span style={{ fontSize:9, padding:"1px 6px", borderRadius:6, background:"#05966911", color:"#059669" }}>✅ Valid</span>
+                    : null}
+                  {s.autoFixed && <span style={{ fontSize:9, padding:"1px 6px", borderRadius:6, background:"#D9770611", color:"#D97706" }}>🔧 Auto-fixed</span>}
+                </div>
                 {s.jsonLd && (
                   <button onClick={() => copySchema(s.jsonLd, i)} style={{ fontSize:10, padding:"3px 10px", borderRadius:6, border:`1px solid ${bdr}`, background: copiedIdx===i?"#059669":"transparent", color: copiedIdx===i?"#fff":txt2, cursor:"pointer" }}>
                     {copiedIdx===i ? "✅ Copied!" : "📋 Copy JSON-LD"}
@@ -1025,6 +1096,25 @@ function FullOnPageView({ op, bg2, bg3, bdr, txt, txt2 }) {
               )}
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Internal PageRank Flow */}
+      {pageAuth.length > 0 && (
+        <div style={{ marginBottom:12 }}>
+          <div style={{ fontSize:11, fontWeight:700, color:txt2, textTransform:"uppercase", letterSpacing:1, marginBottom:8 }}>📊 Internal PageRank Flow</div>
+          <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, overflow:"hidden" }}>
+            {pageAuth.map((p,i)=>(
+              <div key={i} style={{ display:"flex", alignItems:"center", gap:12, padding:"8px 14px", borderBottom:`1px solid ${bdr}` }}>
+                <div style={{ width:120, fontSize:11, color:txt, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{p.page}</div>
+                <div style={{ flex:1, height:6, background:bg3, borderRadius:3 }}>
+                  <div style={{ width:`${Math.min(100,(p.inboundLinks/5)*100)}%`, height:"100%", borderRadius:3, background: p.signal==="strong"?"#059669":p.signal==="medium"?"#D97706":"#6B7280" }} />
+                </div>
+                <span style={{ fontSize:10, color:txt2, width:60, textAlign:"right" }}>{p.inboundLinks} links in</span>
+                <span style={{ fontSize:9, padding:"1px 6px", borderRadius:6, background: p.signal==="strong"?"#05966922":p.signal==="medium"?"#D9770622":"#6B728022", color: p.signal==="strong"?"#059669":p.signal==="medium"?"#D97706":"#6B7280" }}>{p.signal}</span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
@@ -1107,6 +1197,306 @@ function FullGeoView({ geo, bg2, bg3, bdr, txt, txt2 }) {
           <div style={{ fontSize:11, color:txt2 }}>{w.target} — {w.approach}</div>
         </div>
       ))}
+    </div>
+  );
+}
+
+// ── Full Content View (A5) ──────────────────────────
+function FullContentView({ content, bg2, bg3, bdr, txt, txt2 }) {
+  const [openBrief, setOpenBrief] = useState(null);
+  const d  = content.contentData || {};
+  const hp = d.homepageOptimisation || {};
+  const briefs  = d.newPageBriefs    || [];
+  const faqs    = d.faqContent       || [];
+  const refresh = d.contentRefreshFlags || [];
+  const links   = hp.internalLinkSuggestions || [];
+
+  const Pill = ({ text, color="#7C3AED" }) => (
+    <span style={{ fontSize:10, padding:"2px 8px", borderRadius:10, background:color+"22", color, marginRight:4 }}>{text}</span>
+  );
+  const Row = ({ label, before, after, char }) => (
+    <div style={{ marginBottom:12 }}>
+      <div style={{ fontSize:10, color:txt2, fontWeight:700, textTransform:"uppercase", letterSpacing:1, marginBottom:4 }}>{label} {char && <span style={{ color: char>160?"#DC2626":char>60?"#059669":"#D97706" }}>({char} chars)</span>}</div>
+      {before && <div style={{ fontSize:11, color:"#DC2626", background:bg3, borderRadius:6, padding:"6px 10px", marginBottom:4 }}>❌ Current: {before}</div>}
+      <div style={{ fontSize:12, color:"#059669", background:"#05966911", borderRadius:6, padding:"8px 10px", borderLeft:"3px solid #059669" }}>✅ Recommended: {after}</div>
+      {hp[label?.toLowerCase()?.replace(" ","")]?.rationale && <div style={{ fontSize:10, color:txt2, marginTop:4 }}>Why: {hp[label?.toLowerCase()?.replace(" ","")]?.rationale}</div>}
+    </div>
+  );
+
+  return (
+    <div>
+      {/* Summary Cards */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:10, marginBottom:16 }}>
+        {[
+          { l:"Page Briefs",   v:briefs.length,               c:"#7C3AED" },
+          { l:"FAQ Items",     v:faqs.length,                  c:"#0891B2" },
+          { l:"Refresh Flags", v:refresh.length,              c:"#D97706" },
+          { l:"Pending Approval", v:content.approvalItemsCount||0, c:"#059669" },
+        ].map(i=>(
+          <div key={i.l} style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, padding:"12px 10px", textAlign:"center", borderTop:`2px solid ${i.c}` }}>
+            <div style={{ fontSize:22, fontWeight:700, color:i.c }}>{i.v}</div>
+            <div style={{ fontSize:10, color:txt2 }}>{i.l}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Homepage Optimisation */}
+      {(hp.titleTag || hp.metaDescription || hp.h1Tag) && (
+        <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, padding:16, marginBottom:12 }}>
+          <div style={{ fontSize:11, fontWeight:700, color:txt2, textTransform:"uppercase", letterSpacing:1, marginBottom:12 }}>🏠 Homepage Optimisation</div>
+          {hp.titleTag && <Row label="Title Tag" before={hp.titleTag.current} after={hp.titleTag.recommended} char={hp.titleTag.characterCount} />}
+          {hp.metaDescription && <Row label="Meta Description" before={hp.metaDescription.current} after={hp.metaDescription.recommended} char={hp.metaDescription.characterCount} />}
+          {hp.h1Tag && <Row label="H1 Tag" before={hp.h1Tag.current} after={hp.h1Tag.recommended} />}
+          {hp.h2Suggestions?.length > 0 && (
+            <div style={{ marginTop:8 }}>
+              <div style={{ fontSize:10, color:txt2, fontWeight:700, textTransform:"uppercase", letterSpacing:1, marginBottom:6 }}>H2 Subheadings</div>
+              {hp.h2Suggestions.map((h,i) => (
+                <div key={i} style={{ fontSize:11, color:txt, padding:"4px 10px", background:bg3, borderRadius:6, marginBottom:4 }}>H2: {h}</div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* New Page Briefs */}
+      {briefs.length > 0 && (
+        <div style={{ marginBottom:12 }}>
+          <div style={{ fontSize:11, fontWeight:700, color:txt2, textTransform:"uppercase", letterSpacing:1, marginBottom:8 }}>📄 New Page Briefs ({briefs.length})</div>
+          {briefs.map((b,i) => (
+            <div key={i} style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, marginBottom:8, overflow:"hidden" }}>
+              <div style={{ padding:"12px 14px", cursor:"pointer", display:"flex", justifyContent:"space-between", alignItems:"center" }} onClick={()=>setOpenBrief(openBrief===i?null:i)}>
+                <div>
+                  <div style={{ fontSize:13, fontWeight:600, color:txt }}>{b.title}</div>
+                  <div style={{ fontSize:11, color:txt2, marginTop:2 }}>{b.targetKeyword} · {b.recommendedWordCount} words</div>
+                </div>
+                <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+                  <Pill text={b.intent} color={b.intent==="transactional"?"#059669":b.intent==="informational"?"#0891B2":"#7C3AED"} />
+                  <Pill text={b.urgency} color={b.urgency==="high"?"#DC2626":"#D97706"} />
+                  <span style={{ fontSize:12, color:txt2 }}>{openBrief===i?"▲":"▼"}</span>
+                </div>
+              </div>
+              {openBrief===i && (
+                <div style={{ background:bg3, padding:"12px 14px", borderTop:`1px solid ${bdr}` }}>
+                  {b.secondaryKeywords?.length > 0 && <div style={{ fontSize:11, color:txt2, marginBottom:8 }}>Secondary: {b.secondaryKeywords.join(", ")}</div>}
+                  {b.headingStructure?.length > 0 && (
+                    <div style={{ marginBottom:8 }}>
+                      <div style={{ fontSize:10, color:txt2, fontWeight:700, marginBottom:4 }}>HEADING STRUCTURE</div>
+                      {b.headingStructure.map((h,j)=><div key={j} style={{ fontSize:11, color:txt, padding:"2px 0" }}>{h}</div>)}
+                    </div>
+                  )}
+                  {b.contentOutline?.length > 0 && (
+                    <div style={{ marginBottom:8 }}>
+                      <div style={{ fontSize:10, color:txt2, fontWeight:700, marginBottom:4 }}>CONTENT OUTLINE</div>
+                      {b.contentOutline.map((p,j)=><div key={j} style={{ fontSize:11, color:txt2, padding:"2px 0" }}>• {p}</div>)}
+                    </div>
+                  )}
+                  {b.competitorBenchmark && <div style={{ fontSize:11, color:txt2 }}>Benchmark: {b.competitorBenchmark}</div>}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* FAQ Content */}
+      {faqs.length > 0 && (
+        <div style={{ marginBottom:12 }}>
+          <div style={{ fontSize:11, fontWeight:700, color:txt2, textTransform:"uppercase", letterSpacing:1, marginBottom:8 }}>❓ FAQ Content — Schema Ready ({faqs.length} questions)</div>
+          {faqs.map((f,i) => (
+            <div key={i} style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:8, padding:"10px 14px", marginBottom:8 }}>
+              <div style={{ fontSize:12, fontWeight:600, color:txt, marginBottom:4 }}>Q: {f.question}</div>
+              <div style={{ fontSize:11, color:txt2, lineHeight:1.5 }}>A: {f.answer}</div>
+              <div style={{ fontSize:10, color:"#0891B2", marginTop:4 }}>Target page: {f.targetPage}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Content Refresh Flags */}
+      {refresh.length > 0 && (
+        <div style={{ marginBottom:12 }}>
+          <div style={{ fontSize:11, fontWeight:700, color:txt2, textTransform:"uppercase", letterSpacing:1, marginBottom:8 }}>🔄 Content Refresh Needed ({refresh.length})</div>
+          {refresh.map((r,i) => (
+            <div key={i} style={{ background:bg3, borderRadius:8, padding:"10px 12px", marginBottom:6, borderLeft:"3px solid #D97706" }}>
+              <div style={{ fontSize:11, color:txt, fontWeight:600 }}>{r.page}</div>
+              <div style={{ fontSize:11, color:txt2 }}>{r.issue}</div>
+              <div style={{ fontSize:11, color:"#059669" }}>→ {r.action}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Internal Link Suggestions */}
+      {links.length > 0 && (
+        <div>
+          <div style={{ fontSize:11, fontWeight:700, color:txt2, textTransform:"uppercase", letterSpacing:1, marginBottom:8 }}>🔗 Internal Link Suggestions</div>
+          {links.map((l,i) => (
+            <div key={i} style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:8, padding:"8px 12px", marginBottom:6, display:"flex", justifyContent:"space-between" }}>
+              <div>
+                <div style={{ fontSize:12, color:"#0891B2", fontWeight:600 }}>"{l.anchorText}"</div>
+                <div style={{ fontSize:11, color:txt2 }}>Links to: {l.targetPage}</div>
+              </div>
+              <div style={{ fontSize:10, color:txt2, maxWidth:180, textAlign:"right" }}>{l.reason}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Full Report View (A9) ───────────────────────────
+function FullReportView({ report, bg2, bg3, bdr, txt, txt2 }) {
+  const r   = report.reportData || {};
+  const gsc = report.gscSummary;
+  const statusColor = { green:"#059669", amber:"#D97706", red:"#DC2626" };
+
+  return (
+    <div>
+      {/* Approval Status Banner */}
+      <div style={{ padding:"10px 14px", borderRadius:8, background:"#D9770611", border:"1px solid #D9770633", marginBottom:14, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+        <div style={{ fontSize:12, color:"#D97706" }}>⏳ Report awaiting human review before sending to client</div>
+        <div style={{ fontSize:10, color:txt2 }}>Approval ID: {report.approvalId}</div>
+      </div>
+
+      {/* GSC Performance Card */}
+      {gsc && (
+        <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, padding:16, marginBottom:12 }}>
+          <div style={{ fontSize:11, fontWeight:700, color:txt2, textTransform:"uppercase", letterSpacing:1, marginBottom:12 }}>📈 Google Search Console — {gsc.period}</div>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:10, marginBottom:12 }}>
+            {[{l:"Clicks",v:gsc.totalClicks,c:"#059669"},{l:"Impressions",v:gsc.totalImpress,c:"#0891B2"},{l:"Avg CTR",v:gsc.avgCTR+"%",c:"#7C3AED"},{l:"Avg Position",v:"#"+gsc.avgPos,c:"#D97706"}].map(i=>(
+              <div key={i.l} style={{ textAlign:"center" }}>
+                <div style={{ fontSize:22, fontWeight:700, color:i.c }}>{i.v}</div>
+                <div style={{ fontSize:10, color:txt2 }}>{i.l}</div>
+              </div>
+            ))}
+          </div>
+          {gsc.topKeywords?.length > 0 && (
+            <div>
+              <div style={{ fontSize:10, color:txt2, fontWeight:700, textTransform:"uppercase", marginBottom:6 }}>Top Keywords</div>
+              {gsc.topKeywords.map((k,i)=>(
+                <div key={i} style={{ display:"flex", justifyContent:"space-between", padding:"4px 8px", background:bg3, borderRadius:6, marginBottom:4 }}>
+                  <span style={{ fontSize:11, color:txt }}>{k.keyword}</span>
+                  <div style={{ display:"flex", gap:12 }}>
+                    <span style={{ fontSize:11, color:"#059669" }}>{k.clicks} clicks</span>
+                    <span style={{ fontSize:11, color:txt2 }}>#{k.position}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Executive Verdict */}
+      {r.verdict && (
+        <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, padding:16, marginBottom:12, borderLeft:"4px solid #7C3AED" }}>
+          <div style={{ fontSize:11, fontWeight:700, color:"#7C3AED", textTransform:"uppercase", letterSpacing:1, marginBottom:8 }}>📊 Executive Verdict</div>
+          <div style={{ fontSize:14, color:txt, lineHeight:1.6, fontWeight:500 }}>{r.verdict}</div>
+        </div>
+      )}
+
+      {/* KPI Scorecard */}
+      {r.kpiScorecard?.length > 0 && (
+        <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, padding:16, marginBottom:12 }}>
+          <div style={{ fontSize:11, fontWeight:700, color:txt2, textTransform:"uppercase", letterSpacing:1, marginBottom:10 }}>🎯 KPI Scorecard</div>
+          <div style={{ overflowX:"auto" }}>
+            <table style={{ width:"100%", borderCollapse:"collapse", fontSize:11 }}>
+              <thead>
+                <tr style={{ borderBottom:`1px solid ${bdr}` }}>
+                  {["Metric","Value","vs Target","Status","Notes"].map(h=>(
+                    <th key={h} style={{ textAlign:"left", padding:"6px 8px", color:txt2, fontWeight:600, fontSize:10, textTransform:"uppercase" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {r.kpiScorecard.map((row,i)=>(
+                  <tr key={i} style={{ borderBottom:`1px solid ${bdr}` }}>
+                    <td style={{ padding:"8px", color:txt, fontWeight:500 }}>{row.metric}</td>
+                    <td style={{ padding:"8px", color:txt, fontWeight:700 }}>{row.value}</td>
+                    <td style={{ padding:"8px", color:txt2 }}>{row.vs}</td>
+                    <td style={{ padding:"8px" }}>
+                      <span style={{ fontSize:10, padding:"2px 8px", borderRadius:10, background:(statusColor[row.status]||"#6B7280")+"22", color:statusColor[row.status]||"#6B7280" }}>
+                        {row.status==="green"?"✅":row.status==="amber"?"⚠️":"❌"} {row.status}
+                      </span>
+                    </td>
+                    <td style={{ padding:"8px", color:txt2, fontSize:10 }}>{row.notes}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* What Worked / What Didn't */}
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:12 }}>
+        {r.whatWorked?.length > 0 && (
+          <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, padding:14 }}>
+            <div style={{ fontSize:11, fontWeight:700, color:"#059669", textTransform:"uppercase", letterSpacing:1, marginBottom:8 }}>✅ What Worked</div>
+            {r.whatWorked.map((w,i)=>(
+              <div key={i} style={{ padding:"8px 0", borderBottom:`1px solid ${bdr}` }}>
+                <div style={{ fontSize:11, color:txt, fontWeight:600 }}>{w.item}</div>
+                <div style={{ fontSize:10, color:txt2 }}>{w.impact}</div>
+                <div style={{ fontSize:10, color:"#059669" }}>→ {w.keepDoing}</div>
+              </div>
+            ))}
+          </div>
+        )}
+        {r.whatDidnt?.length > 0 && (
+          <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, padding:14 }}>
+            <div style={{ fontSize:11, fontWeight:700, color:"#DC2626", textTransform:"uppercase", letterSpacing:1, marginBottom:8 }}>❌ What Didn't Work</div>
+            {r.whatDidnt.map((w,i)=>(
+              <div key={i} style={{ padding:"8px 0", borderBottom:`1px solid ${bdr}` }}>
+                <div style={{ fontSize:11, color:txt, fontWeight:600 }}>{w.item}</div>
+                <div style={{ fontSize:10, color:txt2 }}>{w.hypothesis}</div>
+                <div style={{ fontSize:10, color:"#D97706" }}>→ Fix: {w.action}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Why It Happened */}
+      {r.whyItHappened && (
+        <div style={{ background:bg3, borderRadius:8, padding:14, marginBottom:12, fontSize:12, color:txt2, lineHeight:1.6, borderLeft:`3px solid #0891B2` }}>
+          <div style={{ fontSize:10, fontWeight:700, color:"#0891B2", textTransform:"uppercase", marginBottom:6 }}>Context — Why It Happened</div>
+          {r.whyItHappened}
+        </div>
+      )}
+
+      {/* Technical Health */}
+      {r.technicalHealthSummary && (
+        <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:8, padding:14, marginBottom:12 }}>
+          <div style={{ fontSize:10, fontWeight:700, color:txt2, textTransform:"uppercase", marginBottom:6 }}>🏥 Technical Health</div>
+          <div style={{ fontSize:12, color:txt, lineHeight:1.6 }}>{r.technicalHealthSummary}</div>
+        </div>
+      )}
+
+      {/* Next 3 Actions */}
+      {r.next3Actions?.length > 0 && (
+        <div style={{ marginBottom:12 }}>
+          <div style={{ fontSize:11, fontWeight:700, color:txt2, textTransform:"uppercase", letterSpacing:1, marginBottom:8 }}>🚀 Next 3 Actions</div>
+          {r.next3Actions.map((a,i)=>(
+            <div key={i} style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, padding:"12px 14px", marginBottom:8, borderLeft:"3px solid #7C3AED" }}>
+              <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
+                <div style={{ fontSize:13, fontWeight:700, color:txt }}>{i+1}. {a.action}</div>
+                <span style={{ fontSize:10, padding:"2px 8px", borderRadius:10, background:"#7C3AED22", color:"#A78BFA" }}>Priority {a.priority}</span>
+              </div>
+              <div style={{ fontSize:11, color:txt2, marginBottom:4 }}>{a.why}</div>
+              <div style={{ fontSize:11, color:"#059669" }}>Expected: {a.expectedOutcome}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Off-Page Summary */}
+      {r.offPageSummary && (
+        <div style={{ background:bg3, borderRadius:8, padding:14, fontSize:12, color:txt2, lineHeight:1.6, borderLeft:"3px solid #D97706" }}>
+          <div style={{ fontSize:10, fontWeight:700, color:"#D97706", textTransform:"uppercase", marginBottom:6 }}>🔗 Off-Page & Backlinks</div>
+          {r.offPageSummary}
+        </div>
+      )}
     </div>
   );
 }

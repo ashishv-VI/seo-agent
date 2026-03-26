@@ -19,6 +19,31 @@ async function runA2(clientId) {
   const issues  = { p1: [], p2: [], p3: [] };
   const checks  = {};
 
+  // ── 0. Redirect Chain Detection ───────────────────
+  // Checks before main fetch — follows redirects manually to detect chains
+  try {
+    let current = siteUrl;
+    const chain = [];
+    for (let hop = 0; hop < 6; hop++) {
+      const r = await fetch(current, { redirect:"manual", signal: AbortSignal.timeout(5000), headers:{ "User-Agent":"SEO-Agent-Audit/1.0" } });
+      if (r.status >= 300 && r.status < 400) {
+        const loc = r.headers.get("location");
+        if (!loc) break;
+        const next = new URL(loc, current).href;
+        chain.push({ from: current, to: next, status: r.status });
+        current = next;
+      } else { break; }
+    }
+    checks.redirectChain = { depth: chain.length, chain };
+    if (chain.length >= 3) {
+      issues.p2.push({
+        type:   "redirect_chain",
+        detail: `${chain.length}-hop redirect chain: ${chain.map(c=>c.status).join("→")} (${chain[0].from} → … → ${chain[chain.length-1].to})`,
+        fix:    "Shorten to a single 301 redirect — each hop loses ~15% of PageRank",
+      });
+    }
+  } catch { checks.redirectChain = { depth: 0, chain: [] }; }
+
   // ── 1. Accessibility & Response Time ──────────────
   const startTime = Date.now();
   try {
@@ -195,6 +220,9 @@ async function runA2(clientId) {
               hasMeta:      pg.checks?.metaDescription?.exists || false,
               hasCanonical: pg.checks?.canonical?.exists || false,
               altMissing:   pg.checks?.altTextAudit?.missingAlt || 0,
+              wordCount:    pg.checks?.wordCount || 0,
+              freshness:    pg.checks?.contentFreshness?.freshnessSignal || "unknown",
+              crawlDepth:   1,
               issues:       [...(pg.issues?.p1||[]), ...(pg.issues?.p2||[])].length,
             });
           }
@@ -251,6 +279,46 @@ async function runA2(clientId) {
 
   checks.pageAudits  = pageAudits;
   checks.brokenLinks = brokenLinks;
+
+  // ── 6. E-E-A-T Signals Audit ──────────────────────
+  // Google's "Experience, Expertise, Authoritativeness, Trustworthiness" — critical post-HCU
+  if (checks._homepageHtml) {
+    const h = checks._homepageHtml;
+    const eeat = {
+      hasAboutPage:     /href=["'][^"']*\/about(?:-us|team|company)?[/"']/i.test(h),
+      hasContactPage:   /href=["'][^"']*\/contact(?:-us)?[/"']/i.test(h),
+      hasPrivacyPolicy: /href=["'][^"']*\/privacy(?:-policy)?[/"']/i.test(h),
+      hasAuthorBio:     /<[^>]*class=["'][^"']*(?:author|byline)[^"']*["']/i.test(h),
+      hasSchemaOrg:     /"@context"\s*:\s*"https?:\/\/schema\.org"/i.test(h),
+      hasBreadcrumb:    /(?:breadcrumb|BreadcrumbList)/i.test(h),
+      hasTestimonials:  /<[^>]*class=["'][^"']*(?:testimonial|review|rating)[^"']*["']/i.test(h),
+      hasSocialLinks:   /href=["'][^"']*(?:linkedin|twitter|facebook|instagram)\.com/i.test(h),
+    };
+    eeat.score    = Object.values(eeat).filter(Boolean).length;
+    eeat.maxScore = 8;
+    checks.eeat   = eeat;
+
+    const missing = [];
+    if (!eeat.hasAboutPage)     missing.push("About/Team page");
+    if (!eeat.hasContactPage)   missing.push("Contact page");
+    if (!eeat.hasPrivacyPolicy) missing.push("Privacy Policy");
+    if (!eeat.hasSchemaOrg)     missing.push("Schema.org structured data");
+
+    if (missing.length >= 3) {
+      issues.p2.push({
+        type:   "weak_eeat",
+        detail: `E-E-A-T signals weak (${eeat.score}/8) — missing: ${missing.join(", ")}`,
+        fix:    "Add About, Contact, Privacy Policy pages and Schema.org markup to build Google trust",
+      });
+    } else if (missing.length > 0) {
+      issues.p3.push({
+        type:   "eeat_improvements",
+        detail: `E-E-A-T score ${eeat.score}/8 — could improve: ${missing.join(", ")}`,
+        fix:    "Strengthen trust signals to improve E-E-A-T and Google's confidence in site authority",
+      });
+    }
+  }
+
   delete checks._homepageHtml;
 
   // ── Build Result ───────────────────────────────────
@@ -265,11 +333,14 @@ async function runA2(clientId) {
     issues,
     checks,
     summary: {
-      p1Count:      issues.p1.length,
-      p2Count:      issues.p2.length,
-      p3Count:      issues.p3.length,
-      pagesCrawled: pageAudits.length + 1,
-      brokenLinks:  brokenLinks.length,
+      p1Count:       issues.p1.length,
+      p2Count:       issues.p2.length,
+      p3Count:       issues.p3.length,
+      pagesCrawled:  pageAudits.length + 1,
+      brokenLinks:   brokenLinks.length,
+      redirectDepth: checks.redirectChain?.depth || 0,
+      eeatScore:     checks.eeat?.score || 0,
+      thinPages:     pageAudits.filter(p => p.wordCount < 300).length,
       message:  issues.p1.length > 0
         ? `${issues.p1.length} critical issue(s) blocking rankings — fix immediately`
         : issues.p2.length > 0
@@ -343,6 +414,61 @@ function parseOnPage(html, pageUrl) {
     issues.p2.push({ type: "no_viewport", detail: "No viewport meta tag — poor mobile experience", fix: "Add <meta name='viewport' content='width=device-width, initial-scale=1'>" });
   }
 
+  // ── Thin Content Detection ───────────────────────
+  const strippedText = html
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ").trim();
+  const wordCount = strippedText.split(/\s+/).filter(w => w.length > 2).length;
+  checks.wordCount = wordCount;
+  if (wordCount < 300) {
+    issues.p2.push({
+      type:   "thin_content",
+      detail: `${pageLabel} has only ~${wordCount} words — may be flagged as thin content`,
+      fix:    "Expand to at least 500 words with genuinely useful information for the user",
+    });
+  } else if (wordCount < 500) {
+    issues.p3.push({
+      type:   "low_content",
+      detail: `${pageLabel} has ~${wordCount} words — consider expanding`,
+      fix:    "Add more depth to support keyword targeting and satisfy user intent",
+    });
+  }
+
+  // ── Content Freshness ────────────────────────────
+  let publishedDate = null;
+  const jsonLdBlocks = html.match(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi) || [];
+  for (const block of jsonLdBlocks) {
+    try {
+      const inner = block.replace(/<script[^>]*>/, "").replace(/<\/script>/i, "");
+      const jld = JSON.parse(inner);
+      const d = jld.dateModified || jld.datePublished || jld.date;
+      if (d) { publishedDate = d; break; }
+    } catch { /* skip */ }
+  }
+  if (!publishedDate) {
+    const metaD = html.match(/<meta[^>]*(?:name|property)=["'](?:article:modified_time|article:published_time|date)["'][^>]*content=["']([^"']*)["']/i);
+    if (metaD) publishedDate = metaD[1];
+  }
+  if (!publishedDate) {
+    const urlYear = pageUrl.match(/\/(20\d{2})\//);
+    if (urlYear) publishedDate = urlYear[1] + "-01-01";
+  }
+  let freshnessSignal = "unknown", ageYears = null;
+  if (publishedDate) {
+    ageYears = Math.round((Date.now() - new Date(publishedDate).getTime()) / (1000*60*60*24*365) * 10) / 10;
+    freshnessSignal = ageYears < 0.5 ? "fresh" : ageYears < 1 ? "recent" : ageYears < 2 ? "aging" : "stale";
+    if (ageYears > 2 && ageYears < 50) {
+      issues.p3.push({
+        type:   "stale_content",
+        detail: `${pageLabel} content appears ${Math.round(ageYears)} year(s) old`,
+        fix:    "Refresh with updated stats, current year references, and new insights",
+      });
+    }
+  }
+  checks.contentFreshness = { publishedDate, freshnessSignal, ageYears };
+
   // ── Alt Text Audit ──────────────────────────────
   const imgMatches = html.match(/<img[^>]*>/gi) || [];
   const imgsNoAlt  = imgMatches.filter(img => !img.match(/alt=["'][^"']+["']/i));
@@ -365,6 +491,32 @@ function parseOnPage(html, pageUrl) {
       type:   "missing_alt_text",
       detail: `${imgsNoAlt.length} image(s) missing alt text`,
       fix:    "Add descriptive alt text to all images",
+    });
+  }
+
+  // ── Image Optimization ──────────────────────────
+  const nonWebp = imgMatches.filter(img => {
+    const s = (img.match(/src=["']([^"']*)["']/i)||[])[1]?.toLowerCase()||"";
+    return (s.endsWith(".jpg")||s.endsWith(".jpeg")||s.endsWith(".png")||s.endsWith(".gif")) && !s.startsWith("data:");
+  });
+  const missingDims = imgMatches.filter(img => !img.match(/width=/i) || !img.match(/height=/i));
+  checks.imageOptimization = {
+    totalImages:       imgMatches.length,
+    nonWebpImages:     nonWebp.length,
+    missingDimensions: missingDims.length,
+  };
+  if (nonWebp.length > 3) {
+    issues.p3.push({
+      type:   "non_webp_images",
+      detail: `${nonWebp.length} images using old format (JPG/PNG) — WebP is 30% smaller`,
+      fix:    "Convert images to WebP format to improve page load speed",
+    });
+  }
+  if (missingDims.length > 5) {
+    issues.p2.push({
+      type:   "missing_image_dimensions",
+      detail: `${missingDims.length} images missing width/height — causes Cumulative Layout Shift (CLS)`,
+      fix:    "Add explicit width and height attributes to all <img> tags",
     });
   }
 

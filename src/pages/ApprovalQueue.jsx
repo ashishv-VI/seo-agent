@@ -3,10 +3,12 @@ import { useAuth } from "../context/AuthContext";
 
 export default function ApprovalQueue({ dark, clientId, clientName }) {
   const { user, API } = useAuth();
-  const [items,   setItems]   = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [acting,  setActing]  = useState(null);
+  const [items,    setItems]    = useState([]);
+  const [loading,  setLoading]  = useState(true);
+  const [acting,   setActing]   = useState(null);
   const [expanded, setExpanded] = useState(null);
+  const [revising, setRevising] = useState(null);   // item id showing revision input
+  const [feedback, setFeedback] = useState({});      // itemId → feedback text
 
   const bg   = dark ? "#0a0a0a" : "#f5f5f0";
   const bg2  = dark ? "#111"    : "#ffffff";
@@ -43,11 +45,25 @@ export default function ApprovalQueue({ dark, clientId, clientName }) {
     setActing(null);
   }
 
+  async function requestRevision(itemId) {
+    setActing(itemId);
+    const token = await getToken();
+    await fetch(`${API}/api/agents/${clientId}/approvals/${itemId}/revision`, {
+      method:  "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body:    JSON.stringify({ feedback: feedback[itemId] || "" }),
+    });
+    setRevising(null);
+    setFeedback(f => ({ ...f, [itemId]: "" }));
+    await load();
+    setActing(null);
+  }
+
   const typeLabel = { homepage_optimisation:"Homepage Optimisation", new_page_brief:"New Page Brief", client_report:"Client Report" };
   const typeIcon  = { homepage_optimisation:"🏠", new_page_brief:"📄", client_report:"📊" };
 
-  const pending  = items.filter(i => i.status === "pending");
-  const reviewed = items.filter(i => i.status !== "pending");
+  const pending  = items.filter(i => ["pending","revision_requested"].includes(i.status));
+  const reviewed = items.filter(i => !["pending","revision_requested"].includes(i.status));
 
   const s = {
     wrap:  { padding:24, background:bg },
@@ -76,11 +92,19 @@ export default function ApprovalQueue({ dark, clientId, clientName }) {
                   <span style={{ fontSize:16, marginRight:8 }}>{typeIcon[item.type] || "📋"}</span>
                   <span style={{ fontSize:13, fontWeight:700, color:txt }}>{typeLabel[item.type] || item.type}</span>
                   <span style={{ fontSize:10, color:txt2, marginLeft:10 }}>Agent: {item.agent}</span>
+                  {item.status==="revision_requested" && (
+                    <span style={{ fontSize:10, marginLeft:10, padding:"1px 8px", borderRadius:8, background:"#D9770622", color:"#D97706" }}>✏️ Revision requested</span>
+                  )}
+                  {item.feedback && <div style={{ fontSize:10, color:"#D97706", marginTop:4 }}>Feedback: {item.feedback}</div>}
                 </div>
                 <div style={{ display:"flex", gap:8 }}>
                   <button onClick={() => setExpanded(expanded === item.id ? null : item.id)}
                     style={{ padding:"5px 12px", borderRadius:8, border:`1px solid ${bdr}`, background:"transparent", color:txt2, fontSize:11, cursor:"pointer" }}>
                     {expanded === item.id ? "Hide" : "View"}
+                  </button>
+                  <button onClick={() => setRevising(revising===item.id?null:item.id)}
+                    style={{ padding:"5px 12px", borderRadius:8, border:`1px solid #D97706`, background:"transparent", color:"#D97706", fontSize:11, cursor:"pointer" }}>
+                    ✏️ Revise
                   </button>
                   <button onClick={() => act(item.id, "reject")} disabled={acting === item.id}
                     style={s.btn("#DC2626")}>Reject</button>
@@ -88,6 +112,28 @@ export default function ApprovalQueue({ dark, clientId, clientName }) {
                     style={s.btn("#059669")}>{acting === item.id ? "..." : "Approve"}</button>
                 </div>
               </div>
+
+              {revising === item.id && (
+                <div style={{ background:"#D9770611", border:"1px solid #D9770633", borderRadius:8, padding:12, marginBottom:10 }}>
+                  <div style={{ fontSize:11, color:"#D97706", fontWeight:600, marginBottom:6 }}>What needs changing?</div>
+                  <textarea
+                    value={feedback[item.id]||""}
+                    onChange={e=>setFeedback(f=>({...f,[item.id]:e.target.value}))}
+                    placeholder="e.g. Make the title shorter, change tone to more professional..."
+                    style={{ width:"100%", minHeight:60, borderRadius:6, border:`1px solid #D97706`, padding:8, fontSize:12, background:bg3, color:txt, resize:"vertical", boxSizing:"border-box" }}
+                  />
+                  <div style={{ display:"flex", gap:8, marginTop:8 }}>
+                    <button onClick={()=>requestRevision(item.id)} disabled={acting===item.id}
+                      style={{ padding:"6px 14px", borderRadius:8, border:"none", background:"#D97706", color:"#fff", fontWeight:600, fontSize:12, cursor:"pointer" }}>
+                      {acting===item.id?"...":"Send Feedback"}
+                    </button>
+                    <button onClick={()=>setRevising(null)}
+                      style={{ padding:"6px 14px", borderRadius:8, border:`1px solid ${bdr}`, background:"transparent", color:txt2, fontSize:12, cursor:"pointer" }}>
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {expanded === item.id && item.data && (
                 <div style={{ background:bg3, borderRadius:8, padding:16, fontSize:12 }}>

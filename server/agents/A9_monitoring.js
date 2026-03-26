@@ -106,11 +106,33 @@ Write an 8-step SEO report. Return ONLY valid JSON:
     createdAt:  FieldValue.serverTimestamp(),
   });
 
+  // ── Save rank snapshot to history (for trend tracking) ──
+  if (competitor?.rankingMatrix?.length > 0) {
+    const snapshot = {
+      clientId,
+      date:     new Date().toISOString().split("T")[0],
+      keywords: competitor.rankingMatrix.slice(0, 20).map(r => ({
+        keyword:  r.keyword,
+        position: r.clientRank || null,
+        category: r.opportunity,
+      })),
+      healthScore:   audit?.healthScore || null,
+      mobileScore:   technical?.summary?.mobileScore || null,
+      gscClicks:     gscSummary?.totalClicks || null,
+      gscImpressions:gscSummary?.totalImpress || null,
+      gscAvgPos:     gscSummary?.avgPos || null,
+      createdAt:     new Date().toISOString(),
+    };
+    // Use clientId + date as doc ID so re-running same day overwrites instead of duplicating
+    await db.collection("rank_history").doc(`${clientId}_${snapshot.date}`).set(snapshot);
+  }
+
   const result = {
     status:       "complete",
     reportData,
     gscSummary,
     approvalId:   ref.id,
+    rankSnapshotSaved: competitor?.rankingMatrix?.length > 0,
     humanGateNote:"Report draft saved — human must review, add relationship context, and trigger send.",
     generatedAt:  new Date().toISOString(),
   };
@@ -121,9 +143,10 @@ Write an 8-step SEO report. Return ONLY valid JSON:
 
 // ── Check Alerts (lightweight monitoring) ─────────
 async function checkAlerts(clientId, keys) {
-  const brief   = await getState(clientId, "A1_brief");
-  const audit   = await getState(clientId, "A2_audit");
-  const techData = await getState(clientId, "A7_technical");
+  const brief      = await getState(clientId, "A1_brief");
+  const audit      = await getState(clientId, "A2_audit");
+  const techData   = await getState(clientId, "A7_technical");
+  const competitor = await getState(clientId, "A4_competitor");
 
   if (!brief) return { success: false, error: "No brief found" };
 
@@ -169,6 +192,24 @@ async function checkAlerts(clientId, keys) {
       resolved: false,
       createdAt: FieldValue.serverTimestamp(),
     });
+  }
+
+  // Check A4 competitor data — if >70% of checked keywords are not ranking, flag P2
+  if (competitor?.rankingMatrix?.length > 0) {
+    const total       = competitor.rankingMatrix.length;
+    const notRanking  = competitor.rankingMatrix.filter(r => !r.clientRank || r.clientRank > 100).length;
+    if (notRanking / total > 0.7) {
+      alerts.push({
+        clientId,
+        tier:    "P2",
+        type:    "low_keyword_visibility",
+        message: `${notRanking} of ${total} tracked keywords (${Math.round(notRanking/total*100)}%) are not ranking in top 100`,
+        fix:     "Review A4 competitor gaps and prioritise content creation for unranked keywords",
+        source:  "A4",
+        resolved: false,
+        createdAt: FieldValue.serverTimestamp(),
+      });
+    }
   }
 
   // Save alerts to Firestore

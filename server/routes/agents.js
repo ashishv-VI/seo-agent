@@ -248,4 +248,36 @@ router.post("/:clientId/alerts/:alertId/resolve", verifyToken, async (req, res) 
   }
 });
 
+// ── Request revision on approval item ─────────────
+router.post("/:clientId/approvals/:itemId/revision", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const { feedback } = req.body;
+    await db.collection("approval_queue").doc(req.params.itemId).update({
+      status:      "revision_requested",
+      feedback:    feedback || "",
+      revisedAt:   FieldValue.serverTimestamp(),
+    });
+    return res.json({ message: "Revision requested" });
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
+// ── Get rank history for client ────────────────────
+router.get("/:clientId/rank-history", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const snap = await db.collection("rank_history")
+      .where("clientId", "==", req.params.clientId)
+      .orderBy("date", "desc")
+      .limit(12)
+      .get();
+    const history = snap.docs.map(d => d.data());
+    return res.json({ history });
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
 module.exports = router;

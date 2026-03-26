@@ -249,10 +249,50 @@ Return ONLY valid JSON:
     recommendations = { schemaMarkup: [], trackingSetup: {}, openGraph: { needed: true, tags: [] } };
   }
 
+  // ── Validate JSON-LD schemas from LLM ─────────────
+  // LLMs sometimes produce malformed JSON-LD — validate and repair before saving
+  const validatedSchema = (recommendations.schemaMarkup || []).map(schema => {
+    if (!schema.jsonLd) return { ...schema, valid: false, validationError: "No JSON-LD provided" };
+    try {
+      const parsed = JSON.parse(schema.jsonLd);
+      const hasContext = parsed["@context"] && (parsed["@context"].includes("schema.org") || parsed["@context"] === "https://schema.org");
+      const hasType    = !!parsed["@type"];
+      const hasName    = !!parsed.name;
+      return {
+        ...schema,
+        valid:           hasContext && hasType,
+        validationError: !hasContext ? "Missing @context: schema.org" : !hasType ? "Missing @type" : null,
+        parsedFields:    { type: parsed["@type"], name: parsed.name, hasUrl: !!parsed.url },
+      };
+    } catch (e) {
+      // Try to salvage — strip trailing commas and retry
+      try {
+        const fixed  = schema.jsonLd.replace(/,\s*([}\]])/g, "$1");
+        const parsed = JSON.parse(fixed);
+        return { ...schema, jsonLd: fixed, valid: true, validationError: null, autoFixed: true, parsedFields: { type: parsed["@type"] } };
+      } catch {
+        return { ...schema, valid: false, validationError: `Parse error: ${e.message}` };
+      }
+    }
+  });
+  recommendations.schemaMarkup = validatedSchema;
+
+  // ── Internal PageRank Flow (link authority scoring) ──
+  // Score each page by how many internal links it receives
   const allInternalLinks = [
     ...internalLinkOpps,
     ...(recommendations.internalLinkSuggestions || []),
   ].slice(0, 10);
+
+  const pageAuthorityMap = {};
+  for (const link of allInternalLinks) {
+    if (link.toPage) {
+      pageAuthorityMap[link.toPage] = (pageAuthorityMap[link.toPage] || 0) + 1;
+    }
+  }
+  const pageAuthority = Object.entries(pageAuthorityMap)
+    .sort((a, b) => b[1] - a[1])
+    .map(([page, inboundLinks]) => ({ page, inboundLinks, signal: inboundLinks >= 3 ? "strong" : inboundLinks >= 2 ? "medium" : "weak" }));
 
   const result = {
     status:          "complete",
@@ -261,12 +301,14 @@ Return ONLY valid JSON:
     serpPreview,
     h1Analysis,
     internalLinks:   allInternalLinks,
+    pageAuthority,
     totalFixes:      fixQueue.length,
     summary: {
       p1Fixes:       fixQueue.filter(f => f.priority === "p1").length,
       p2Fixes:       fixQueue.filter(f => f.priority === "p2").length,
       p3Fixes:       fixQueue.filter(f => f.priority === "p3").length,
-      schemaNeeded:  recommendations.schemaMarkup?.length || 0,
+      schemaNeeded:  validatedSchema.length,
+      schemaValid:   validatedSchema.filter(s => s.valid).length,
       altMissing:    altAudit.missingAlt || 0,
       ogMissing:     missingOg.length,
     },

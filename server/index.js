@@ -1,6 +1,7 @@
 require("dotenv").config();
 const express = require("express");
 const cors    = require("cors");
+const { db }  = require("./config/firebase");
 
 const authRoutes    = require("./routes/auth");
 const keysRoutes    = require("./routes/keys");
@@ -62,6 +63,41 @@ app.use("/api/auth",    authRoutes);
 app.use("/api/keys",    keysRoutes);
 app.use("/api/clients", clientsRoutes);
 app.use("/api/agents",  agentsRoutes);
+
+// ── Monthly pipeline scheduler ────────────────────
+// Checks once per hour — runs pipeline for clients whose last run was 30+ days ago
+setInterval(async () => {
+  try {
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const snap = await db.collection("clients")
+      .where("pipelineStatus", "==", "complete")
+      .get();
+
+    for (const doc of snap.docs) {
+      const data = doc.data();
+      if (data.pipelineCompletedAt && data.pipelineCompletedAt < thirtyDaysAgo) {
+        const { getUserKeys }      = require("./utils/getUserKeys");
+        const { runFullPipeline }  = require("./agents/A0_orchestrator");
+        const keys = await getUserKeys(data.ownerId).catch(() => null);
+        if (!keys) continue;
+
+        await db.collection("clients").doc(doc.id).update({
+          pipelineStatus:    "running",
+          pipelineStartedAt: new Date().toISOString(),
+          pipelineError:     null,
+        });
+
+        runFullPipeline(doc.id, keys).catch(err => {
+          console.error(`[scheduler] Re-run failed for ${doc.id}:`, err.message);
+        });
+
+        console.log(`[scheduler] Started monthly re-run for ${data.name} (${doc.id})`);
+      }
+    }
+  } catch (err) {
+    console.error("[scheduler] Error:", err.message);
+  }
+}, 60 * 60 * 1000); // every hour
 
 // ── 404 Handler ────────────────────────────────────
 app.use((req, res) => {

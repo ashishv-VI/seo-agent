@@ -43,6 +43,38 @@ async function runA7(clientId, keys) {
               ttfb: aud["server-response-time"]?.displayValue       || "N/A",
               si:   aud["speed-index"]?.displayValue                || "N/A",
             },
+            rawMetrics: {
+              lcp: {
+                display: aud["largest-contentful-paint"]?.displayValue || "N/A",
+                ms:      Math.round(aud["largest-contentful-paint"]?.numericValue || 0),
+                score:   aud["largest-contentful-paint"]?.score ?? null,
+              },
+              inp: {
+                display: aud["experimental-interaction-to-next-paint"]?.displayValue || aud["total-blocking-time"]?.displayValue || "N/A",
+                ms:      Math.round(aud["experimental-interaction-to-next-paint"]?.numericValue || aud["total-blocking-time"]?.numericValue || 0),
+                score:   aud["experimental-interaction-to-next-paint"]?.score ?? aud["total-blocking-time"]?.score ?? null,
+              },
+              cls: {
+                display: aud["cumulative-layout-shift"]?.displayValue || "N/A",
+                value:   aud["cumulative-layout-shift"]?.numericValue ?? null,
+                score:   aud["cumulative-layout-shift"]?.score ?? null,
+              },
+              fcp: {
+                display: aud["first-contentful-paint"]?.displayValue || "N/A",
+                ms:      Math.round(aud["first-contentful-paint"]?.numericValue || 0),
+                score:   aud["first-contentful-paint"]?.score ?? null,
+              },
+              ttfb: {
+                display: aud["server-response-time"]?.displayValue || "N/A",
+                ms:      Math.round(aud["server-response-time"]?.numericValue || 0),
+                score:   aud["server-response-time"]?.score ?? null,
+              },
+              si: {
+                display: aud["speed-index"]?.displayValue || "N/A",
+                ms:      Math.round(aud["speed-index"]?.numericValue || 0),
+                score:   aud["speed-index"]?.score ?? null,
+              },
+            },
             opportunities: Object.values(aud)
               .filter(a => a.score !== null && a.score < 0.9 && a.details?.type === "opportunity")
               .slice(0, 8)
@@ -123,6 +155,9 @@ Provide technical fix recommendations. Return ONLY valid JSON:
       desktopScore: cwvData.desktop?.scores?.performance || null,
       highImpactFixes: techRecs.priorityFixes?.filter(f => f.impact === "high").length || 0,
       responseTime,
+      lcpMs:    cwvData.mobile?.rawMetrics?.lcp?.ms    ?? null,
+      clsValue: cwvData.mobile?.rawMetrics?.cls?.value ?? null,
+      ttfbMs:   cwvData.mobile?.rawMetrics?.ttfb?.ms   ?? null,
     },
     generatedAt: new Date().toISOString(),
   };

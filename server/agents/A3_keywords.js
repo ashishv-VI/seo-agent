@@ -135,6 +135,24 @@ Generate 5-8 keywords per cluster. Make them realistic and specific to the busin
     topicClusters[topic].push(kw.keyword);
   }
 
+  // ── Featured Snippet Opportunities ──────────────────
+  // Questions + "how to" + "best" + "vs" keywords are snippet candidates
+  const snippetTriggers = /^(what|how|why|when|where|who|which|is|are|can|does|best|top|vs\.?|difference|compare)/i;
+  const snippetOpps = allKeywords
+    .filter(kw => snippetTriggers.test(kw.keyword))
+    .slice(0, 8)
+    .map(kw => ({
+      keyword:       kw.keyword,
+      snippetType:   /^how/i.test(kw.keyword) ? "how_to" : /^(what|why|when|where|who|is|are|can|does)/i.test(kw.keyword) ? "definition" : "list",
+      targetPage:    kw.suggestedPage || "/",
+      strategy:      /^how/i.test(kw.keyword)
+        ? "Use numbered steps format (1. 2. 3.) under an H2 matching the question"
+        : /^(what|why)/i.test(kw.keyword)
+        ? "Answer directly in 40-60 words in the first paragraph under the H2 that matches the question"
+        : "Use a bulleted or numbered list of 5-8 items under the matching H2",
+      priority:      kw.priority || "medium",
+    }));
+
   const result = {
     status:         "complete",
     totalKeywords:  allKeywords.length,
@@ -145,7 +163,14 @@ Generate 5-8 keywords per cluster. Make them realistic and specific to the busin
     hasSerpData:    Object.keys(serpData).length > 0,
     cannibalization,
     hasCannibalization: cannibalization.length > 0,
+    snippetOpportunities: snippetOpps,
+    hasSnippetOpps: snippetOpps.length > 0,
     pageKeywordMap,
+    summary: {
+      totalKeywords:   allKeywords.length,
+      cannibalization: cannibalization.length,
+      snippetOpps:     snippetOpps.length,
+    },
     generatedAt:    new Date().toISOString(),
   };
 
