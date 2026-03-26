@@ -21,11 +21,11 @@ function TagSelect({ label, options, selected, onChange, placeholder, dark }) {
 
   return (
     <div>
-      <label style={{ fontSize:11, color:txt2, fontWeight:600, marginBottom:6, display:"block" }}>{label}</label>
+      <label style={{ fontSize:13, color:txt2, fontWeight:600, marginBottom:6, display:"block" }}>{label}</label>
       <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginBottom:8 }}>
         {options.map(o => (
           <button key={o} type="button" onClick={() => toggle(o)}
-            style={{ padding:"4px 10px", borderRadius:16, fontSize:11, fontWeight:600, cursor:"pointer", border:`1px solid ${selected.includes(o) ? "#7C3AED" : bdr}`, background: selected.includes(o) ? "#7C3AED22" : "transparent", color: selected.includes(o) ? "#7C3AED" : txt2, transition:"all 0.1s" }}>
+            style={{ padding:"5px 12px", borderRadius:16, fontSize:12, fontWeight:600, cursor:"pointer", border:`1px solid ${selected.includes(o) ? "#7C3AED" : bdr}`, background: selected.includes(o) ? "#7C3AED22" : "transparent", color: selected.includes(o) ? "#7C3AED" : txt2, transition:"all 0.1s" }}>
             {o}
           </button>
         ))}
@@ -33,14 +33,14 @@ function TagSelect({ label, options, selected, onChange, placeholder, dark }) {
       <div style={{ display:"flex", gap:6 }}>
         <input value={custom} onChange={e => setCustom(e.target.value)}
           onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addCustom(); } if (e.key === ",") { e.preventDefault(); addCustom(); } }}
-          placeholder={placeholder} style={{ flex:1, padding:"7px 10px", borderRadius:8, border:`1px solid ${bdr}`, background:bg3, color:txt, fontSize:12, outline:"none", fontFamily:"inherit" }} />
+          placeholder={placeholder} style={{ flex:1, padding:"8px 12px", borderRadius:8, border:`1px solid ${bdr}`, background:bg3, color:txt, fontSize:13, outline:"none", fontFamily:"inherit" }} />
         <button type="button" onClick={addCustom}
-          style={{ padding:"7px 12px", borderRadius:8, border:`1px solid #7C3AED`, background:"transparent", color:"#7C3AED", fontSize:12, cursor:"pointer", fontWeight:600 }}>+ Add</button>
+          style={{ padding:"8px 14px", borderRadius:8, border:`1px solid #7C3AED`, background:"transparent", color:"#7C3AED", fontSize:13, cursor:"pointer", fontWeight:600 }}>+ Add</button>
       </div>
       {selected.length > 0 && (
         <div style={{ display:"flex", flexWrap:"wrap", gap:4, marginTop:6 }}>
           {selected.map(v => (
-            <span key={v} style={{ padding:"3px 8px", borderRadius:12, background:"#7C3AED22", color:"#7C3AED", fontSize:11, fontWeight:600, display:"flex", alignItems:"center", gap:4 }}>
+            <span key={v} style={{ padding:"4px 10px", borderRadius:12, background:"#7C3AED22", color:"#7C3AED", fontSize:12, fontWeight:600, display:"flex", alignItems:"center", gap:4 }}>
               {v}
               <span onClick={() => toggle(v)} style={{ cursor:"pointer", opacity:0.7 }}>×</span>
             </span>
@@ -51,8 +51,83 @@ function TagSelect({ label, options, selected, onChange, placeholder, dark }) {
   );
 }
 
-// ── Location tag input (type + press Enter/comma) ───────────────────────────
-function LocationInput({ label, value, onChange, dark }) {
+// ── City input with country suggestions ─────────────────────────────────────
+function CityInput({ label, value, onChange, dark, countryCities }) {
+  const [input, setInput] = useState("");
+  const [showDrop, setShowDrop] = useState(false);
+  const bdr  = dark ? "#2a2a2a" : "#e0e0d8";
+  const txt  = dark ? "#e8e8e8" : "#1a1a18";
+  const txt2 = dark ? "#888"    : "#777";
+  const bg2  = dark ? "#111"    : "#ffffff";
+  const bg3  = dark ? "#1a1a1a" : "#f0f0ea";
+
+  function add(city) {
+    const v = city.trim();
+    if (v && !value.includes(v)) onChange([...value, v]);
+    setInput("");
+    setShowDrop(false);
+  }
+
+  const filtered = countryCities.filter(
+    c => c.toLowerCase().includes(input.toLowerCase()) && !value.includes(c)
+  );
+
+  return (
+    <div>
+      <label style={{ fontSize:13, color:txt2, fontWeight:600, marginBottom:6, display:"block" }}>{label}</label>
+
+      {/* Country city suggestion chips */}
+      {countryCities.length > 0 && (
+        <div style={{ display:"flex", flexWrap:"wrap", gap:5, marginBottom:8 }}>
+          {countryCities.filter(c => !value.includes(c)).slice(0, 10).map(c => (
+            <button key={c} type="button" onClick={() => add(c)}
+              style={{ padding:"4px 10px", borderRadius:14, fontSize:11, cursor:"pointer", border:`1px solid ${bdr}`, background:"transparent", color:txt2, fontWeight:500 }}>
+              + {c}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div style={{ position:"relative", display:"flex", gap:6 }}>
+        <input value={input} onChange={e => { setInput(e.target.value); setShowDrop(true); }}
+          onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); if (filtered[0]) add(filtered[0]); else if (input.trim()) add(input); } if (e.key === "Escape") setShowDrop(false); }}
+          onFocus={() => setShowDrop(true)}
+          onBlur={() => setTimeout(() => setShowDrop(false), 150)}
+          placeholder="Search or type a city..."
+          style={{ flex:1, padding:"8px 12px", borderRadius:8, border:`1px solid ${bdr}`, background:bg3, color:txt, fontSize:13, outline:"none", fontFamily:"inherit" }} />
+        <button type="button" onClick={() => { if (input.trim()) add(input); }}
+          style={{ padding:"8px 14px", borderRadius:8, border:`1px solid #7C3AED`, background:"transparent", color:"#7C3AED", fontSize:13, cursor:"pointer", fontWeight:600 }}>+ Add</button>
+
+        {showDrop && input && filtered.length > 0 && (
+          <div style={{ position:"absolute", top:"100%", left:0, right:60, background:bg2, border:`1px solid ${bdr}`, borderRadius:8, zIndex:100, maxHeight:160, overflowY:"auto", boxShadow:"0 4px 12px rgba(0,0,0,0.15)" }}>
+            {filtered.slice(0, 8).map(c => (
+              <div key={c} onMouseDown={() => add(c)}
+                style={{ padding:"8px 12px", cursor:"pointer", fontSize:13, color:txt, borderBottom:`1px solid ${bdr}` }}
+                onMouseEnter={e => e.target.style.background = dark?"#1a1a1a":"#f5f5f0"}
+                onMouseLeave={e => e.target.style.background = "transparent"}>
+                {c}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {value.length > 0 && (
+        <div style={{ display:"flex", flexWrap:"wrap", gap:4, marginTop:6 }}>
+          {value.map(v => (
+            <span key={v} style={{ padding:"4px 10px", borderRadius:12, background:"#0EA5E922", color:"#0EA5E9", fontSize:12, fontWeight:600, display:"flex", alignItems:"center", gap:4 }}>
+              {v}
+              <span onClick={() => onChange(value.filter(x => x !== v))} style={{ cursor:"pointer", opacity:0.7 }}>×</span>
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Competitor chip input ────────────────────────────────────────────────────
+function CompetitorInput({ label, value, onChange, dark }) {
   const [input, setInput] = useState("");
   const bdr  = dark ? "#2a2a2a" : "#e0e0d8";
   const txt  = dark ? "#e8e8e8" : "#1a1a18";
@@ -60,28 +135,29 @@ function LocationInput({ label, value, onChange, dark }) {
   const bg3  = dark ? "#1a1a1a" : "#f0f0ea";
 
   function add() {
-    const v = input.trim();
+    const v = input.trim().replace(/^https?:\/\//, "").replace(/\/$/, "");
     if (v && !value.includes(v)) onChange([...value, v]);
     setInput("");
   }
 
   return (
     <div>
-      <label style={{ fontSize:11, color:txt2, fontWeight:600, marginBottom:6, display:"block" }}>{label}</label>
+      <label style={{ fontSize:13, color:txt2, fontWeight:600, marginBottom:6, display:"block" }}>{label}</label>
       <div style={{ display:"flex", gap:6 }}>
         <input value={input} onChange={e => setInput(e.target.value)}
           onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); add(); } if (e.key === ",") { e.preventDefault(); add(); } }}
-          placeholder="Type city / region then press Enter"
-          style={{ flex:1, padding:"7px 10px", borderRadius:8, border:`1px solid ${bdr}`, background:bg3, color:txt, fontSize:12, outline:"none", fontFamily:"inherit" }} />
+          placeholder="competitor.com"
+          style={{ flex:1, padding:"8px 12px", borderRadius:8, border:`1px solid ${bdr}`, background:bg3, color:txt, fontSize:13, outline:"none", fontFamily:"inherit" }} />
         <button type="button" onClick={add}
-          style={{ padding:"7px 12px", borderRadius:8, border:`1px solid #7C3AED`, background:"transparent", color:"#7C3AED", fontSize:12, cursor:"pointer", fontWeight:600 }}>+ Add</button>
+          style={{ padding:"8px 14px", borderRadius:8, border:`1px solid #DC2626`, background:"transparent", color:"#DC2626", fontSize:13, cursor:"pointer", fontWeight:600 }}>+ Add</button>
       </div>
       {value.length > 0 && (
-        <div style={{ display:"flex", flexWrap:"wrap", gap:4, marginTop:6 }}>
-          {value.map(v => (
-            <span key={v} style={{ padding:"3px 8px", borderRadius:12, background:"#0EA5E922", color:"#0EA5E9", fontSize:11, fontWeight:600, display:"flex", alignItems:"center", gap:4 }}>
+        <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginTop:8 }}>
+          {value.map((v, i) => (
+            <span key={v} style={{ padding:"5px 12px", borderRadius:10, background:"#DC262611", border:"1px solid #DC262633", color:"#DC2626", fontSize:12, fontWeight:600, display:"flex", alignItems:"center", gap:6 }}>
+              <span style={{ opacity:0.5, fontSize:10 }}>#{i+1}</span>
               {v}
-              <span onClick={() => onChange(value.filter(x => x !== v))} style={{ cursor:"pointer", opacity:0.7 }}>×</span>
+              <span onClick={() => onChange(value.filter(x => x !== v))} style={{ cursor:"pointer", opacity:0.6, fontSize:14, lineHeight:1 }}>×</span>
             </span>
           ))}
         </div>
@@ -121,6 +197,24 @@ const COUNTRY_OPTIONS = [
   "Germany", "France", "Singapore", "Malaysia", "Philippines",
 ];
 
+const CITIES_BY_COUNTRY = {
+  "United Kingdom":  ["London", "Manchester", "Birmingham", "Leeds", "Glasgow", "Liverpool", "Edinburgh", "Bristol", "Cardiff", "Sheffield", "Leicester", "Nottingham", "Newcastle", "Coventry", "Bradford"],
+  "United States":   ["New York", "Los Angeles", "Chicago", "Houston", "Phoenix", "Philadelphia", "San Antonio", "San Diego", "Dallas", "San Jose", "Austin", "Seattle", "Denver", "Miami", "Boston", "Atlanta", "Las Vegas", "Portland"],
+  "Australia":       ["Sydney", "Melbourne", "Brisbane", "Perth", "Adelaide", "Gold Coast", "Canberra", "Hobart", "Darwin", "Newcastle", "Wollongong", "Geelong"],
+  "Canada":          ["Toronto", "Montreal", "Vancouver", "Calgary", "Edmonton", "Ottawa", "Winnipeg", "Quebec City", "Hamilton", "Kitchener", "Halifax", "Victoria"],
+  "India":           ["Mumbai", "Delhi", "Bangalore", "Hyderabad", "Chennai", "Kolkata", "Pune", "Ahmedabad", "Jaipur", "Surat", "Lucknow", "Kanpur", "Nagpur", "Indore", "Bhopal", "Chandigarh", "Kochi"],
+  "Pakistan":        ["Karachi", "Lahore", "Islamabad", "Faisalabad", "Rawalpindi", "Gujranwala", "Peshawar", "Multan", "Hyderabad", "Quetta", "Sialkot"],
+  "UAE":             ["Dubai", "Abu Dhabi", "Sharjah", "Ajman", "Ras Al Khaimah", "Fujairah", "Umm Al Quwain", "Al Ain"],
+  "South Africa":    ["Johannesburg", "Cape Town", "Durban", "Pretoria", "Port Elizabeth", "Bloemfontein", "East London", "Nelspruit", "Polokwane"],
+  "Ireland":         ["Dublin", "Cork", "Limerick", "Galway", "Waterford", "Drogheda", "Dundalk", "Swords", "Bray", "Navan"],
+  "New Zealand":     ["Auckland", "Wellington", "Christchurch", "Hamilton", "Tauranga", "Dunedin", "Palmerston North", "Napier", "Nelson"],
+  "Germany":         ["Berlin", "Hamburg", "Munich", "Cologne", "Frankfurt", "Stuttgart", "Düsseldorf", "Leipzig", "Dortmund", "Essen", "Bremen", "Dresden"],
+  "France":          ["Paris", "Lyon", "Marseille", "Toulouse", "Nice", "Nantes", "Strasbourg", "Montpellier", "Bordeaux", "Lille", "Rennes"],
+  "Singapore":       ["Singapore City", "Jurong", "Woodlands", "Tampines", "Ang Mo Kio", "Toa Payoh", "Clementi", "Bedok"],
+  "Malaysia":        ["Kuala Lumpur", "George Town", "Johor Bahru", "Ipoh", "Shah Alam", "Petaling Jaya", "Subang Jaya", "Kota Kinabalu", "Kuching", "Malacca"],
+  "Philippines":     ["Manila", "Quezon City", "Davao", "Caloocan", "Cebu City", "Zamboanga", "Antipolo", "Pasig", "Taguig", "Makati", "Pasay"],
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function ClientManager({ dark }) {
@@ -144,7 +238,7 @@ export default function ClientManager({ dark }) {
     businessName: "", websiteUrl: "", businessDescription: "",
     businessLocation: "", services: [], goals: [],
     targetAudience: [], conversionGoals: [],
-    targetLocations: [], competitors: "", primaryKeywords: "",
+    targetLocations: [], competitors: [], primaryKeywords: "",
     notes: "",
   };
   const [form, setForm] = useState(blankForm);
@@ -171,11 +265,10 @@ export default function ClientManager({ dark }) {
       const token = await getToken();
       const body  = {
         ...form,
-        conversionGoal:  form.conversionGoals.join(", "),  // A1 expects a string
-        targetAudience:  form.targetAudience.join(", "),   // A1 expects a string
-        competitors:     form.competitors.split(",").map(s => s.trim()).filter(Boolean),
+        conversionGoal:  form.conversionGoals.join(", "),
+        targetAudience:  form.targetAudience.join(", "),
         primaryKeywords: form.primaryKeywords.split(",").map(s => s.trim()).filter(Boolean),
-        // services, goals, targetLocations, conversionGoals are already arrays
+        // competitors is already an array
       };
       const res  = await fetch(`${API}/api/clients`, {
         method: "POST",
@@ -204,16 +297,18 @@ export default function ClientManager({ dark }) {
   const statusColor = s => ({ complete:"#059669", signed_off:"#059669", running:"#D97706", pending:txt3, failed:"#DC2626", incomplete:"#D97706" }[s] || txt3);
   const statusLabel = s => ({ complete:"Complete", signed_off:"Signed Off", running:"Running", pending:"Pending", failed:"Failed", incomplete:"Incomplete" }[s] || s);
 
+  const countryCities = CITIES_BY_COUNTRY[form.businessLocation] || [];
+
   const s = {
     wrap:  { flex:1, overflowY:"auto", padding:24, background:bg },
     card:  { background:bg2, border:`1px solid ${bdr}`, borderRadius:12, padding:20, marginBottom:12, cursor:"pointer", transition:"border 0.15s" },
-    badge: (color) => ({ fontSize:10, padding:"2px 8px", borderRadius:10, background:color+"22", color, fontWeight:600 }),
-    inp:   { width:"100%", padding:"9px 12px", borderRadius:8, border:`1px solid ${bdr}`, background:bg3, color:txt, fontSize:13, outline:"none", fontFamily:"inherit", boxSizing:"border-box" },
-    sel:   { width:"100%", padding:"9px 12px", borderRadius:8, border:`1px solid ${bdr}`, background:bg3, color:txt, fontSize:13, outline:"none", fontFamily:"inherit", boxSizing:"border-box", cursor:"pointer" },
-    label: { fontSize:11, color:txt2, fontWeight:600, marginBottom:4, display:"block" },
-    btn:   (c="#7C3AED") => ({ padding:"9px 20px", borderRadius:8, border:"none", background:c, color:"#fff", fontWeight:600, fontSize:13, cursor:"pointer" }),
-    grid:  { display:"grid", gridTemplateColumns:"repeat(2,1fr)", gap:16 },
-    sec:   { fontSize:11, fontWeight:700, color:"#7C3AED", textTransform:"uppercase", letterSpacing:1, marginBottom:12, marginTop:8, paddingBottom:6, borderBottom:`1px solid ${bdr}`, gridColumn:"span 2" },
+    badge: (color) => ({ fontSize:11, padding:"3px 9px", borderRadius:10, background:color+"22", color, fontWeight:600 }),
+    inp:   { width:"100%", padding:"10px 12px", borderRadius:8, border:`1px solid ${bdr}`, background:bg3, color:txt, fontSize:14, outline:"none", fontFamily:"inherit", boxSizing:"border-box" },
+    sel:   { width:"100%", padding:"10px 12px", borderRadius:8, border:`1px solid ${bdr}`, background:bg3, color:txt, fontSize:14, outline:"none", fontFamily:"inherit", boxSizing:"border-box", cursor:"pointer" },
+    label: { fontSize:13, color:txt2, fontWeight:600, marginBottom:5, display:"block" },
+    btn:   (c="#7C3AED") => ({ padding:"10px 22px", borderRadius:8, border:"none", background:c, color:"#fff", fontWeight:600, fontSize:14, cursor:"pointer" }),
+    grid:  { display:"grid", gridTemplateColumns:"repeat(2,1fr)", gap:18 },
+    sec:   { fontSize:12, fontWeight:700, color:"#7C3AED", textTransform:"uppercase", letterSpacing:1, marginBottom:12, marginTop:8, paddingBottom:6, borderBottom:`1px solid ${bdr}`, gridColumn:"span 2" },
   };
 
   if (selected) {
@@ -225,19 +320,19 @@ export default function ClientManager({ dark }) {
       {/* Header */}
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
         <div>
-          <div style={{ fontSize:18, fontWeight:700, color:txt }}>Client Manager</div>
-          <div style={{ fontSize:12, color:txt2, marginTop:2 }}>Manage clients · Run A1 brief · Trigger pipeline</div>
+          <div style={{ fontSize:20, fontWeight:700, color:txt }}>Client Manager</div>
+          <div style={{ fontSize:13, color:txt2, marginTop:2 }}>Manage clients · Run A1 brief · Trigger pipeline</div>
         </div>
         <button onClick={() => { setShowForm(true); setError(""); setForm(blankForm); }} style={s.btn()}>+ Add Client</button>
       </div>
 
-      {error && <div style={{ padding:"10px 14px", borderRadius:8, background:"#DC262611", color:"#DC2626", fontSize:12, marginBottom:14 }}>{error}</div>}
+      {error && <div style={{ padding:"10px 14px", borderRadius:8, background:"#DC262611", color:"#DC2626", fontSize:13, marginBottom:14 }}>{error}</div>}
 
       {/* Add Client Form */}
       {showForm && (
         <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:12, padding:24, marginBottom:20 }}>
-          <div style={{ fontSize:15, fontWeight:700, color:txt, marginBottom:6 }}>New Client Brief — A1</div>
-          <div style={{ fontSize:11, color:txt2, marginBottom:20 }}>Fill in the brief. Downstream agents use this as their source of truth.</div>
+          <div style={{ fontSize:16, fontWeight:700, color:txt, marginBottom:6 }}>New Client Brief — A1</div>
+          <div style={{ fontSize:13, color:txt2, marginBottom:20 }}>Fill in the brief. Downstream agents use this as their source of truth.</div>
 
           <form onSubmit={handleSubmit}>
             <div style={s.grid}>
@@ -259,14 +354,15 @@ export default function ClientManager({ dark }) {
               </div>
 
               <div>
-                <label style={s.label}>Business Location</label>
+                <label style={s.label}>Business Country</label>
                 <select style={s.sel} value={form.businessLocation}
-                  onChange={e => setForm(f => ({...f, businessLocation: e.target.value}))}>
-                  <option value="">Select country / region</option>
+                  onChange={e => setForm(f => ({...f, businessLocation: e.target.value, targetLocations: [] }))}>
+                  <option value="">Select country</option>
                   {COUNTRY_OPTIONS.map(c => <option key={c} value={c}>{c}</option>)}
                   <option value="Other">Other</option>
                 </select>
               </div>
+
               <div style={{ gridColumn:"span 2" }}>
                 <TagSelect label="Target Audience * (who are this client's customers?)" options={AUDIENCE_OPTIONS}
                   selected={form.targetAudience} onChange={v => setForm(f => ({...f, targetAudience: v}))}
@@ -275,7 +371,7 @@ export default function ClientManager({ dark }) {
 
               <div style={{ gridColumn:"span 2" }}>
                 <label style={s.label}>Business Description</label>
-                <textarea style={{...s.inp, height:60, resize:"vertical"}} value={form.businessDescription}
+                <textarea style={{...s.inp, height:70, resize:"vertical"}} value={form.businessDescription}
                   onChange={e => setForm(f => ({...f, businessDescription: e.target.value}))}
                   placeholder="What does this business do? Products, USP, market position..." />
               </div>
@@ -301,14 +397,17 @@ export default function ClientManager({ dark }) {
                   placeholder="Custom goal..." dark={dark} />
               </div>
 
-              {/* ── Section: Target Locations ─────────────────── */}
+              {/* ── Section: Targeting ────────────────────────── */}
               <div style={s.sec}>Targeting</div>
 
               <div style={{ gridColumn:"span 2" }}>
-                <LocationInput label="Target Locations (cities / regions to rank in)"
+                <CityInput
+                  label={`Target Cities${form.businessLocation ? ` — ${form.businessLocation}` : ""} (cities / regions to rank in)`}
                   value={form.targetLocations}
                   onChange={v => setForm(f => ({...f, targetLocations: v}))}
-                  dark={dark} />
+                  dark={dark}
+                  countryCities={countryCities}
+                />
               </div>
 
               <div style={{ gridColumn:"span 2" }}>
@@ -319,17 +418,19 @@ export default function ClientManager({ dark }) {
               </div>
 
               <div style={{ gridColumn:"span 2" }}>
-                <label style={s.label}>Competitors (comma separated URLs)</label>
-                <input style={s.inp} value={form.competitors}
-                  onChange={e => setForm(f => ({...f, competitors: e.target.value}))}
-                  placeholder="competitor1.com, competitor2.com" />
+                <CompetitorInput
+                  label="Competitors (add one by one)"
+                  value={form.competitors}
+                  onChange={v => setForm(f => ({...f, competitors: v}))}
+                  dark={dark}
+                />
               </div>
 
               {/* ── Section: Notes ────────────────────────────── */}
               <div style={s.sec}>Additional Notes</div>
 
               <div style={{ gridColumn:"span 2" }}>
-                <textarea style={{...s.inp, height:60, resize:"vertical"}} value={form.notes}
+                <textarea style={{...s.inp, height:70, resize:"vertical"}} value={form.notes}
                   onChange={e => setForm(f => ({...f, notes: e.target.value}))}
                   placeholder="Any extra context — budget, timeline, previous SEO work, specific challenges..." />
               </div>
@@ -349,7 +450,7 @@ export default function ClientManager({ dark }) {
       ) : clients.length === 0 ? (
         <div style={{ textAlign:"center", padding:60, color:txt3 }}>
           <div style={{ fontSize:36, marginBottom:12 }}>🏢</div>
-          <div style={{ fontSize:14, color:txt2 }}>No clients yet — add your first client above</div>
+          <div style={{ fontSize:15, color:txt2 }}>No clients yet — add your first client above</div>
         </div>
       ) : (
         clients.map(client => (
@@ -357,10 +458,10 @@ export default function ClientManager({ dark }) {
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
               <div style={{ flex:1 }}>
                 <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:2 }}>
-                  <div style={{ fontSize:14, fontWeight:700, color:txt }}>{client.name}</div>
-                  {client.location && <span style={{ fontSize:10, color:txt2, background:bg3, padding:"2px 7px", borderRadius:8 }}>{client.location}</span>}
+                  <div style={{ fontSize:15, fontWeight:700, color:txt }}>{client.name}</div>
+                  {client.location && <span style={{ fontSize:11, color:txt2, background:bg3, padding:"2px 8px", borderRadius:8 }}>{client.location}</span>}
                 </div>
-                <div style={{ fontSize:11, color:txt2, marginBottom:10 }}>{client.website}</div>
+                <div style={{ fontSize:12, color:txt2, marginBottom:10 }}>{client.website}</div>
                 <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
                   {Object.entries(client.agents || {}).map(([agent, status]) => (
                     <span key={agent} style={s.badge(statusColor(status))}>
@@ -370,9 +471,9 @@ export default function ClientManager({ dark }) {
                 </div>
               </div>
               <div style={{ display:"flex", gap:8, alignItems:"center", flexShrink:0, marginLeft:12 }}>
-                <span style={{ fontSize:11, color:txt3 }}>View Pipeline →</span>
+                <span style={{ fontSize:12, color:txt3 }}>View Pipeline →</span>
                 <button onClick={(e) => deleteClient(client.id, e)}
-                  style={{ padding:"4px 10px", borderRadius:6, border:"1px solid #DC262633", background:"transparent", color:"#DC2626", fontSize:11, cursor:"pointer" }}>
+                  style={{ padding:"5px 12px", borderRadius:6, border:"1px solid #DC262633", background:"transparent", color:"#DC2626", fontSize:12, cursor:"pointer" }}>
                   Delete
                 </button>
               </div>
