@@ -42,8 +42,8 @@ const CSS = `
     to  { opacity:1; transform:translateY(0);   }
   }
   @keyframes glow-border {
-    0%,100%{ border-color:rgba(124,58,237,0.35); box-shadow:0 0 0 rgba(124,58,237,0); }
-    50%    { border-color:rgba(124,58,237,0.7);  box-shadow:0 0 30px rgba(124,58,237,0.15); }
+    0%,100%{ border-color:rgba(68,61,203,0.35); box-shadow:0 0 0 rgba(68,61,203,0); }
+    50%    { border-color:rgba(68,61,203,0.7);  box-shadow:0 0 30px rgba(68,61,203,0.15); }
   }
   @keyframes city-flicker {
     0%,100%{ opacity:0.7; } 45%{ opacity:1; } 50%{ opacity:0.5; } 55%{ opacity:1; }
@@ -61,9 +61,9 @@ const CSS = `
   }
   .l-input::placeholder{ color:rgba(255,255,255,0.2); }
   .l-input:focus{
-    border-color:rgba(124,58,237,0.65);
-    background:rgba(124,58,237,0.05);
-    box-shadow:0 0 0 3px rgba(124,58,237,0.1);
+    border-color:rgba(68,61,203,0.65);
+    background:rgba(68,61,203,0.05);
+    box-shadow:0 0 0 3px rgba(68,61,203,0.1);
   }
 
   /* ── Buttons ─────────────────────────────────── */
@@ -74,7 +74,7 @@ const CSS = `
     cursor:pointer; font-family:'Inter',sans-serif;
     position:relative; overflow:hidden;
     transition:transform .15s,box-shadow .2s,opacity .2s;
-    box-shadow:0 4px 28px rgba(124,58,237,0.4);
+    box-shadow:0 4px 28px rgba(68,61,203,0.4);
   }
   .btn-main::before{
     content:''; position:absolute; inset:0;
@@ -82,7 +82,7 @@ const CSS = `
     background-size:300% auto;
     animation:shimmer 2.5s linear infinite;
   }
-  .btn-main:hover:not(:disabled){ transform:translateY(-2px); box-shadow:0 8px 36px rgba(124,58,237,0.5); opacity:.95; }
+  .btn-main:hover:not(:disabled){ transform:translateY(-2px); box-shadow:0 8px 36px rgba(68,61,203,0.5); opacity:.95; }
   .btn-main:active:not(:disabled){ transform:translateY(0); }
   .btn-main:disabled{ opacity:.4; cursor:not-allowed; }
 
@@ -158,7 +158,7 @@ function MiniBarChart({ color = "#A78BFA" }) {
           width:5, height:`${h}%`, borderRadius:3,
           background: i >= bars.length - 3
             ? `linear-gradient(180deg, ${color}, ${color}88)`
-            : `rgba(167,139,250,${0.15 + i*0.06})`,
+            : `rgba(99,88,219,${0.15 + i*0.06})`,
           animation:`bar-pop .6s ease ${i*.05}s both`,
         }}/>
       ))}
@@ -360,7 +360,7 @@ export default function Login() {
           <div style={{
             position:"absolute", top:-140, right:-100,
             width:520, height:520, borderRadius:"50%",
-            background:"radial-gradient(circle, rgba(124,58,237,0.32) 0%, rgba(79,70,229,0.12) 50%, transparent 70%)",
+            background:"radial-gradient(circle, rgba(68,61,203,0.32) 0%, rgba(55,48,184,0.12) 50%, transparent 70%)",
             animation:"pulse-orb 5s ease-in-out infinite",
           }}/>
 
@@ -376,7 +376,7 @@ export default function Login() {
           <div style={{
             position:"absolute", top:"38%", right:"5%",
             width:200, height:200, borderRadius:"50%",
-            background:"radial-gradient(circle, rgba(236,72,153,0.14) 0%, transparent 70%)",
+            background:"radial-gradient(circle, rgba(234,34,39,0.14) 0%, transparent 70%)",
             animation:"pulse-orb 4.5s ease-in-out 1s infinite",
           }}/>
 
@@ -386,7 +386,7 @@ export default function Login() {
           {/* ── Scan line ── */}
           <div style={{
             position:"absolute", left:0, right:0, height:1,
-            background:"linear-gradient(90deg, transparent, rgba(124,58,237,0.6), rgba(167,139,250,0.8), rgba(124,58,237,0.6), transparent)",
+            background:"linear-gradient(90deg, transparent, rgba(68,61,203,0.6), rgba(99,88,219,0.8), rgba(68,61,203,0.6), transparent)",
             animation:"scan-line 6s linear infinite",
             pointerEvents:"none",
           }}/>
@@ -439,7 +439,7 @@ export default function Login() {
                 background:"linear-gradient(135deg,#443DCB,#3730B8)",
                 display:"flex", alignItems:"center", justifyContent:"center",
                 fontSize:22, fontWeight:900, color:"#fff",
-                boxShadow:"0 4px 24px rgba(124,58,237,0.55), inset 0 1px 0 rgba(255,255,255,0.2)",
+                boxShadow:"0 4px 24px rgba(68,61,203,0.55), inset 0 1px 0 rgba(255,255,255,0.2)",
               }}>S</div>
               <div>
                 <div style={{ fontSize:17, fontWeight:800, color:"#f5f5f5", letterSpacing:.2 }}>SEO Agent</div>
@@ -469,11 +469,11 @@ export default function Login() {
                 <div key={i} className="feat-item" style={{ animationDelay:`${.1+i*.12}s` }}>
                   <div style={{
                     width:42, height:42, borderRadius:11, flexShrink:0,
-                    background:"rgba(124,58,237,0.12)",
-                    border:"1px solid rgba(124,58,237,0.22)",
+                    background:"rgba(68,61,203,0.12)",
+                    border:"1px solid rgba(68,61,203,0.22)",
                     display:"flex", alignItems:"center", justifyContent:"center",
                     fontSize:19,
-                    boxShadow:"0 2px 12px rgba(124,58,237,0.1)",
+                    boxShadow:"0 2px 12px rgba(68,61,203,0.1)",
                   }}>{f.icon}</div>
                   <div>
                     <div style={{ fontSize:13.5, fontWeight:700, color:"#e8e8e8", marginBottom:3 }}>{f.title}</div>
@@ -496,13 +496,13 @@ export default function Login() {
           <div style={{
             position:"absolute", top:-80, right:-80,
             width:320, height:320, borderRadius:"50%",
-            background:"radial-gradient(circle, rgba(79,70,229,0.1) 0%, transparent 70%)",
+            background:"radial-gradient(circle, rgba(55,48,184,0.1) 0%, transparent 70%)",
             pointerEvents:"none",
           }}/>
           <div style={{
             position:"absolute", bottom:-60, left:-60,
             width:260, height:260, borderRadius:"50%",
-            background:"radial-gradient(circle, rgba(236,72,153,0.07) 0%, transparent 70%)",
+            background:"radial-gradient(circle, rgba(234,34,39,0.07) 0%, transparent 70%)",
             pointerEvents:"none",
           }}/>
 
@@ -514,7 +514,7 @@ export default function Login() {
             borderRadius:24, padding:"42px 38px",
             backdropFilter:"blur(24px)",
             WebkitBackdropFilter:"blur(24px)",
-            boxShadow:"0 28px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(124,58,237,0.06), inset 0 1px 0 rgba(255,255,255,0.07)",
+            boxShadow:"0 28px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(68,61,203,0.06), inset 0 1px 0 rgba(255,255,255,0.07)",
             animation: mounted ? "fade-up .55s ease forwards" : "none",
             opacity: mounted ? undefined : 0,
             ...(mounted ? { animation:"glow-border 4s ease-in-out infinite" } : {}),
