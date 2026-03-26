@@ -4,3 +4,6 @@ dist/
 server/.env
 .env
 *.env
+server/*firebase*.json
+*service-account*.json
+*adminsdk*.json
