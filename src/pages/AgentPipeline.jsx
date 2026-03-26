@@ -160,6 +160,7 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
         {isComplete("A2") && <div style={s.tab(activeTab==="audit")} onClick={()=>setActiveTab("audit")}>🏥 Audit</div>}
         {isComplete("A3") && <div style={s.tab(activeTab==="keywords")} onClick={()=>setActiveTab("keywords")}>🔍 Keywords</div>}
         {isComplete("A4") && <div style={s.tab(activeTab==="competitor")} onClick={()=>setActiveTab("competitor")}>🕵️ Competitor</div>}
+        {isComplete("A6") && <div style={s.tab(activeTab==="onpage")} onClick={()=>setActiveTab("onpage")}>🏷️ On-Page</div>}
         {isComplete("A7") && <div style={s.tab(activeTab==="technical")} onClick={()=>setActiveTab("technical")}>⚡ CWV</div>}
         {isComplete("A8") && <div style={s.tab(activeTab==="geo")} onClick={()=>setActiveTab("geo")}>🌍 GEO</div>}
       </div>
@@ -279,6 +280,11 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
       {/* Competitor Tab */}
       {activeTab==="competitor" && state.A4_competitor && (
         <FullCompetitorView comp={state.A4_competitor} dark={dark} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2} />
+      )}
+
+      {/* On-Page Tab */}
+      {activeTab==="onpage" && state.A6_onpage && (
+        <FullOnPageView op={state.A6_onpage} dark={dark} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2} />
       )}
 
       {/* Technical Tab */}
@@ -524,7 +530,14 @@ function ContentSummary({ content, txt, txt2 }) {
 }
 
 function OnPageSummary({ op, txt, txt2, bg2 }) {
-  return <div style={{ fontSize:12, color:txt2 }}>{op.totalFixes} fixes identified · P1: {op.summary?.p1Fixes} · P2: {op.summary?.p2Fixes} · Schema: {op.summary?.schemaNeeded} types needed</div>;
+  return (
+    <div style={{ fontSize:12, color:txt2 }}>
+      {op.totalFixes} fixes · P1: {op.summary?.p1Fixes} · P2: {op.summary?.p2Fixes}
+      {op.summary?.altMissing > 0 && <span style={{ color:"#D97706", marginLeft:8 }}>· {op.summary.altMissing} imgs no alt</span>}
+      {op.summary?.ogMissing > 0  && <span style={{ color:"#D97706", marginLeft:8 }}>· {op.summary.ogMissing} OG missing</span>}
+      <span style={{ marginLeft:8 }}>· Schema: {op.summary?.schemaNeeded} types</span>
+    </div>
+  );
 }
 
 function TechnicalSummary({ tech, txt, txt2 }) {
@@ -546,22 +559,118 @@ function ReportSummary({ report, txt, txt2 }) {
 // ── Full view components ────────────────────────────
 function FullAuditView({ audit, bg2, bg3, bdr, txt, txt2 }) {
   const issueColor = { p1:"#DC2626", p2:"#D97706", p3:"#6B7280" };
+  const c = audit.checks || {};
+  const alt = c.altTextAudit || {};
+  const og  = c.ogTags || {};
+  const req = c.httpRequests || {};
+  const serp = c.serpPreview || {};
+  const robots = c.robotsTxt || {};
+  const sitemap = c.sitemap || {};
+  const [showAltUrls, setShowAltUrls] = useState(false);
+  const [copiedSchema, setCopiedSchema] = useState(null);
+
+  const statusBadge = (ok, okText, failText) => (
+    <span style={{ fontSize:10, padding:"2px 8px", borderRadius:10, background: ok?"#05966922":"#DC262611", color: ok?"#059669":"#DC2626" }}>
+      {ok ? `✅ ${okText}` : `❌ ${failText}`}
+    </span>
+  );
+
   return (
     <div>
+      {/* Score Cards */}
       <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:10, marginBottom:16 }}>
-        {[{ l:"Health", v:audit.healthScore+"/100", c:"#7C3AED" },{ l:"P1",v:audit.summary?.p1Count,c:"#DC2626" },{ l:"P2",v:audit.summary?.p2Count,c:"#D97706" },{ l:"P3",v:audit.summary?.p3Count,c:"#6B7280" }].map(i=>(
+        {[{ l:"Health", v:audit.healthScore+"/100", c:"#7C3AED" },{ l:"P1 Critical",v:audit.summary?.p1Count,c:"#DC2626" },{ l:"P2 Important",v:audit.summary?.p2Count,c:"#D97706" },{ l:"P3 Minor",v:audit.summary?.p3Count,c:"#6B7280" }].map(i=>(
           <div key={i.l} style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, padding:"12px 10px", textAlign:"center", borderTop:`2px solid ${i.c}` }}>
             <div style={{ fontSize:20, fontWeight:700, color:i.c }}>{i.v}</div>
             <div style={{ fontSize:10, color:txt2 }}>{i.l}</div>
           </div>
         ))}
       </div>
+
+      {/* SERP Preview */}
+      {serp.title && (
+        <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, padding:16, marginBottom:12 }}>
+          <div style={{ fontSize:11, fontWeight:700, color:txt2, textTransform:"uppercase", letterSpacing:1, marginBottom:10 }}>🔍 Google SERP Preview</div>
+          <div style={{ background:"#fff", border:"1px solid #e0e0e0", borderRadius:8, padding:"14px 16px" }}>
+            <div style={{ fontSize:12, color:"#006621", marginBottom:2 }}>{serp.url?.replace(/^https?:\/\//,"")}</div>
+            <div style={{ fontSize:18, color:"#1a0dab", fontWeight:400, marginBottom:4, fontFamily:"Arial,sans-serif",
+              borderBottom: serp.titleLength > 60 ? "2px dashed #DC2626" : "none" }}>
+              {serp.title?.slice(0,60)}{serp.titleLength > 60 ? <span style={{color:"#DC2626"}}>... ✂️ cut off</span> : ""}
+            </div>
+            <div style={{ fontSize:13, color:"#545454", lineHeight:1.5, fontFamily:"Arial,sans-serif" }}>
+              {serp.description?.slice(0,155)}{serp.descLength > 155 ? <span style={{color:"#DC2626"}}>... ✂️ cut off</span> : ""}
+            </div>
+          </div>
+          <div style={{ display:"flex", gap:12, marginTop:10 }}>
+            <div style={{ fontSize:11, color: serp.titleLength>60||serp.titleLength<30 ? "#DC2626":"#059669" }}>
+              Title: {serp.titleLength} chars {serp.titleLength>60?"(too long — will be cut)":serp.titleLength<30?"(too short)":"✅"}
+            </div>
+            <div style={{ fontSize:11, color: serp.descLength>155||serp.descLength<70 ? "#D97706":"#059669" }}>
+              Description: {serp.descLength} chars {serp.descLength>155?"(will be cut)":serp.descLength<70?"(too short)":"✅"}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Technical Checks Grid */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(2,1fr)", gap:10, marginBottom:12 }}>
+        <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, padding:14 }}>
+          <div style={{ fontSize:11, fontWeight:700, color:txt2, marginBottom:8 }}>📊 HTTP Requests</div>
+          <div style={{ fontSize:22, fontWeight:800, color: req.total>60?"#DC2626":req.total>30?"#D97706":"#059669" }}>{req.total || 0}</div>
+          <div style={{ fontSize:10, color:txt2, marginTop:4 }}>Images: {req.images||0} · JS: {req.scripts||0} · CSS: {req.stylesheets||0}</div>
+          <div style={{ fontSize:10, color:txt2 }}>Limit: 20 · {req.total>60?"🔴 Critical":req.total>30?"🟡 High":"✅ OK"}</div>
+        </div>
+        <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, padding:14 }}>
+          <div style={{ fontSize:11, fontWeight:700, color:txt2, marginBottom:8 }}>🖼️ Alt Text Audit</div>
+          <div style={{ fontSize:22, fontWeight:800, color: alt.missingAlt>5?"#DC2626":alt.missingAlt>0?"#D97706":"#059669" }}>{alt.missingAlt||0}</div>
+          <div style={{ fontSize:10, color:txt2, marginTop:4 }}>Missing of {alt.totalImages||0} total images</div>
+          <div style={{ fontSize:10, color:"#0891B2", cursor:"pointer", marginTop:4 }} onClick={()=>setShowAltUrls(v=>!v)}>
+            {alt.missingAlt>0 ? (showAltUrls?"Hide URLs ▲":"Show URLs ▼") : "✅ All good"}
+          </div>
+        </div>
+      </div>
+
+      {/* Alt text URL list */}
+      {showAltUrls && (alt.missingUrls||[]).length > 0 && (
+        <div style={{ background:bg3, borderRadius:8, padding:12, marginBottom:12 }}>
+          <div style={{ fontSize:11, fontWeight:600, color:"#D97706", marginBottom:8 }}>Images missing alt text:</div>
+          {alt.missingUrls.map((url,i) => (
+            <div key={i} style={{ fontSize:10, color:txt2, padding:"3px 0", borderBottom:`1px solid ${bdr}`, wordBreak:"break-all" }}>{url}</div>
+          ))}
+        </div>
+      )}
+
+      {/* OG Tags + robots/sitemap row */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:10, marginBottom:12 }}>
+        <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, padding:14 }}>
+          <div style={{ fontSize:11, fontWeight:700, color:txt2, marginBottom:8 }}>📢 Open Graph</div>
+          {["title","description","image","url"].map(tag => (
+            <div key={tag} style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
+              <span style={{ fontSize:10, color:txt2 }}>og:{tag}</span>
+              {statusBadge(!!og[tag], "set", "missing")}
+            </div>
+          ))}
+        </div>
+        <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, padding:14 }}>
+          <div style={{ fontSize:11, fontWeight:700, color:txt2, marginBottom:8 }}>🤖 Robots.txt</div>
+          {statusBadge(robots.exists, "Found", "Missing")}
+          {robots.sitemapInRobots && <div style={{ fontSize:10, color:"#059669", marginTop:6 }}>Sitemap: ✅ declared</div>}
+          {robots.content && <div style={{ fontSize:9, color:txt2, marginTop:6, fontFamily:"monospace", background:bg3, padding:6, borderRadius:4, maxHeight:60, overflow:"hidden" }}>{robots.content.slice(0,150)}</div>}
+        </div>
+        <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, padding:14 }}>
+          <div style={{ fontSize:11, fontWeight:700, color:txt2, marginBottom:8 }}>🗺️ XML Sitemap</div>
+          {statusBadge(sitemap.exists, "Found", "Missing")}
+          {sitemap.url && <div style={{ fontSize:9, color:txt2, marginTop:6, wordBreak:"break-all" }}>{sitemap.url}</div>}
+        </div>
+      </div>
+
+      {/* Issues by Priority */}
       {["p1","p2","p3"].map(tier => (
         <div key={tier} style={{ marginBottom:14 }}>
           {(audit.issues?.[tier]||[]).map((issue,i)=>(
             <div key={i} style={{ padding:"10px 14px", borderRadius:8, marginBottom:6, background:bg3, borderLeft:`3px solid ${issueColor[tier]}` }}>
               <div style={{ fontSize:12, color:txt, fontWeight:600 }}>{issue.detail}</div>
-              <div style={{ fontSize:11, color:txt2 }}>Fix: {issue.fix}</div>
+              <div style={{ fontSize:11, color:"#059669" }}>→ Fix: {issue.fix}</div>
             </div>
           ))}
         </div>
@@ -632,6 +741,134 @@ function FullCompetitorView({ comp, bg2, bg3, bdr, txt, txt2 }) {
           <span style={{ fontSize:11, color:opp[r.opportunity]||txt2 }}>{r.opportunity?.replace("_"," ")}</span>
         </div>
       ))}
+    </div>
+  );
+}
+
+function FullOnPageView({ op, bg2, bg3, bdr, txt, txt2 }) {
+  const [copiedIdx, setCopiedIdx] = useState(null);
+  const serpPrev = op.serpPreview || {};
+  const h1       = op.h1Analysis  || {};
+  const schema   = op.recommendations?.schemaMarkup || [];
+  const tracking = op.recommendations?.trackingSetup || {};
+  const fixQueue = op.fixQueue || [];
+
+  const priColor = { p1:"#DC2626", p2:"#D97706", p3:"#6B7280" };
+
+  function copySchema(json, idx) {
+    navigator.clipboard?.writeText(json);
+    setCopiedIdx(idx);
+    setTimeout(() => setCopiedIdx(null), 2000);
+  }
+
+  return (
+    <div>
+      {/* SERP Preview */}
+      {serpPrev.title && (
+        <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, padding:16, marginBottom:12 }}>
+          <div style={{ fontSize:11, fontWeight:700, color:txt2, textTransform:"uppercase", letterSpacing:1, marginBottom:10 }}>🔍 Google SERP Preview</div>
+          <div style={{ background:"#fff", border:"1px solid #e0e0e0", borderRadius:8, padding:"14px 16px" }}>
+            <div style={{ fontSize:12, color:"#006621", marginBottom:2 }}>{serpPrev.urlDisplay}</div>
+            <div style={{ fontSize:18, color:"#1a0dab", fontWeight:400, marginBottom:4, fontFamily:"Arial,sans-serif" }}>
+              {serpPrev.titleDisplay}
+              {serpPrev.titleStatus==="too_long" && <span style={{ color:"#DC2626", fontSize:13 }}> ✂️</span>}
+            </div>
+            <div style={{ fontSize:13, color:"#545454", lineHeight:1.5, fontFamily:"Arial,sans-serif" }}>
+              {serpPrev.descDisplay}
+              {serpPrev.descStatus==="too_long" && <span style={{ color:"#D97706", fontSize:12 }}> ✂️</span>}
+            </div>
+          </div>
+          <div style={{ display:"flex", gap:16, marginTop:8 }}>
+            <span style={{ fontSize:11, color: serpPrev.titleStatus==="good"?"#059669":"#DC2626" }}>Title: {serpPrev.titleLength} chars {serpPrev.titleStatus==="too_long"?"(cut off)":serpPrev.titleStatus==="too_short"?"(too short)":"✅"}</span>
+            <span style={{ fontSize:11, color: serpPrev.descStatus==="good"?"#059669":"#D97706" }}>Desc: {serpPrev.descLength} chars {serpPrev.descStatus==="too_long"?"(cut off)":serpPrev.descStatus==="too_short"?"(too short)":"✅"}</span>
+          </div>
+        </div>
+      )}
+
+      {/* H1 Keyword Analysis */}
+      {h1.current && (
+        <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, padding:16, marginBottom:12 }}>
+          <div style={{ fontSize:11, fontWeight:700, color:txt2, textTransform:"uppercase", letterSpacing:1, marginBottom:10 }}>📝 H1 Keyword Analysis</div>
+          <div style={{ fontSize:13, color:txt, fontStyle:"italic", marginBottom:8 }}>"{h1.current}"</div>
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+            {h1.matchedKeywords?.length > 0
+              ? h1.matchedKeywords.map((k,i) => <span key={i} style={{ fontSize:10, padding:"2px 10px", borderRadius:10, background:"#05966922", color:"#059669" }}>✅ {k}</span>)
+              : <span style={{ fontSize:11, color:"#DC2626" }}>❌ No target keywords found in H1</span>}
+          </div>
+          {h1.missingKeywords?.length > 0 && (
+            <div style={{ marginTop:8 }}>
+              <span style={{ fontSize:10, color:txt2 }}>Should include: </span>
+              {h1.missingKeywords.map((k,i) => <span key={i} style={{ fontSize:10, padding:"2px 8px", borderRadius:10, background:"#DC262611", color:"#DC2626", marginLeft:4 }}>🔴 {k}</span>)}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Fix Queue */}
+      {fixQueue.length > 0 && (
+        <div style={{ marginBottom:12 }}>
+          <div style={{ fontSize:11, fontWeight:700, color:txt2, textTransform:"uppercase", letterSpacing:1, marginBottom:8 }}>🔧 Fix Queue ({fixQueue.length} items)</div>
+          {fixQueue.map((fix,i) => (
+            <div key={i} style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:8, padding:"12px 14px", marginBottom:8, borderLeft:`3px solid ${priColor[fix.priority]||"#6B7280"}` }}>
+              <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
+                <span style={{ fontSize:12, fontWeight:600, color:txt }}>{fix.type?.replace(/_/g," ").toUpperCase()}</span>
+                <span style={{ fontSize:10, padding:"2px 8px", borderRadius:10, background:bg3, color:txt2 }}>{fix.page} · {fix.priority?.toUpperCase()}</span>
+              </div>
+              <div style={{ fontSize:11, color:txt2, marginBottom:4 }}>Current: <span style={{ color:"#DC2626" }}>{fix.current}</span></div>
+              <div style={{ fontSize:11, color:"#059669" }}>→ {fix.recommended}</div>
+              {fix.affectedUrls?.length > 0 && (
+                <div style={{ marginTop:6 }}>
+                  {fix.affectedUrls.slice(0,3).map((u,j) => <div key={j} style={{ fontSize:9, color:txt2, wordBreak:"break-all" }}>{u}</div>)}
+                  {fix.affectedUrls.length > 3 && <div style={{ fontSize:9, color:txt2 }}>+{fix.affectedUrls.length - 3} more</div>}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Schema Markup with JSON-LD */}
+      {schema.length > 0 && (
+        <div style={{ marginBottom:12 }}>
+          <div style={{ fontSize:11, fontWeight:700, color:txt2, textTransform:"uppercase", letterSpacing:1, marginBottom:8 }}>🏗️ Schema Markup — Copy-Paste Ready</div>
+          {schema.map((s,i) => (
+            <div key={i} style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:8, padding:"12px 14px", marginBottom:8 }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
+                <span style={{ fontSize:12, fontWeight:600, color:"#7C3AED" }}>{s.type} — {s.page}</span>
+                {s.jsonLd && (
+                  <button onClick={() => copySchema(s.jsonLd, i)} style={{ fontSize:10, padding:"3px 10px", borderRadius:6, border:`1px solid ${bdr}`, background: copiedIdx===i?"#059669":"transparent", color: copiedIdx===i?"#fff":txt2, cursor:"pointer" }}>
+                    {copiedIdx===i ? "✅ Copied!" : "📋 Copy JSON-LD"}
+                  </button>
+                )}
+              </div>
+              <div style={{ fontSize:11, color:txt2, marginBottom:s.jsonLd?8:0 }}>{s.reason}</div>
+              {s.jsonLd && (
+                <div style={{ background:bg3, borderRadius:6, padding:10, fontSize:10, fontFamily:"monospace", color:"#0891B2", overflowX:"auto", whiteSpace:"pre-wrap", maxHeight:120, overflow:"hidden" }}>
+                  {s.jsonLd}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Tracking Setup */}
+      {Object.keys(tracking).length > 0 && (
+        <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, padding:16 }}>
+          <div style={{ fontSize:11, fontWeight:700, color:txt2, textTransform:"uppercase", letterSpacing:1, marginBottom:10 }}>📈 Tracking Setup Checklist</div>
+          {Object.entries(tracking).map(([tool, data]) => (
+            <div key={tool} style={{ display:"flex", gap:10, padding:"8px 0", borderBottom:`1px solid ${bdr}` }}>
+              <span style={{ fontSize:10, padding:"2px 8px", borderRadius:10, background: data.status==="check"?"#05966922":"#DC262611", color: data.status==="check"?"#059669":"#DC2626", whiteSpace:"nowrap" }}>
+                {tool.toUpperCase()} {data.status==="check"?"✅":"⚠️"}
+              </span>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:11, color:txt }}>{data.notes}</div>
+              </div>
+              <span style={{ fontSize:10, color: data.priority==="high"?"#DC2626":"#D97706" }}>{data.priority}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

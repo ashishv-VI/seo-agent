@@ -93,10 +93,21 @@ async function runA2(clientId) {
     };
     if (robotsRes.ok) {
       const robotsText = await robotsRes.text();
-      checks.robotsTxt.content = robotsText.slice(0, 500);
-      // Check if it blocks everything
-      if (robotsText.includes("Disallow: /") && !robotsText.includes("Disallow: /wp-admin")) {
+      checks.robotsTxt.content = robotsText.slice(0, 800);
+      // Extract sitemap URL from robots.txt
+      const sitemapInRobots = robotsText.match(/^Sitemap:\s*(.+)$/im);
+      checks.robotsTxt.sitemapInRobots = sitemapInRobots ? sitemapInRobots[1].trim() : null;
+      // Check for broad blocking
+      const disallowLines = robotsText.match(/^Disallow:\s*.+$/gim) || [];
+      const blocksRoot = disallowLines.some(l => l.match(/Disallow:\s*\/\s*$/));
+      if (blocksRoot) {
         issues.p1.push({
+          type:   "robots_blocking_all",
+          detail: "robots.txt has 'Disallow: /' — entire site may be blocked from Google",
+          fix:    "Remove 'Disallow: /' or restrict only specific paths like /wp-admin/",
+        });
+      } else if (robotsText.includes("Disallow: /") && !robotsText.includes("Disallow: /wp-admin")) {
+        issues.p2.push({
           type:   "robots_blocking",
           detail: "robots.txt may be blocking important pages from crawling",
           fix:    "Review robots.txt — ensure key pages are crawlable",
@@ -218,6 +229,95 @@ function parseOnPage(html, pageUrl) {
   if (!viewportMatch) {
     issues.p2.push({ type: "no_viewport", detail: "No viewport meta tag — poor mobile experience", fix: "Add <meta name='viewport' content='width=device-width, initial-scale=1'>" });
   }
+
+  // ── Alt Text Audit ──────────────────────────────
+  const imgMatches = html.match(/<img[^>]*>/gi) || [];
+  const imgsNoAlt  = imgMatches.filter(img => !img.match(/alt=["'][^"']+["']/i));
+  checks.altTextAudit = {
+    totalImages: imgMatches.length,
+    missingAlt:  imgsNoAlt.length,
+    missingUrls: imgsNoAlt.slice(0, 20).map(img => {
+      const srcMatch = img.match(/src=["']([^"']*)["']/i);
+      return srcMatch ? srcMatch[1] : "(no src)";
+    }),
+  };
+  if (imgsNoAlt.length > 5) {
+    issues.p2.push({
+      type:   "missing_alt_text",
+      detail: `${imgsNoAlt.length} of ${imgMatches.length} images missing alt text`,
+      fix:    "Add keyword-rich descriptive alt text to all images",
+    });
+  } else if (imgsNoAlt.length > 0) {
+    issues.p3.push({
+      type:   "missing_alt_text",
+      detail: `${imgsNoAlt.length} image(s) missing alt text`,
+      fix:    "Add descriptive alt text to all images",
+    });
+  }
+
+  // ── Open Graph Tags ─────────────────────────────
+  const ogTags = {};
+  const ogPattern1 = /<meta[^>]*property=["']og:([^"']*)["'][^>]*content=["']([^"']*)["']/gi;
+  const ogPattern2 = /<meta[^>]*content=["']([^"']*)["'][^>]*property=["']og:([^"']*)["']/gi;
+  let m;
+  while ((m = ogPattern1.exec(html)) !== null) ogTags[m[1]] = m[2];
+  while ((m = ogPattern2.exec(html)) !== null) ogTags[m[2]] = m[1];
+  checks.ogTags = ogTags;
+  const missingOg = ["title", "description", "image"].filter(t => !ogTags[t]);
+  if (missingOg.length > 0) {
+    issues.p2.push({
+      type:   "missing_og_tags",
+      detail: `Missing Open Graph tags: og:${missingOg.join(", og:")}`,
+      fix:    "Add og:title, og:description, og:image for proper social sharing previews",
+    });
+  }
+
+  // ── HTTP Request Analyzer ───────────────────────
+  const scriptCount = (html.match(/<script[^>]*src=["']/gi) || []).length;
+  const cssCount    = (html.match(/<link[^>]*rel=["']stylesheet["']/gi) || []).length;
+  const totalRequests = scriptCount + cssCount + imgMatches.length;
+  checks.httpRequests = {
+    total:       totalRequests,
+    scripts:     scriptCount,
+    stylesheets: cssCount,
+    images:      imgMatches.length,
+  };
+  if (totalRequests > 60) {
+    issues.p1.push({
+      type:   "too_many_requests",
+      detail: `${totalRequests} HTTP requests (${imgMatches.length} images, ${scriptCount} JS, ${cssCount} CSS) — limit is 20`,
+      fix:    "Minify & combine CSS/JS files, lazy-load images, use a CDN",
+    });
+  } else if (totalRequests > 30) {
+    issues.p2.push({
+      type:   "high_request_count",
+      detail: `${totalRequests} HTTP requests detected — recommended max: 20`,
+      fix:    "Combine CSS/JS files and optimise image loading",
+    });
+  }
+
+  // ── Minification check ──────────────────────────
+  const unminJS  = (html.match(/src=["'][^"']*(?<!\.min)\.js["']/gi) || []).slice(0, 5).map(s => s.match(/src=["']([^"']*)["']/i)?.[1]);
+  const unminCSS = (html.match(/href=["'][^"']*(?<!\.min)\.css["']/gi) || []).slice(0, 5).map(s => s.match(/href=["']([^"']*)["']/i)?.[1]);
+  checks.minification = { unminifiedJS: unminJS.filter(Boolean), unminifiedCSS: unminCSS.filter(Boolean) };
+  if (unminJS.length > 0 || unminCSS.length > 0) {
+    issues.p3.push({
+      type:   "unminified_assets",
+      detail: `${unminJS.length} JS and ${unminCSS.length} CSS files appear unminified`,
+      fix:    "Minify JS and CSS files to reduce page load time",
+    });
+  }
+
+  // ── SERP Preview data ───────────────────────────
+  checks.serpPreview = {
+    title:       title || "(No title)",
+    titleLength: title?.length || 0,
+    description: desc || "(No description)",
+    descLength:  desc?.length || 0,
+    url:         pageUrl,
+    titleTruncated: title && title.length > 60,
+    descTruncated:  desc && desc.length > 155,
+  };
 
   return { checks, issues };
 }

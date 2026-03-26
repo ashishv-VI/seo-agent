@@ -7,9 +7,10 @@ const { callLLM, parseJSON }  = require("../utils/llm");
  * Produces implementation specs for HTML + tracking fixes
  */
 async function runA6(clientId, keys) {
-  const brief   = await getState(clientId, "A1_brief");
-  const audit   = await getState(clientId, "A2_audit");
-  const content = await getState(clientId, "A5_content"); // optional — A6 runs in parallel with A5
+  const brief    = await getState(clientId, "A1_brief");
+  const audit    = await getState(clientId, "A2_audit");
+  const keywords = await getState(clientId, "A3_keywords");
+  const content  = await getState(clientId, "A5_content"); // optional — A6 runs in parallel with A5
 
   if (!brief?.signedOff) return { success: false, error: "A1 brief not signed off" };
   if (!audit?.status)    return { success: false, error: "A2 audit must complete first" };
@@ -88,14 +89,87 @@ async function runA6(clientId, keys) {
     });
   }
 
-  // ── LLM: Schema markup + tracking recommendations ─
-  const prompt = `You are an SEO technical specialist. Based on this site info, provide schema and tracking recommendations.
+  // ── H1 Keyword Match ────────────────────────────
+  const h1Text     = checks.h1?.value || "";
+  const topKeywords = [
+    ...(keywords?.clusters?.generic   || []),
+    ...(keywords?.clusters?.longtail  || []),
+  ].slice(0, 10).map(k => k.keyword?.toLowerCase());
+  const h1Lower    = h1Text.toLowerCase();
+  const h1KeywordMatches = topKeywords.filter(k => k && h1Lower.includes(k));
+  const h1KeywordMiss    = topKeywords.slice(0, 3).filter(k => k && !h1Lower.includes(k));
+  const h1Analysis = {
+    current:        h1Text,
+    matchedKeywords: h1KeywordMatches,
+    missingKeywords: h1KeywordMiss,
+    score:           h1KeywordMatches.length > 0 ? "good" : h1Text ? "needs_keywords" : "missing",
+  };
+  if (h1Analysis.score === "needs_keywords") {
+    fixQueue.push({
+      type:        "h1_keyword_gap",
+      page:        "/",
+      priority:    "p2",
+      current:     h1Text,
+      recommended: `Include primary keyword — e.g. "${topKeywords[0] || brief.services?.[0] || "your main service"}"`,
+      implementation: "Rewrite H1 to naturally include your primary target keyword",
+      status:      "pending",
+    });
+  }
+
+  // ── Alt Text Fix Queue ───────────────────────────
+  const altAudit = checks.altTextAudit || {};
+  if (altAudit.missingAlt > 0) {
+    fixQueue.push({
+      type:        "alt_text",
+      page:        "homepage",
+      priority:    altAudit.missingAlt > 5 ? "p2" : "p3",
+      current:     `${altAudit.missingAlt} images missing alt text`,
+      recommended: "Add descriptive alt text with relevant keywords",
+      implementation: "For each <img> tag, add alt='[descriptive keyword-rich text]'",
+      affectedUrls: altAudit.missingUrls || [],
+      status:      "pending",
+    });
+  }
+
+  // ── OG Tags Fix Queue ────────────────────────────
+  const ogTags   = checks.ogTags || {};
+  const missingOg = ["title", "description", "image"].filter(t => !ogTags[t]);
+  if (missingOg.length > 0) {
+    fixQueue.push({
+      type:        "open_graph",
+      page:        "all key pages",
+      priority:    "p2",
+      current:     `Missing: og:${missingOg.join(", og:")}`,
+      recommended: `Add og:title="${checks.title?.value || brief.businessName}", og:description="...", og:image="[hero image URL]"`,
+      implementation: "Add Open Graph meta tags in <head> of every public page",
+      status:      "pending",
+    });
+  }
+
+  // ── SERP Preview ─────────────────────────────────
+  const serpData = checks.serpPreview || {};
+  const serpPreview = {
+    title:           serpData.title,
+    titleDisplay:    serpData.title?.slice(0, 60) + (serpData.titleLength > 60 ? "..." : ""),
+    titleLength:     serpData.titleLength,
+    titleStatus:     serpData.titleLength > 60 ? "too_long" : serpData.titleLength < 30 ? "too_short" : "good",
+    description:     serpData.description,
+    descDisplay:     serpData.description?.slice(0, 155) + (serpData.descLength > 155 ? "..." : ""),
+    descLength:      serpData.descLength,
+    descStatus:      serpData.descLength > 155 ? "too_long" : serpData.descLength < 70 ? "too_short" : "good",
+    url:             serpData.url || siteUrl,
+    urlDisplay:      (serpData.url || siteUrl).replace(/^https?:\/\//, ""),
+  };
+
+  // ── LLM: Schema markup + tracking + JSON-LD ──────
+  const prompt = `You are an SEO technical specialist. Based on this site, provide schema markup with ready-to-use JSON-LD code.
 
 Business: ${brief.businessName}
 Website: ${siteUrl}
 Services: ${(brief.services || []).join(", ")}
 Locations: ${(brief.targetLocations || []).join(", ")}
-Issues found: ${[...issues.p1, ...issues.p2].map(i => i.type).join(", ")}
+H1: ${h1Text || "(missing)"}
+Issues: ${[...issues.p1, ...issues.p2].map(i => i.type).join(", ")}
 
 Return ONLY valid JSON:
 {
@@ -103,8 +177,8 @@ Return ONLY valid JSON:
     {
       "type": "Organization|LocalBusiness|Service|FAQPage|BreadcrumbList",
       "page": "/page",
-      "reason": "why this schema",
-      "implementation": "key properties to include"
+      "reason": "why this schema will help rankings",
+      "jsonLd": "{\"@context\":\"https://schema.org\",\"@type\":\"...\",\"name\":\"...\"}"
     }
   ],
   "trackingSetup": {
@@ -130,12 +204,16 @@ Return ONLY valid JSON:
     status:          "complete",
     fixQueue,
     recommendations,
+    serpPreview,
+    h1Analysis,
     totalFixes:      fixQueue.length,
     summary: {
       p1Fixes:       fixQueue.filter(f => f.priority === "p1").length,
       p2Fixes:       fixQueue.filter(f => f.priority === "p2").length,
       p3Fixes:       fixQueue.filter(f => f.priority === "p3").length,
       schemaNeeded:  recommendations.schemaMarkup?.length || 0,
+      altMissing:    altAudit.missingAlt || 0,
+      ogMissing:     missingOg.length,
     },
     generatedAt: new Date().toISOString(),
   };
