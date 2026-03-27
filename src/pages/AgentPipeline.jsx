@@ -205,9 +205,9 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
   const s = {
     wrap:  { flex:1, overflowY:"auto", padding:24, background:bg },
     card:  { background:bg2, border:`1px solid ${bdr}`, borderRadius:12, padding:20, marginBottom:12 },
-    tab:   (a) => ({ padding:"6px 16px", borderRadius:20, fontSize:12, cursor:"pointer", fontWeight:a?600:400, background:a?"#7C3AED22":"transparent", color:a?"#A78BFA":txt2, border:`1px solid ${a?"#7C3AED44":bdr}` }),
-    btn:   (c="#7C3AED", dis=false) => ({ padding:"8px 18px", borderRadius:8, border:"none", background:dis?bdr:c, color:dis?txt3:"#fff", fontWeight:600, fontSize:12, cursor:dis?"not-allowed":"pointer" }),
-    agentRow: (active) => ({ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"12px 16px", borderRadius:10, marginBottom:8, background:active?`#7C3AED11`:bg3, border:`1px solid ${active?"#7C3AED44":bdr}`, cursor:"pointer" }),
+    tab:   (a) => ({ padding:"6px 16px", borderRadius:20, fontSize:12, cursor:"pointer", fontWeight:a?600:400, background:a?"#443DCB22":"transparent", color:a?"#6B62E8":txt2, border:`1px solid ${a?"#443DCB44":bdr}` }),
+    btn:   (c="#443DCB", dis=false) => ({ padding:"8px 18px", borderRadius:8, border:"none", background:dis?bdr:c, color:dis?txt3:"#fff", fontWeight:600, fontSize:12, cursor:dis?"not-allowed":"pointer" }),
+    agentRow: (active) => ({ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"12px 16px", borderRadius:10, marginBottom:8, background:active?`#443DCB11`:bg3, border:`1px solid ${active?"#443DCB44":bdr}`, cursor:"pointer" }),
   };
 
   if (loading) return <div style={{...s.wrap, display:"flex", alignItems:"center", justifyContent:"center", color:txt3}}>Loading pipeline...</div>;
@@ -243,7 +243,7 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
           <button
             onClick={runFullAnalysis}
             disabled={!!running}
-            style={{ padding:"10px 20px", borderRadius:20, border:"none", background:"linear-gradient(135deg,#7C3AED,#059669)", color:"#fff", fontWeight:700, fontSize:13, cursor:"pointer", boxShadow:"0 2px 12px #7C3AED44" }}
+            style={{ padding:"10px 20px", borderRadius:20, border:"none", background:"linear-gradient(135deg,#443DCB,#059669)", color:"#fff", fontWeight:700, fontSize:13, cursor:"pointer", boxShadow:"0 2px 12px #443DCB44" }}
           >
             {pipelineStatus === "complete" ? "🔄 Re-run Analysis" : "🚀 Run Full SEO Analysis"}
           </button>
@@ -316,7 +316,7 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
               </div>
               <button
                 onClick={runFullAnalysis}
-                style={{ padding:"12px 32px", borderRadius:24, border:"none", background:"linear-gradient(135deg,#7C3AED,#059669)", color:"#fff", fontWeight:700, fontSize:14, cursor:"pointer", boxShadow:"0 4px 20px #7C3AED44" }}
+                style={{ padding:"12px 32px", borderRadius:24, border:"none", background:"linear-gradient(135deg,#443DCB,#059669)", color:"#fff", fontWeight:700, fontSize:14, cursor:"pointer", boxShadow:"0 4px 20px #443DCB44" }}
               >
                 🚀 Run Full SEO Analysis
               </button>
@@ -460,13 +460,15 @@ function getStateSuffix(id) {
   return { A1:"brief", A2:"audit", A3:"keywords", A4:"competitor", A5:"content", A6:"onpage", A7:"technical", A8:"geo", A9:"report" }[id] || id;
 }
 
-// ── Smart SEO Command Center ───────────────────────
+// ── SEO Execution Engine ────────────────────────────
 function ActionPlanView({ state, bg2, bg3, bdr, txt, txt2, txt3, clientId, getToken, API, exportPDF }) {
-  const [viewMode,   setViewMode]   = useState("business"); // business | expert
   const [done,       setDone]       = useState(new Set());
   const [copied,     setCopied]     = useState(null);
   const [generating, setGenerating] = useState(null);
   const [generated,  setGenerated]  = useState({});
+  const [expanded,   setExpanded]   = useState(null);
+
+  const B = "#443DCB";
 
   const audit    = state.A2_audit      || {};
   const keywords = state.A3_keywords   || {};
@@ -475,102 +477,97 @@ function ActionPlanView({ state, bg2, bg3, bdr, txt, txt2, txt3, clientId, getTo
   const report   = state.A9_report     || {};
   const brief    = state.A1_brief      || {};
 
-  // ── Build impact-scored master task list ──────────
+  // ── Priority Score Formula ─────────────────────────
+  // score = (rankingImpact × 0.4) + (trafficPotential × 0.3) − (effortCost × 0.3)
+  function calcPriority(ri, tp, effort) {
+    const effortCost = { easy:10, medium:30, hard:60 }[effort] || 30;
+    return Math.round((ri * 0.4) + (tp * 0.3) - (effortCost * 0.3));
+  }
+
+  // ── Build task list ────────────────────────────────
   const allTasks = [];
 
-  (audit.issues?.p1 || []).forEach((issue, i) => allTasks.push({
-    id: `p1_${i}`, category: "technical", tier: "critical",
-    label: issue.detail,
-    businessLabel: `Fix: ${issue.detail?.split("(")[0]?.trim() || issue.detail}`,
-    why: "This is a critical technical issue that directly blocks search engine crawling and hurts your rankings.",
-    fix: issue.fix,
-    impact: Math.max(90 - i * 3, 78),
-    color: "#DC2626", bgColor: "#DC262608", tierLabel: "🔴 Critical",
-  }));
+  (audit.issues?.p1 || []).forEach((issue, i) => {
+    const ri = Math.max(92 - i * 3, 78), tp = Math.max(75 - i * 3, 55);
+    allTasks.push({ id:`p1_${i}`, category:"critical",
+      label:issue.detail, why:"This is a critical technical issue that directly blocks search engine crawling and hurts your rankings.",
+      fix:issue.fix, impact:"High", effort:"Easy",
+      impactColor:"#DC2626", effortColor:"#059669",
+      priority:calcPriority(ri, tp, "easy"), color:"#DC2626", catLabel:"Critical" });
+  });
 
-  (comp.analysis?.quickWins || []).slice(0, 4).forEach((w, i) => allTasks.push({
-    id: `qw_${i}`, category: "seo", tier: "quick_win",
-    label: `Rank for "${w.keyword}"`,
-    businessLabel: `Get found when customers search "${w.keyword}"`,
-    why: "Your competitors rank for this keyword — you're losing traffic you could easily capture right now.",
-    fix: w.action, expectedOutcome: w.expectedOutcome,
-    impact: Math.max(78 - i * 3, 60),
-    color: "#D97706", bgColor: "#D9770608", tierLabel: "⚡ Quick Win",
-  }));
+  (comp.analysis?.quickWins || []).slice(0, 5).forEach((w, i) => {
+    const ri = Math.max(78 - i * 3, 55), tp = Math.max(72 - i * 3, 48);
+    allTasks.push({ id:`qw_${i}`, category:"quick_wins",
+      label:`Rank for "${w.keyword}"`,
+      why:`Your competitors rank for this keyword — you're losing traffic you could capture right now.`,
+      fix:w.action, expectedOutcome:w.expectedOutcome,
+      impact:"High", effort:"Medium", impactColor:"#059669", effortColor:"#D97706",
+      priority:calcPriority(ri, tp, "medium"), color:"#D97706", catLabel:"Quick Win" });
+  });
 
-  (keywords.gaps || []).slice(0, 3).forEach((g, i) => allTasks.push({
-    id: `gap_${i}`, category: "content", tier: "content",
-    label: `Create content: "${g.keyword}"`,
-    businessLabel: `Write a page for "${g.keyword}"`,
-    why: g.reason || "No page exists for this search term — you're invisible to customers searching for it.",
-    fix: g.recommendedAction,
-    impact: Math.max(62 - i * 3, 48),
-    color: "#0891B2", bgColor: "#0891B208", tierLabel: "📝 Content Gap",
-  }));
+  (keywords.gaps || []).slice(0, 5).forEach((g, i) => {
+    const ri = Math.max(65 - i * 3, 42), tp = Math.max(68 - i * 3, 45);
+    allTasks.push({ id:`gap_${i}`, category:"content",
+      label:`Create content: "${g.keyword}"`,
+      why:g.reason || "No page exists for this search term — you're invisible to customers searching for it.",
+      fix:g.recommendedAction,
+      impact:"Medium", effort:"Medium", impactColor:"#0891B2", effortColor:"#D97706",
+      priority:calcPriority(ri, tp, "medium"), color:"#0891B2", catLabel:"Content Gap" });
+  });
 
-  (audit.issues?.p2 || []).slice(0, 4).forEach((issue, i) => allTasks.push({
-    id: `p2_${i}`, category: "technical", tier: "important",
-    label: issue.detail,
-    businessLabel: issue.detail?.split("(")[0]?.trim() || issue.detail,
-    why: "An important SEO issue that affects your search visibility and page experience scores.",
-    fix: issue.fix,
-    impact: Math.max(55 - i * 3, 38),
-    color: "#D97706", bgColor: "#D9770608", tierLabel: "🟡 Important",
-  }));
+  (audit.issues?.p2 || []).slice(0, 6).forEach((issue, i) => {
+    const ri = Math.max(58 - i * 3, 35), tp = Math.max(52 - i * 3, 30);
+    allTasks.push({ id:`p2_${i}`, category:"important",
+      label:issue.detail,
+      why:"An important SEO issue that affects your search visibility and page experience scores.",
+      fix:issue.fix, impact:"Medium", effort:"Medium", impactColor:"#D97706", effortColor:"#D97706",
+      priority:calcPriority(ri, tp, "medium"), color:"#D97706", catLabel:"Important" });
+  });
 
-  (keywords.cannibalization || []).slice(0, 2).forEach((c, i) => allTasks.push({
-    id: `can_${i}`, category: "seo", tier: "important",
-    label: `Fix keyword cannibalization: ${c.page}`,
-    businessLabel: "Multiple pages competing for the same searches",
-    why: "When multiple pages target the same keyword they split authority and cancel each other out in Google.",
-    fix: c.fix,
-    impact: Math.max(44 - i * 3, 32),
-    color: "#D97706", bgColor: "#D9770608", tierLabel: "⚠️ Cannibalization",
-  }));
+  (keywords.cannibalization || []).slice(0, 3).forEach((c, i) => {
+    const ri = Math.max(48 - i * 3, 28), tp = Math.max(44 - i * 3, 25);
+    allTasks.push({ id:`can_${i}`, category:"important",
+      label:`Fix keyword cannibalization: ${c.page}`,
+      why:"Multiple pages competing for the same keyword split authority and cancel each other out in Google.",
+      fix:c.fix, impact:"Medium", effort:"Hard", impactColor:"#D97706", effortColor:"#DC2626",
+      priority:calcPriority(ri, tp, "hard"), color:"#D97706", catLabel:"Cannibalization" });
+  });
 
-  (geo.offPage?.citationTargets || []).slice(0, 3).forEach((c, i) => allTasks.push({
-    id: `geo_${i}`, category: "local", tier: "local",
-    label: `List on ${c.directory}`,
-    businessLabel: `Get listed on ${c.directory} to appear in local searches`,
-    why: "Local directory listings boost your visibility in Google Maps and local search results.",
-    fix: c.url ? `Submit to ${c.directory} at ${c.url}` : `Create a listing on ${c.directory}`,
-    impact: Math.max(42 - i * 3, 28),
-    color: "#059669", bgColor: "#05966908", tierLabel: "🌍 Local SEO",
-  }));
+  (geo.offPage?.citationTargets || []).slice(0, 4).forEach((c, i) => {
+    const ri = Math.max(45 - i * 3, 25), tp = Math.max(48 - i * 3, 28);
+    allTasks.push({ id:`geo_${i}`, category:"local",
+      label:`Get listed on ${c.directory}`,
+      why:"Local directory listings boost your visibility in Google Maps and local search results.",
+      fix:c.url ? `Submit to ${c.directory} at ${c.url}` : `Create a listing on ${c.directory}`,
+      impact:"Low", effort:"Easy", impactColor:"#6B7280", effortColor:"#059669",
+      priority:calcPriority(ri, tp, "easy"), color:"#059669", catLabel:"Local SEO" });
+  });
 
-  allTasks.sort((a, b) => b.impact - a.impact);
-
-  const top3      = allTasks.slice(0, 3);
-  const rest      = allTasks.slice(3);
-  const remaining = rest.filter(t => !done.has(t.id));
-  const doneCount = done.size;
-  const total     = allTasks.length;
-  const next3     = report.reportData?.next3Actions || [];
+  allTasks.sort((a, b) => b.priority - a.priority);
 
   const hs         = audit.healthScore || 0;
   const scoreColor = hs >= 80 ? "#059669" : hs >= 50 ? "#D97706" : "#DC2626";
+  const doneCount  = done.size;
+  const total      = allTasks.length;
+  const topTasks   = allTasks.slice(0, 5);
 
-  function copyFix(fix, id) {
-    navigator.clipboard?.writeText(fix || "");
-    setCopied(id);
-    setTimeout(() => setCopied(null), 2000);
-  }
-
-  function toggleDone(id) {
-    setDone(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
-  }
+  const CATEGORIES = [
+    { id:"critical",   icon:"🔴", label:"Critical Issues",  color:"#DC2626" },
+    { id:"quick_wins", icon:"⚡", label:"Quick Wins",        color:"#D97706" },
+    { id:"content",    icon:"📝", label:"Content Gaps",      color:"#0891B2" },
+    { id:"important",  icon:"🟡", label:"Important Fixes",   color:"#D97706" },
+    { id:"local",      icon:"🌍", label:"Local SEO",         color:"#059669" },
+  ];
 
   async function generateFix(task, key) {
     setGenerating(key);
     try {
       const token = await getToken();
       const res = await fetch(`${API}/api/agents/${clientId}/generate-fix`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-          type: task.category, detail: task.label, current: "",
-          context: { businessName: brief.businessName, websiteUrl: brief.websiteUrl, services: brief.services },
-        }),
+        method:"POST", headers:{"Content-Type":"application/json", Authorization:`Bearer ${token}`},
+        body:JSON.stringify({ type:task.category, detail:task.label,
+          context:{ businessName:brief.businessName, websiteUrl:brief.websiteUrl, services:brief.services } }),
       });
       const data = await res.json();
       if (data.fix) setGenerated(g => ({ ...g, [key]: data }));
@@ -578,64 +575,60 @@ function ActionPlanView({ state, bg2, bg3, bdr, txt, txt2, txt3, clientId, getTo
     setGenerating(null);
   }
 
-  // ── Render helpers ─────────────────────────────────
-  function ImpactCard({ task, taskKey, prominent = false }) {
+  function TaskCard({ task, taskKey }) {
     const isDone = done.has(task.id);
     const gen    = generated[taskKey];
     return (
-      <div style={{
-        background: bg2, border: `1px solid ${bdr}`, borderLeft: `4px solid ${task.color}`,
-        borderRadius: 12, padding: prominent ? 18 : 14, marginBottom: 10,
-        opacity: isDone ? 0.45 : 1, transition: "opacity 0.3s",
-      }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 10, padding: "3px 10px", borderRadius: 10, background: `${task.color}22`, color: task.color, fontWeight: 700 }}>{task.tierLabel}</span>
-            <span style={{ fontSize: 10, padding: "3px 10px", borderRadius: 10, background: "#7C3AED22", color: "#A78BFA", fontWeight: 700 }}>Impact: {task.impact}</span>
+      <div style={{ background:bg2, border:`1px solid ${bdr}`, borderLeft:`4px solid ${task.color}`,
+        borderRadius:10, padding:16, marginBottom:10, opacity:isDone?0.45:1, transition:"opacity 0.25s" }}>
+        {/* Badges row */}
+        <div style={{ display:"flex", gap:6, marginBottom:10, flexWrap:"wrap", alignItems:"center" }}>
+          <span style={{ fontSize:10, padding:"3px 10px", borderRadius:10, background:`${task.color}20`, color:task.color, fontWeight:700 }}>{task.catLabel}</span>
+          <span style={{ fontSize:10, padding:"3px 10px", borderRadius:10, background:`${task.impactColor}18`, color:task.impactColor, fontWeight:700 }}>Impact: {task.impact}</span>
+          <span style={{ fontSize:10, padding:"3px 10px", borderRadius:10, background:`${task.effortColor}18`, color:task.effortColor, fontWeight:700 }}>Effort: {task.effort}</span>
+          <span style={{ fontSize:10, padding:"3px 10px", borderRadius:10, background:`${B}15`, color:B, fontWeight:700 }}>Score: {task.priority}</span>
+          {isDone && <span style={{ fontSize:10, color:"#059669", fontWeight:700, marginLeft:"auto" }}>✅ Done</span>}
+        </div>
+        {/* Title */}
+        <div style={{ fontSize:13, fontWeight:700, color:txt, marginBottom:8, lineHeight:1.4 }}>{task.label}</div>
+        {/* Why it matters */}
+        <div style={{ fontSize:12, color:txt2, marginBottom:10, lineHeight:1.6, padding:"8px 12px", background:bg3, borderRadius:6 }}>
+          <span style={{ color:task.color, fontWeight:700 }}>Why it matters: </span>{task.why}
+        </div>
+        {/* Fix suggestion */}
+        {task.fix && (
+          <div style={{ fontSize:12, color:txt, marginBottom:10, lineHeight:1.55 }}>
+            <span style={{ fontWeight:700, color:"#059669" }}>→ Suggested fix: </span>{task.fix}
           </div>
-          {isDone && <span style={{ fontSize: 10, color: "#059669", fontWeight: 700 }}>✅ Done</span>}
-        </div>
-
-        <div style={{ fontSize: prominent ? 14 : 13, fontWeight: 700, color: txt, marginBottom: 6 }}>
-          {viewMode === "business" ? (task.businessLabel || task.label) : task.label}
-        </div>
-
-        <div style={{ fontSize: 12, color: txt2, marginBottom: 8, lineHeight: 1.55 }}>
-          <span style={{ color: task.color, fontWeight: 600 }}>Why: </span>{task.why}
-        </div>
-
+        )}
         {task.expectedOutcome && (
-          <div style={{ fontSize: 11, color: "#059669", marginBottom: 8 }}>📈 Expected: {task.expectedOutcome}</div>
+          <div style={{ fontSize:11, color:"#059669", marginBottom:10 }}>📈 Expected: {task.expectedOutcome}</div>
         )}
-
-        <div style={{ fontSize: 12, color: txt, padding: "8px 12px", background: bg3, borderRadius: 8, marginBottom: 12 }}>
-          <span style={{ fontWeight: 600, color: txt2 }}>Fix: </span>{task.fix}
-        </div>
-
+        {/* AI generated fix */}
         {gen && (
-          <div style={{ marginBottom: 12, padding: "10px 12px", background: "#7C3AED11", borderRadius: 8, border: "1px solid #7C3AED33" }}>
-            <div style={{ fontSize: 10, color: "#A78BFA", fontWeight: 700, marginBottom: 6 }}>🤖 AI-Generated Fix</div>
-            <div style={{ fontSize: 12, color: txt, marginBottom: 4 }}>{gen.fix}</div>
-            {gen.codeSnippet && (
-              <pre style={{ fontSize: 10, color: "#059669", background: bg3, borderRadius: 6, padding: 8, overflow: "auto", margin: "6px 0 0", whiteSpace: "pre-wrap" }}>{gen.codeSnippet}</pre>
-            )}
-            {gen.implementation && (
-              <div style={{ fontSize: 11, color: txt2, marginTop: 6 }}>{gen.implementation}</div>
-            )}
+          <div style={{ marginBottom:12, padding:"10px 12px", background:`${B}0d`, borderRadius:8, border:`1px solid ${B}30` }}>
+            <div style={{ fontSize:10, color:B, fontWeight:700, marginBottom:6 }}>🤖 AI-Generated Fix</div>
+            <div style={{ fontSize:12, color:txt, marginBottom:gen.codeSnippet?6:0 }}>{gen.fix}</div>
+            {gen.codeSnippet && <pre style={{ fontSize:10, color:"#059669", background:bg3, borderRadius:6, padding:8, overflow:"auto", margin:"6px 0 0", whiteSpace:"pre-wrap" }}>{gen.codeSnippet}</pre>}
+            {gen.implementation && <div style={{ fontSize:11, color:txt2, marginTop:6 }}>{gen.implementation}</div>}
           </div>
         )}
-
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <button onClick={() => copyFix(task.fix, task.id)}
-            style={{ padding: "6px 14px", borderRadius: 8, border: `1px solid ${bdr}`, background: copied === task.id ? "#05966922" : "transparent", color: copied === task.id ? "#059669" : txt2, fontSize: 11, cursor: "pointer", fontWeight: 500 }}>
-            {copied === task.id ? "✅ Copied!" : "📋 Copy Fix"}
+        {/* CTA buttons */}
+        <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+          <button
+            onClick={() => { navigator.clipboard?.writeText(task.fix||""); setCopied(task.id); setTimeout(()=>setCopied(null),2000); }}
+            style={{ padding:"7px 16px", borderRadius:8, border:"none", background:"#059669", color:"#fff", fontSize:11, fontWeight:700, cursor:"pointer" }}>
+            {copied===task.id ? "✅ Copied!" : "📋 Fix Now"}
           </button>
-          <button onClick={() => generateFix(task, taskKey)} disabled={generating === taskKey}
-            style={{ padding: "6px 14px", borderRadius: 8, border: "1px solid #7C3AED44", background: "transparent", color: "#A78BFA", fontSize: 11, cursor: generating === taskKey ? "not-allowed" : "pointer", fontWeight: 500 }}>
-            {generating === taskKey ? "⏳ Generating..." : "🤖 AI Fix"}
+          <button
+            onClick={() => generateFix(task, taskKey)}
+            disabled={generating===taskKey}
+            style={{ padding:"7px 16px", borderRadius:8, border:`1px solid ${B}`, background:"transparent", color:B, fontSize:11, fontWeight:700, cursor:generating===taskKey?"not-allowed":"pointer", opacity:generating===taskKey?0.6:1 }}>
+            {generating===taskKey ? "⏳ Generating..." : "🤖 Auto Fix"}
           </button>
-          <button onClick={() => toggleDone(task.id)}
-            style={{ padding: "6px 14px", borderRadius: 8, border: "1px solid #05966444", background: isDone ? "#05966922" : "transparent", color: "#059669", fontSize: 11, cursor: "pointer", fontWeight: 500 }}>
+          <button
+            onClick={() => setDone(prev => { const n=new Set(prev); n.has(task.id)?n.delete(task.id):n.add(task.id); return n; })}
+            style={{ padding:"7px 16px", borderRadius:8, border:"1px solid #05966440", background:isDone?"#05966920":"transparent", color:"#059669", fontSize:11, fontWeight:700, cursor:"pointer" }}>
             {isDone ? "↩️ Undo" : "✅ Mark Done"}
           </button>
         </div>
@@ -645,129 +638,137 @@ function ActionPlanView({ state, bg2, bg3, bdr, txt, txt2, txt3, clientId, getTo
 
   return (
     <div>
-      {/* ── Header ───────────────────────────────────── */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+      {/* ── Top Banner ─────────────────────────────────── */}
+      <div style={{ background:`linear-gradient(135deg,${B}14,#05966912)`, border:`1px solid ${B}28`, borderRadius:12, padding:"16px 20px", marginBottom:20, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
         <div>
-          <div style={{ fontSize: 16, fontWeight: 700, color: txt }}>🎯 SEO Command Center</div>
-          <div style={{ fontSize: 12, color: txt2, marginTop: 2 }}>AI-prioritized actions sorted by business impact</div>
+          <div style={{ fontSize:16, fontWeight:800, color:txt, marginBottom:4 }}>🎯 Your SEO Action Plan</div>
+          <div style={{ fontSize:12, color:txt2 }}>Priority Score = (Ranking Impact × 0.4) + (Traffic Potential × 0.3) − (Effort × 0.3)</div>
         </div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          {/* Business / Expert toggle */}
-          <div style={{ display: "flex", background: bg3, borderRadius: 20, padding: 2, border: `1px solid ${bdr}` }}>
-            {[["business", "📊 Summary"], ["expert", "⚙️ Technical"]].map(([m, label]) => (
-              <button key={m} onClick={() => setViewMode(m)}
-                style={{ padding: "5px 14px", borderRadius: 18, border: "none", fontSize: 11, fontWeight: 600, cursor: "pointer",
-                  background: viewMode === m ? "#7C3AED" : "transparent",
-                  color: viewMode === m ? "#fff" : txt2 }}>
-                {label}
-              </button>
-            ))}
-          </div>
-          {exportPDF && (
-            <button onClick={exportPDF}
-              style={{ padding: "7px 16px", borderRadius: 8, border: `1px solid ${bdr}`, background: bg2, color: txt2, fontSize: 11, cursor: "pointer", fontWeight: 600 }}>
-              📄 PDF
-            </button>
-          )}
-        </div>
+        {exportPDF && (
+          <button onClick={exportPDF} style={{ padding:"8px 16px", borderRadius:8, border:`1px solid ${bdr}`, background:bg2, color:txt2, fontSize:11, cursor:"pointer", fontWeight:600 }}>
+            📄 Export PDF
+          </button>
+        )}
       </div>
 
-      {/* ── Dashboard Row ─────────────────────────────── */}
-      <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: 12, marginBottom: 14 }}>
-        {/* Health Ring */}
+      {/* ── Dashboard ──────────────────────────────────── */}
+      <div style={{ display:"grid", gridTemplateColumns:hs>0?"auto 1fr":"1fr", gap:12, marginBottom:16 }}>
         {hs > 0 && (
-          <div style={{ background: bg2, border: `1px solid ${bdr}`, borderRadius: 12, padding: "16px 20px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-            <div style={{
-              width: 80, height: 80, borderRadius: "50%",
-              background: `conic-gradient(${scoreColor} ${hs * 3.6}deg, ${bg3} 0deg)`,
-              display: "flex", alignItems: "center", justifyContent: "center",
-            }}>
-              <div style={{ width: 62, height: 62, borderRadius: "50%", background: bg2, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-                <div style={{ fontSize: 20, fontWeight: 800, color: scoreColor, lineHeight: 1 }}>{hs}</div>
-                <div style={{ fontSize: 8, color: txt2 }}>/ 100</div>
+          <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:12, padding:"16px 20px", display:"flex", flexDirection:"column", alignItems:"center" }}>
+            <div style={{ position:"relative", width:80, height:80 }}>
+              <svg width="80" height="80" viewBox="0 0 80 80">
+                <circle cx="40" cy="40" r="32" fill="none" stroke={bg3} strokeWidth="7"/>
+                <circle cx="40" cy="40" r="32" fill="none" stroke={scoreColor} strokeWidth="7"
+                  strokeDasharray={`${(hs/100)*201} 201`} strokeLinecap="round" transform="rotate(-90 40 40)"/>
+              </svg>
+              <div style={{ position:"absolute", inset:0, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center" }}>
+                <div style={{ fontSize:20, fontWeight:800, color:scoreColor, lineHeight:1 }}>{hs}</div>
+                <div style={{ fontSize:8, color:txt2 }}>/100</div>
               </div>
             </div>
-            <div style={{ fontSize: 10, color: txt2, marginTop: 8, fontWeight: 600 }}>Site Health</div>
+            <div style={{ fontSize:10, color:txt2, marginTop:8, fontWeight:600 }}>SEO Score</div>
           </div>
         )}
-
-        {/* Stats + Verdict */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+          <div style={{ display:"flex", gap:8 }}>
             {[
-              { l: "Critical",   v: audit.summary?.p1Count || 0,    c: "#DC2626" },
-              { l: "Important",  v: audit.summary?.p2Count || 0,    c: "#D97706" },
-              { l: "Keywords",   v: keywords.totalKeywords || 0,    c: "#7C3AED" },
-              { l: "Completed",  v: doneCount,                       c: "#059669" },
+              { l:"Critical",   v:(audit.issues?.p1||[]).length, c:"#DC2626" },
+              { l:"Important",  v:(audit.issues?.p2||[]).length, c:"#D97706" },
+              { l:"Quick Wins", v:(comp.analysis?.quickWins||[]).length, c:"#059669" },
+              { l:"Completed",  v:doneCount, c:B },
             ].map(i => (
-              <div key={i.l} style={{ background: bg2, border: `1px solid ${bdr}`, borderRadius: 8, padding: "8px 14px", textAlign: "center", flex: 1, minWidth: 70 }}>
-                <div style={{ fontSize: 18, fontWeight: 700, color: i.c }}>{i.v}</div>
-                <div style={{ fontSize: 10, color: txt2 }}>{i.l}</div>
+              <div key={i.l} style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:8, padding:"10px 14px", textAlign:"center", flex:1 }}>
+                <div style={{ fontSize:20, fontWeight:800, color:i.c }}>{i.v}</div>
+                <div style={{ fontSize:10, color:txt2 }}>{i.l}</div>
               </div>
             ))}
           </div>
           {report.reportData?.verdict && (
-            <div style={{ background: bg2, border: `1px solid ${bdr}`, borderRadius: 8, padding: "10px 14px", borderLeft: "3px solid #7C3AED", flex: 1 }}>
-              <div style={{ fontSize: 10, color: "#A78BFA", fontWeight: 700, marginBottom: 4, textTransform: "uppercase", letterSpacing: 0.5 }}>🤖 AI Verdict</div>
-              <div style={{ fontSize: 12, color: txt, lineHeight: 1.6 }}>
-                {viewMode === "business"
-                  ? (report.reportData.verdict?.split(".").slice(0, 2).join(".") + ".")
-                  : report.reportData.verdict}
-              </div>
+            <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:8, padding:"10px 14px", borderLeft:`3px solid ${B}` }}>
+              <div style={{ fontSize:10, color:B, fontWeight:700, marginBottom:4, textTransform:"uppercase", letterSpacing:0.5 }}>🤖 AI Verdict</div>
+              <div style={{ fontSize:12, color:txt, lineHeight:1.6 }}>{report.reportData.verdict?.split(".").slice(0,2).join(".")+"."}</div>
             </div>
           )}
         </div>
       </div>
 
-      {/* ── Progress bar ──────────────────────────────── */}
+      {/* ── Progress bar ────────────────────────────────── */}
       {total > 0 && (
-        <div style={{ background: bg2, border: `1px solid ${bdr}`, borderRadius: 10, padding: "10px 14px", marginBottom: 16, display: "flex", alignItems: "center", gap: 12 }}>
-          <div style={{ fontSize: 12, color: txt2, whiteSpace: "nowrap" }}>{doneCount} / {total} actions complete</div>
-          <div style={{ flex: 1, height: 6, background: bg3, borderRadius: 3, overflow: "hidden" }}>
-            <div style={{ width: `${total > 0 ? (doneCount / total) * 100 : 0}%`, height: "100%", background: "#059669", borderRadius: 3, transition: "width 0.4s" }} />
+        <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, padding:"10px 16px", marginBottom:20, display:"flex", alignItems:"center", gap:12 }}>
+          <div style={{ fontSize:12, color:txt2, whiteSpace:"nowrap" }}>Progress: {doneCount}/{total} tasks</div>
+          <div style={{ flex:1, height:8, background:bg3, borderRadius:4, overflow:"hidden" }}>
+            <div style={{ width:`${(doneCount/total)*100}%`, height:"100%", background:`linear-gradient(90deg,${B},#059669)`, borderRadius:4, transition:"width 0.4s" }}/>
           </div>
-          <div style={{ fontSize: 11, color: "#059669", fontWeight: 700, whiteSpace: "nowrap" }}>{total > 0 ? Math.round((doneCount / total) * 100) : 0}%</div>
+          <div style={{ fontSize:12, fontWeight:700, color:B, whiteSpace:"nowrap" }}>{Math.round((doneCount/total)*100)}%</div>
         </div>
       )}
 
-      {/* ── Top 3 Impact Actions ──────────────────────── */}
-      {top3.length > 0 && (
-        <div style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: txt2, textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>
-            ⚡ Top Impact Actions — Fix These First
+      {/* ── Today's Top 5 ──────────────────────────────── */}
+      {topTasks.length > 0 && (
+        <div style={{ marginBottom:24 }}>
+          <div style={{ fontSize:13, fontWeight:800, color:txt, marginBottom:12, display:"flex", alignItems:"center", gap:8 }}>
+            <span style={{ background:B, color:"#fff", borderRadius:6, padding:"3px 12px", fontSize:11 }}>TODAY</span>
+            Fix These First — Highest Priority Actions
           </div>
-          {top3.map((task, i) => <ImpactCard key={task.id} task={task} taskKey={`top_${i}`} prominent />)}
+          {topTasks.map((task, i) => <TaskCard key={task.id} task={task} taskKey={`top_${i}`} />)}
         </div>
       )}
 
-      {/* ── A9 Strategic Priorities ───────────────────── */}
-      {next3.length > 0 && (
-        <div style={{ background: bg2, border: `1px solid ${bdr}`, borderRadius: 12, padding: 16, marginBottom: 14 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: "#0891B2", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>🚀 AI Strategic Priorities</div>
-          {next3.map((a, i) => (
-            <div key={i} style={{ padding: "10px 12px", background: bg3, borderRadius: 8, marginBottom: 8 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: txt, marginBottom: 4 }}>{i + 1}. {a.action}</div>
-              <div style={{ fontSize: 12, color: txt2, marginBottom: 2 }}>{a.why}</div>
-              {a.how && <div style={{ fontSize: 11, color: "#0891B2", marginTop: 4 }}>How: {a.how}</div>}
+      {/* ── AI Strategic Recommendations ─────────────── */}
+      {(report.reportData?.next3Actions||[]).length > 0 && (
+        <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:12, padding:"16px 20px", marginBottom:20 }}>
+          <div style={{ fontSize:11, fontWeight:800, color:"#0891B2", textTransform:"uppercase", letterSpacing:1, marginBottom:14 }}>🚀 AI Strategic Recommendations</div>
+          {report.reportData.next3Actions.map((a, i) => (
+            <div key={i} style={{ padding:"12px 14px", background:bg3, borderRadius:8, marginBottom:8, borderLeft:"3px solid #0891B2" }}>
+              <div style={{ fontSize:13, fontWeight:700, color:txt, marginBottom:4 }}>{i+1}. {a.action}</div>
+              <div style={{ fontSize:12, color:txt2, marginBottom:a.how?4:0 }}>{a.why}</div>
+              {a.how && <div style={{ fontSize:11, color:"#0891B2" }}>→ {a.how}</div>}
             </div>
           ))}
         </div>
       )}
 
-      {/* ── Remaining actions ─────────────────────────── */}
-      {remaining.length > 0 && (
-        <div style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: txt2, textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>
-            All Actions ({remaining.length} remaining)
-          </div>
-          {remaining.map((task, i) => <ImpactCard key={task.id} task={task} taskKey={`rest_${i}`} />)}
+      {/* ── Category Accordion ──────────────────────────── */}
+      {allTasks.length > 0 && (
+        <div>
+          <div style={{ fontSize:11, fontWeight:700, color:txt2, textTransform:"uppercase", letterSpacing:1, marginBottom:12 }}>All Actions by Category</div>
+          {CATEGORIES.map(cat => {
+            const catTasks = allTasks.filter(t => t.category === cat.id);
+            if (!catTasks.length) return null;
+            const isOpen  = expanded === cat.id;
+            const doneCat = catTasks.filter(t => done.has(t.id)).length;
+            return (
+              <div key={cat.id} style={{ marginBottom:8 }}>
+                <div onClick={() => setExpanded(isOpen ? null : cat.id)}
+                  style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"13px 16px",
+                    background:bg2, border:`1px solid ${isOpen?cat.color:bdr}`, borderLeft:`4px solid ${cat.color}`,
+                    borderRadius:isOpen?"10px 10px 0 0":10, cursor:"pointer" }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                    <span>{cat.icon}</span>
+                    <span style={{ fontSize:13, fontWeight:700, color:txt }}>{cat.label}</span>
+                    <span style={{ fontSize:11, padding:"2px 8px", borderRadius:10, background:`${cat.color}20`, color:cat.color, fontWeight:700 }}>{catTasks.length}</span>
+                  </div>
+                  <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                    {doneCat>0 && <span style={{ fontSize:11, color:"#059669", fontWeight:600 }}>✅ {doneCat}/{catTasks.length}</span>}
+                    <span style={{ fontSize:12, color:txt2 }}>{isOpen?"▲":"▼"}</span>
+                  </div>
+                </div>
+                {isOpen && (
+                  <div style={{ padding:"12px 12px 2px", border:`1px solid ${cat.color}`, borderTop:"none", borderRadius:"0 0 10px 10px", background:bg3 }}>
+                    {catTasks.map((task, i) => <TaskCard key={task.id} task={task} taskKey={`cat_${cat.id}_${i}`} />)}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 
       {allTasks.length === 0 && !hs && (
-        <div style={{ textAlign: "center", padding: 60, color: txt3 }}>
-          <div style={{ fontSize: 32, marginBottom: 12 }}>🚀</div>
-          <div style={{ color: txt2 }}>Run the full AI analysis to see your prioritised command center</div>
+        <div style={{ textAlign:"center", padding:60, color:txt2 }}>
+          <div style={{ fontSize:40, marginBottom:16 }}>🚀</div>
+          <div style={{ fontSize:15, fontWeight:700, color:txt, marginBottom:8 }}>Your AI SEO Employee is ready</div>
+          <div style={{ fontSize:13 }}>Run the full analysis to get your prioritised action plan</div>
         </div>
       )}
     </div>
@@ -871,7 +872,7 @@ function FullAuditView({ audit, bg2, bg3, bdr, txt, txt2 }) {
     <div>
       {/* Score Cards */}
       <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:10, marginBottom:16 }}>
-        {[{ l:"Health", v:audit.healthScore+"/100", c:"#7C3AED" },{ l:"P1 Critical",v:audit.summary?.p1Count,c:"#DC2626" },{ l:"P2 Important",v:audit.summary?.p2Count,c:"#D97706" },{ l:"P3 Minor",v:audit.summary?.p3Count,c:"#6B7280" }].map(i=>(
+        {[{ l:"Health", v:audit.healthScore+"/100", c:"#443DCB" },{ l:"P1 Critical",v:audit.summary?.p1Count,c:"#DC2626" },{ l:"P2 Important",v:audit.summary?.p2Count,c:"#D97706" },{ l:"P3 Minor",v:audit.summary?.p3Count,c:"#6B7280" }].map(i=>(
           <div key={i.l} style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, padding:"12px 10px", textAlign:"center", borderTop:`2px solid ${i.c}` }}>
             <div style={{ fontSize:20, fontWeight:700, color:i.c }}>{i.v}</div>
             <div style={{ fontSize:10, color:txt2 }}>{i.l}</div>
@@ -987,24 +988,103 @@ function FullAuditView({ audit, bg2, bg3, bdr, txt, txt2 }) {
         </div>
       )}
 
-      {/* Issues by Priority */}
-      {["p1","p2","p3"].map(tier => (
-        <div key={tier} style={{ marginBottom:14 }}>
-          {(audit.issues?.[tier]||[]).map((issue,i)=>(
-            <div key={i} style={{ padding:"10px 14px", borderRadius:8, marginBottom:6, background:bg3, borderLeft:`3px solid ${issueColor[tier]}` }}>
-              <div style={{ fontSize:12, color:txt, fontWeight:600 }}>{issue.detail}</div>
-              <div style={{ fontSize:11, color:"#059669" }}>→ Fix: {issue.fix}</div>
+      {/* Issues Accordion */}
+      <AuditIssueAccordion audit={audit} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2} />
+    </div>
+  );
+}
+
+function AuditIssueAccordion({ audit, bg2, bg3, bdr, txt, txt2 }) {
+  const [expanded,  setExpanded]  = useState(null);
+  const [copied,    setCopied]    = useState(null);
+
+  const TIERS = [
+    { id:"p1", icon:"🔴", label:"Critical Issues",   color:"#DC2626", impact:"High",   effort:"Easy",   impactColor:"#DC2626", effortColor:"#059669",
+      why:"Critical technical issues that directly block search engine crawling and hurt rankings immediately." },
+    { id:"p2", icon:"🟡", label:"Important Fixes",   color:"#D97706", impact:"Medium", effort:"Medium", impactColor:"#D97706", effortColor:"#D97706",
+      why:"Important SEO issues affecting your search visibility and page experience scores." },
+    { id:"p3", icon:"⚪", label:"Minor Issues",       color:"#6B7280", impact:"Low",    effort:"Easy",   impactColor:"#6B7280", effortColor:"#059669",
+      why:"Minor improvements that accumulate over time and signal quality to search engines." },
+    { id:"opp", icon:"💡", label:"Opportunities",    color:"#0891B2", impact:"High",   effort:"Medium", impactColor:"#0891B2", effortColor:"#D97706",
+      why:"Untapped SEO opportunities to gain a competitive advantage in search rankings." },
+  ];
+
+  // Build "opportunities" from audit data if available
+  const opportunities = [];
+  if (audit.checks?.eeat?.score < 6) opportunities.push({ detail:"Improve E-E-A-T signals — add About, Author Bio, and Trust pages", fix:"Create or improve About Us, Author Bio, and Privacy Policy pages. Add Schema.org markup for organization." });
+  if (audit.checks?.sitemap?.exists === false) opportunities.push({ detail:"Create and submit XML sitemap to Google Search Console", fix:"Generate sitemap.xml and submit to Google Search Console. Add sitemap URL to robots.txt." });
+  if (audit.checks?.ogTags && !audit.checks.ogTags.image) opportunities.push({ detail:"Add Open Graph image for better social sharing CTR", fix:"Add og:image meta tag pointing to a 1200×630px branded image on all key pages." });
+
+  return (
+    <div style={{ marginTop:4 }}>
+      <div style={{ fontSize:11, fontWeight:700, color:txt2, textTransform:"uppercase", letterSpacing:1, marginBottom:12 }}>Issues by Priority</div>
+      {TIERS.map(tier => {
+        const issues = tier.id === "opp" ? opportunities : (audit.issues?.[tier.id] || []);
+        if (!issues.length) return null;
+        const isOpen = expanded === tier.id;
+        return (
+          <div key={tier.id} style={{ marginBottom:8 }}>
+            {/* Accordion header */}
+            <div
+              onClick={() => setExpanded(isOpen ? null : tier.id)}
+              style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"13px 16px",
+                background:bg2, border:`1px solid ${isOpen ? tier.color : bdr}`, borderLeft:`4px solid ${tier.color}`,
+                borderRadius: isOpen ? "10px 10px 0 0" : 10, cursor:"pointer" }}>
+              <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                <span>{tier.icon}</span>
+                <span style={{ fontSize:13, fontWeight:700, color:txt }}>{tier.label}</span>
+                <span style={{ fontSize:11, padding:"2px 8px", borderRadius:10, background:`${tier.color}20`, color:tier.color, fontWeight:700 }}>{issues.length}</span>
+              </div>
+              <span style={{ fontSize:12, color:txt2 }}>{isOpen ? "▲" : "▼"}</span>
             </div>
-          ))}
-        </div>
-      ))}
+            {/* Accordion body */}
+            {isOpen && (
+              <div style={{ padding:"12px 12px 2px", border:`1px solid ${tier.color}`, borderTop:"none", borderRadius:"0 0 10px 10px", background:bg3 }}>
+                {issues.map((issue, i) => {
+                  const key = `${tier.id}_${i}`;
+                  return (
+                    <div key={i} style={{ background:bg2, border:`1px solid ${bdr}`, borderLeft:`4px solid ${tier.color}`,
+                      borderRadius:10, padding:16, marginBottom:10 }}>
+                      {/* Badges */}
+                      <div style={{ display:"flex", gap:6, marginBottom:10, flexWrap:"wrap" }}>
+                        <span style={{ fontSize:10, padding:"3px 10px", borderRadius:10, background:`${tier.impactColor}18`, color:tier.impactColor, fontWeight:700 }}>Impact: {tier.impact}</span>
+                        <span style={{ fontSize:10, padding:"3px 10px", borderRadius:10, background:`${tier.effortColor}18`, color:tier.effortColor, fontWeight:700 }}>Effort: {tier.effort}</span>
+                      </div>
+                      {/* Issue description */}
+                      <div style={{ fontSize:13, fontWeight:700, color:txt, marginBottom:8, lineHeight:1.4 }}>{issue.detail}</div>
+                      {/* Why it matters */}
+                      <div style={{ fontSize:12, color:txt2, marginBottom:10, lineHeight:1.6, padding:"8px 12px", background:bg3, borderRadius:6 }}>
+                        <span style={{ color:tier.color, fontWeight:700 }}>Why it matters: </span>{tier.why}
+                      </div>
+                      {/* Fix suggestion */}
+                      {issue.fix && (
+                        <div style={{ fontSize:12, color:txt, marginBottom:12, lineHeight:1.55 }}>
+                          <span style={{ fontWeight:700, color:"#059669" }}>→ Suggested fix: </span>{issue.fix}
+                        </div>
+                      )}
+                      {/* CTAs */}
+                      <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                        <button
+                          onClick={() => { navigator.clipboard?.writeText(issue.fix || issue.detail || ""); setCopied(key); setTimeout(() => setCopied(null), 2000); }}
+                          style={{ padding:"7px 16px", borderRadius:8, border:"none", background:"#059669", color:"#fff", fontSize:11, fontWeight:700, cursor:"pointer" }}>
+                          {copied === key ? "✅ Copied!" : "📋 Fix Now"}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
 
 function FullKeywordsView({ kw, bg2, bg3, bdr, txt, txt2 }) {
   const clusters = kw.clusters || {};
-  const intentColor = { transactional:"#059669", informational:"#0891B2", commercial:"#7C3AED", navigational:"#D97706", local:"#DC2626" };
+  const intentColor = { transactional:"#059669", informational:"#0891B2", commercial:"#443DCB", navigational:"#D97706", local:"#DC2626" };
   return (
     <div>
       {Object.entries(clusters).filter(([k])=>k!=="gaps").map(([cluster, items]) => (
@@ -1059,7 +1139,7 @@ function FullCompetitorView({ comp, bg2, bg3, bdr, txt, txt2 }) {
   return (
     <div>
       <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:10, marginBottom:16 }}>
-        {[{ l:"Not Ranking",v:comp.summary?.notRanking,c:"#DC2626" },{ l:"Top 3",v:comp.summary?.rankingTop3,c:"#059669" },{ l:"Content Gaps",v:comp.summary?.contentGapsFound,c:"#7C3AED" }].map(i=>(
+        {[{ l:"Not Ranking",v:comp.summary?.notRanking,c:"#DC2626" },{ l:"Top 3",v:comp.summary?.rankingTop3,c:"#059669" },{ l:"Content Gaps",v:comp.summary?.contentGapsFound,c:"#443DCB" }].map(i=>(
           <div key={i.l} style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, padding:"12px 10px", textAlign:"center", borderTop:`2px solid ${i.c}` }}>
             <div style={{ fontSize:20, fontWeight:700, color:i.c }}>{i.v}</div>
             <div style={{ fontSize:10, color:txt2 }}>{i.l}</div>
@@ -1176,7 +1256,7 @@ function FullOnPageView({ op, bg2, bg3, bdr, txt, txt2 }) {
             <div key={i} style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:8, padding:"12px 14px", marginBottom:8 }}>
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
                 <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                  <span style={{ fontSize:12, fontWeight:600, color:"#7C3AED" }}>{s.type} — {s.page}</span>
+                  <span style={{ fontSize:12, fontWeight:600, color:"#443DCB" }}>{s.type} — {s.page}</span>
                   {s.valid === false
                     ? <span style={{ fontSize:9, padding:"1px 6px", borderRadius:6, background:"#DC262611", color:"#DC2626" }}>❌ Invalid JSON-LD</span>
                     : s.valid === true
@@ -1313,7 +1393,7 @@ function FullContentView({ content, bg2, bg3, bdr, txt, txt2 }) {
   const refresh = d.contentRefreshFlags || [];
   const links   = hp.internalLinkSuggestions || [];
 
-  const Pill = ({ text, color="#7C3AED" }) => (
+  const Pill = ({ text, color="#443DCB" }) => (
     <span style={{ fontSize:10, padding:"2px 8px", borderRadius:10, background:color+"22", color, marginRight:4 }}>{text}</span>
   );
   const Row = ({ label, before, after, char }) => (
@@ -1330,7 +1410,7 @@ function FullContentView({ content, bg2, bg3, bdr, txt, txt2 }) {
       {/* Summary Cards */}
       <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:10, marginBottom:16 }}>
         {[
-          { l:"Page Briefs",   v:briefs.length,               c:"#7C3AED" },
+          { l:"Page Briefs",   v:briefs.length,               c:"#443DCB" },
           { l:"FAQ Items",     v:faqs.length,                  c:"#0891B2" },
           { l:"Refresh Flags", v:refresh.length,              c:"#D97706" },
           { l:"Pending Approval", v:content.approvalItemsCount||0, c:"#059669" },
@@ -1372,7 +1452,7 @@ function FullContentView({ content, bg2, bg3, bdr, txt, txt2 }) {
                   <div style={{ fontSize:11, color:txt2, marginTop:2 }}>{b.targetKeyword} · {b.recommendedWordCount} words</div>
                 </div>
                 <div style={{ display:"flex", gap:6, alignItems:"center" }}>
-                  <Pill text={b.intent} color={b.intent==="transactional"?"#059669":b.intent==="informational"?"#0891B2":"#7C3AED"} />
+                  <Pill text={b.intent} color={b.intent==="transactional"?"#059669":b.intent==="informational"?"#0891B2":"#443DCB"} />
                   <Pill text={b.urgency} color={b.urgency==="high"?"#DC2626":"#D97706"} />
                   <span style={{ fontSize:12, color:txt2 }}>{openBrief===i?"▲":"▼"}</span>
                 </div>
@@ -1466,7 +1546,7 @@ function FullReportView({ report, bg2, bg3, bdr, txt, txt2 }) {
         <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, padding:16, marginBottom:12 }}>
           <div style={{ fontSize:11, fontWeight:700, color:txt2, textTransform:"uppercase", letterSpacing:1, marginBottom:12 }}>📈 Google Search Console — {gsc.period}</div>
           <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:10, marginBottom:12 }}>
-            {[{l:"Clicks",v:gsc.totalClicks,c:"#059669"},{l:"Impressions",v:gsc.totalImpress,c:"#0891B2"},{l:"Avg CTR",v:gsc.avgCTR+"%",c:"#7C3AED"},{l:"Avg Position",v:"#"+gsc.avgPos,c:"#D97706"}].map(i=>(
+            {[{l:"Clicks",v:gsc.totalClicks,c:"#059669"},{l:"Impressions",v:gsc.totalImpress,c:"#0891B2"},{l:"Avg CTR",v:gsc.avgCTR+"%",c:"#443DCB"},{l:"Avg Position",v:"#"+gsc.avgPos,c:"#D97706"}].map(i=>(
               <div key={i.l} style={{ textAlign:"center" }}>
                 <div style={{ fontSize:22, fontWeight:700, color:i.c }}>{i.v}</div>
                 <div style={{ fontSize:10, color:txt2 }}>{i.l}</div>
@@ -1492,8 +1572,8 @@ function FullReportView({ report, bg2, bg3, bdr, txt, txt2 }) {
 
       {/* Executive Verdict */}
       {r.verdict && (
-        <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, padding:16, marginBottom:12, borderLeft:"4px solid #7C3AED" }}>
-          <div style={{ fontSize:11, fontWeight:700, color:"#7C3AED", textTransform:"uppercase", letterSpacing:1, marginBottom:8 }}>📊 Executive Verdict</div>
+        <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, padding:16, marginBottom:12, borderLeft:"4px solid #443DCB" }}>
+          <div style={{ fontSize:11, fontWeight:700, color:"#443DCB", textTransform:"uppercase", letterSpacing:1, marginBottom:8 }}>📊 Executive Verdict</div>
           <div style={{ fontSize:14, color:txt, lineHeight:1.6, fontWeight:500 }}>{r.verdict}</div>
         </div>
       )}
@@ -1580,10 +1660,10 @@ function FullReportView({ report, bg2, bg3, bdr, txt, txt2 }) {
         <div style={{ marginBottom:12 }}>
           <div style={{ fontSize:11, fontWeight:700, color:txt2, textTransform:"uppercase", letterSpacing:1, marginBottom:8 }}>🚀 Next 3 Actions</div>
           {r.next3Actions.map((a,i)=>(
-            <div key={i} style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, padding:"12px 14px", marginBottom:8, borderLeft:"3px solid #7C3AED" }}>
+            <div key={i} style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, padding:"12px 14px", marginBottom:8, borderLeft:"3px solid #443DCB" }}>
               <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
                 <div style={{ fontSize:13, fontWeight:700, color:txt }}>{i+1}. {a.action}</div>
-                <span style={{ fontSize:10, padding:"2px 8px", borderRadius:10, background:"#7C3AED22", color:"#A78BFA" }}>Priority {a.priority}</span>
+                <span style={{ fontSize:10, padding:"2px 8px", borderRadius:10, background:"#443DCB22", color:"#6B62E8" }}>Priority {a.priority}</span>
               </div>
               <div style={{ fontSize:11, color:txt2, marginBottom:4 }}>{a.why}</div>
               <div style={{ fontSize:11, color:"#059669" }}>Expected: {a.expectedOutcome}</div>

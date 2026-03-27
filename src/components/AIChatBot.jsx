@@ -58,7 +58,7 @@ export default function AIChatBot({ dark, clientId, getToken, API }) {
       const data = await res.json();
       setMessages(prev => [...prev, {
         role:    "assistant",
-        content: data.response || data.error || "Kuch gadbad ho gayi, dobara try karo.",
+        content: data.response || data.error || "Something went wrong. Please try again.",
         action:  data.action  || null,
         meta:    data.meta    || null,
         time:    new Date(),
@@ -244,7 +244,7 @@ export default function AIChatBot({ dark, clientId, getToken, API }) {
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={e => { if (e.key==="Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
-                placeholder="Kuch bhi pucho SEO ke baare mein..."
+                placeholder="Ask me anything about your SEO..."
                 rows={1}
                 style={{
                   flex:1, padding:"10px 13px", borderRadius:14,
