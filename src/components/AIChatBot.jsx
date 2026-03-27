@@ -28,7 +28,7 @@ export default function AIChatBot({ dark, clientId, getToken, API }) {
     if (open && messages.length === 0) {
       setMessages([{
         role: "assistant",
-        content: "Hey! Main aapka SEO Expert AI hun 🤖\n\nMujhe is client ka pura data pata hai — health score, issues, keywords, competitors sab kuch.\n\nKuch bhi pucho ya neeche se quick question select karo!",
+        content: "Hello! I'm your SEO Expert AI 🤖\n\nI have full access to this client's data — health score, issues, keywords, competitors, and more.\n\nAsk me anything or pick a quick question below!",
         time: new Date(),
       }]);
     }
@@ -50,7 +50,7 @@ export default function AIChatBot({ dark, clientId, getToken, API }) {
     try {
       const token   = await getToken();
       const history = messages.slice(-6).map(m => ({ role: m.role, content: m.content }));
-      const res     = await fetch(`${API}/api/chat/${clientId}`, {
+      const res     = await fetch(`${API}/api/chat/${clientId}/chat`, {
         method:  "POST",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
         body:    JSON.stringify({ message: msg, history }),
