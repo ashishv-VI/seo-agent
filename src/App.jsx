@@ -26,6 +26,7 @@ import CompetitorGap from "./CompetitorGap";
 import ReadabilityChecker from "./ReadabilityChecker";
 import BacklinkAnalyzer from "./BacklinkAnalyzer";
 import SitemapGenerator from "./SitemapGenerator";
+import UserPanel from "./pages/UserPanel";
 
 // ── Main App wrapped with Auth ─────────────────────
 export default function App() {
@@ -329,6 +330,7 @@ function MainApp({ onLogout }) {
 
             <div style={s.secLabel}>Agency</div>
             <div onClick={()=>setPage("clients")} style={s.navItem(page==="clients", "#443DCB")}>🏢 <span>Client Manager</span></div>
+            <div onClick={()=>setPage("users")} style={s.navItem(page==="users", "#DC2626")}>👥 <span>User Management</span></div>
 
             <div style={s.secLabel}>Main</div>
             <div onClick={()=>setPage("dashboard")}     style={s.navItem(page==="dashboard",     "#443DCB")}>🏠 <span>Dashboard</span></div>
@@ -432,6 +434,7 @@ function MainApp({ onLogout }) {
 
         {/* ── Pages ── */}
         {page==="clients"       && <ClientManager dark={dark} />}
+        {page==="users"         && <UserPanel dark={dark} />}
         {page==="dashboard"     && <Dashboard onToolSelect={selectTool} count={count} keys={keys} dark={dark} onPageSelect={setPage} />}
         {page==="promptcontent" && <PromptToContent dark={dark} keys={keys} model={model} />}
         {page==="writer"        && <AiWriter dark={dark} keys={keys} model={model} />}

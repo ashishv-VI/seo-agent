@@ -9,6 +9,7 @@ const clientsRoutes = require("./routes/clients");
 const agentsRoutes  = require("./routes/agents");
 const chatRoutes    = require("./routes/chat");
 const rankTrackerRoutes = require("./routes/rank-tracker");
+const adminRoutes   = require("./routes/admin");
 
 const app  = express();
 const PORT = process.env.PORT || 5000;
@@ -67,6 +68,7 @@ app.use("/api/clients", clientsRoutes);
 app.use("/api/agents",  agentsRoutes);
 app.use("/api/chat",   chatRoutes);
 app.use("/api/rank-tracker", rankTrackerRoutes);
+app.use("/api/admin",  adminRoutes);
 
 // ── Monthly pipeline scheduler ────────────────────
 // Checks once per hour — runs pipeline for clients whose last run was 30+ days ago
