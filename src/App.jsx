@@ -225,16 +225,25 @@ function MainApp({ onLogout }) {
 
   const s = {
     app:     { fontFamily:"Inter,system-ui,sans-serif", display:"flex", height:"100vh", background:bg, color:txt, overflow:"hidden" },
-    side:    { width:sideOpen?240:0, minWidth:sideOpen?240:0, background:bg2, borderRight:`1px solid ${bdr}`, display:"flex", flexDirection:"column", transition:"all 0.2s", overflow:"hidden", flexShrink:0 },
-    logo:    { padding:"14px 16px", borderBottom:`1px solid ${bdr}`, display:"flex", alignItems:"center", gap:10, flexShrink:0 },
-    badge:   { width:32, height:32, borderRadius:8, background:"#443DCB", display:"flex", alignItems:"center", justifyContent:"center", fontWeight:800, fontSize:14, color:"#fff", flexShrink:0 },
-    nav:     { flex:1, overflowY:"auto", padding:"6px" },
+    side:    { width:sideOpen?260:0, minWidth:sideOpen?260:0, background:bg2, borderRight:`1px solid ${bdr}`, display:"flex", flexDirection:"column", transition:"all 0.2s", overflow:"hidden", flexShrink:0 },
+    logo:    { padding:"16px 18px", borderBottom:`1px solid ${bdr}`, display:"flex", alignItems:"center", gap:12, flexShrink:0 },
+    badge:   { width:36, height:36, borderRadius:10, background:"linear-gradient(135deg,#443DCB,#3730b8)", display:"flex", alignItems:"center", justifyContent:"center", fontWeight:800, fontSize:16, color:"#fff", flexShrink:0, boxShadow:"0 2px 8px #443DCB44" },
+    nav:     { flex:1, overflowY:"auto", padding:"8px 8px 4px", scrollbarWidth:"thin" },
     catRow:  { display:"flex", flexWrap:"wrap", gap:4, padding:"8px 4px 4px" },
-    catBtn:  a => ({ padding:"3px 9px", borderRadius:20, fontSize:11, fontWeight:a?600:400, cursor:"pointer", border:"1px solid", background:a?"#443DCB22":"transparent", color:a?"#6B62E8":txt2, borderColor:a?"#443DCB44":bdr }),
-    secLabel:{ fontSize:10, color:txt3, padding:"8px 8px 3px", textTransform:"uppercase", letterSpacing:"0.08em" },
-    navItem: (a, color) => ({ display:"flex", alignItems:"center", gap:8, padding:"7px 10px", borderRadius:8, marginBottom:1, cursor:"pointer", fontSize:12, fontWeight:a?600:400, background:a?color+"22":"transparent", color:a?color:txt2, border:a?`1px solid ${color}33`:"1px solid transparent", whiteSpace:"nowrap" }),
+    catBtn:  a => ({ padding:"4px 11px", borderRadius:20, fontSize:11, fontWeight:a?700:400, cursor:"pointer", border:"1px solid", background:a?"#443DCB22":"transparent", color:a?"#443DCB":txt2, borderColor:a?"#443DCB55":bdr }),
+    secLabel:{ fontSize:10, fontWeight:700, color:txt3, padding:"14px 6px 5px", textTransform:"uppercase", letterSpacing:"0.1em" },
+    navItem: (a, color) => ({
+      display:"flex", alignItems:"center", gap:10, padding:"9px 12px",
+      borderRadius:9, marginBottom:2, cursor:"pointer",
+      fontSize:13, fontWeight:a?600:400,
+      background: a ? `${color}18` : "transparent",
+      color: a ? color : txt2,
+      borderLeft: a ? `3px solid ${color}` : "3px solid transparent",
+      transition:"background 0.15s, color 0.15s",
+      whiteSpace:"nowrap",
+    }),
     main:    { flex:1, display:"flex", flexDirection:"column", overflow:"hidden", minWidth:0 },
-    header:  { padding:"10px 16px", borderBottom:`1px solid ${bdr}`, background:bg2, display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, flexShrink:0 },
+    header:  { padding:"11px 18px", borderBottom:`1px solid ${bdr}`, background:bg2, display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, flexShrink:0 },
     msgs:    { flex:1, overflowY:"auto", padding:"20px", display:"flex", flexDirection:"column", gap:14 },
     uBub:    { alignSelf:"flex-end", background:"#443DCB", color:"#fff", padding:"10px 14px", borderRadius:"12px 12px 4px 12px", maxWidth:"75%", fontSize:13, lineHeight:1.6, whiteSpace:"pre-wrap" },
     aBub:    { alignSelf:"flex-start", background:bg3, border:`1px solid ${bdr}`, color:txt, padding:"14px 16px", borderRadius:"4px 12px 12px 12px", maxWidth:"88%", fontSize:13 },
@@ -295,8 +304,8 @@ function MainApp({ onLogout }) {
         <div style={s.logo}>
           <div style={s.badge}>S</div>
           <div style={{ flex:1 }}>
-            <div style={{ fontSize:13, fontWeight:700, color:txt }}>SEO Agent</div>
-            <div style={{ fontSize:10, color:txt3 }}>v16.0 · {TOOLS.length} tools</div>
+            <div style={{ fontSize:15, fontWeight:800, color:txt, letterSpacing:"-0.3px" }}>SEO Agent</div>
+            <div style={{ fontSize:11, color:txt3, marginTop:1 }}>v16.0 · {TOOLS.length} tools</div>
           </div>
         </div>
 
@@ -304,18 +313,18 @@ function MainApp({ onLogout }) {
           <div style={{ padding:"6px 4px 2px" }}>
 
             {/* User Info */}
-            <div style={{ padding:"8px 10px", marginBottom:6, background:bg3, borderRadius:8, display:"flex", alignItems:"center", gap:8 }}>
-              <div style={{ width:28, height:28, borderRadius:"50%", background:"#443DCB", display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, color:"#fff", fontWeight:700, flexShrink:0 }}>
+            <div style={{ padding:"10px 12px", marginBottom:8, background:bg3, borderRadius:10, display:"flex", alignItems:"center", gap:10, border:`1px solid ${bdr}` }}>
+              <div style={{ width:34, height:34, borderRadius:"50%", background:"linear-gradient(135deg,#443DCB,#3730b8)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:14, color:"#fff", fontWeight:800, flexShrink:0, boxShadow:"0 2px 6px #443DCB44" }}>
                 {user?.displayName?.[0]?.toUpperCase() || user?.email?.[0]?.toUpperCase() || "U"}
               </div>
               <div style={{ flex:1, minWidth:0 }}>
-                <div style={{ fontSize:11, fontWeight:600, color:txt, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                <div style={{ fontSize:13, fontWeight:700, color:txt, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
                   {user?.displayName || user?.email?.split("@")[0] || "User"}
                 </div>
-                <div style={{ fontSize:9, color:"#6B62E8" }}>Free Plan</div>
+                <div style={{ fontSize:10, color:"#6B62E8", fontWeight:600, marginTop:1 }}>Free Plan</div>
               </div>
               <div onClick={onLogout} title="Logout"
-                style={{ fontSize:14, cursor:"pointer", color:txt3 }}>🚪</div>
+                style={{ fontSize:15, cursor:"pointer", color:txt3, padding:4 }}>🚪</div>
             </div>
 
             <div style={s.secLabel}>Agency</div>
@@ -377,14 +386,14 @@ function MainApp({ onLogout }) {
           ))}
         </div>
 
-        <div style={{ padding:8, borderTop:`1px solid ${bdr}`, flexShrink:0 }}>
-          <div style={{ padding:"6px 8px", fontSize:11, color:txt3, display:"flex", justifyContent:"space-between" }}>
-            <span>Total analyses</span>
-            <span style={{ color:"#443DCB", fontWeight:600 }}>{count}</span>
+        <div style={{ padding:"8px 10px 10px", borderTop:`1px solid ${bdr}`, flexShrink:0 }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"6px 8px 8px" }}>
+            <span style={{ fontSize:12, color:txt3 }}>Total analyses</span>
+            <span style={{ fontSize:13, color:"#443DCB", fontWeight:700 }}>{count}</span>
           </div>
           <div onClick={()=>{ setTmpKeys({...keys}); setShowSettings(true); }}
-            style={{ padding:"8px 10px", borderRadius:8, cursor:"pointer", fontSize:12, color:txt2, display:"flex", alignItems:"center", gap:8 }}>
-            ⚙️ <span>Settings & Keys</span>
+            style={{ padding:"9px 12px", borderRadius:9, cursor:"pointer", fontSize:13, color:txt2, display:"flex", alignItems:"center", gap:10, background:bg3, border:`1px solid ${bdr}` }}>
+            ⚙️ <span style={{ fontWeight:500 }}>Settings & API Keys</span>
           </div>
         </div>
       </div>
