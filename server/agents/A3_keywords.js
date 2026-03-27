@@ -89,6 +89,58 @@ Generate 5-8 keywords per cluster. Make them realistic and specific to the busin
     }
   }
 
+  // ── SE Ranking: Enrich keywords with real volume + difficulty ──
+  const seMetrics = {};
+  if (keys.seranking) {
+    const { getKeywordMetrics, getDomainKeywords } = require("../utils/seranking");
+    const allKws = [
+      ...(keywordData.brand        || []),
+      ...(keywordData.generic      || []),
+      ...(keywordData.longtail     || []),
+      ...(keywordData.informational|| []),
+    ].map(k => k.keyword).filter(Boolean);
+
+    // Detect country from locations
+    const locationStr = (brief.targetLocations || []).join(" ").toLowerCase();
+    const country = locationStr.includes("uk") || locationStr.includes("united kingdom") ? "GB"
+                  : locationStr.includes("australia") ? "AU"
+                  : locationStr.includes("canada") ? "CA"
+                  : locationStr.includes("india") ? "IN"
+                  : "US";
+
+    const [metrics, domainKws] = await Promise.all([
+      getKeywordMetrics(allKws, keys.seranking, country),
+      getDomainKeywords(brief.websiteUrl, keys.seranking, country),
+    ]);
+
+    Object.assign(seMetrics, metrics);
+
+    // Enrich each keyword cluster with real data
+    ["brand","generic","longtail","informational"].forEach(cluster => {
+      (keywordData[cluster] || []).forEach(kw => {
+        const m = seMetrics[(kw.keyword || "").toLowerCase()];
+        if (m) {
+          kw.searchVolume  = m.volume;
+          kw.realDifficulty= m.difficulty;
+          kw.cpc           = m.cpc;
+          // Override difficulty label based on real data
+          if (m.difficulty >= 70) kw.difficulty = "high";
+          else if (m.difficulty >= 40) kw.difficulty = "medium";
+          else kw.difficulty = "low";
+        }
+      });
+    });
+
+    // Store domain's current rankings
+    if (domainKws.length > 0) {
+      keywordData.currentRankings = domainKws.slice(0, 30);
+      // Find keywords we rank for that are in our keyword map
+      keywordData.rankingKeywords = domainKws.filter(dk =>
+        allKws.some(k => k.toLowerCase().includes(dk.keyword.toLowerCase()))
+      );
+    }
+  }
+
   // ── Build keyword map ──────────────────────────────
   const allKeywords = [
     ...(keywordData.brand         || []).map(k => ({ ...k, cluster: "brand" })),
@@ -161,6 +213,11 @@ Generate 5-8 keywords per cluster. Make them realistic and specific to the busin
     gaps:           keywordData.gaps || [],
     serpData,
     hasSerpData:    Object.keys(serpData).length > 0,
+    seRankingData: Object.keys(seMetrics).length > 0 ? {
+      enriched: true,
+      keywordsEnriched: Object.keys(seMetrics).length,
+      currentRankings: keywordData.currentRankings || [],
+    } : null,
     cannibalization,
     hasCannibalization: cannibalization.length > 0,
     snippetOpportunities: snippetOpps,
