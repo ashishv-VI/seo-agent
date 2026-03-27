@@ -46,26 +46,37 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
 
   function exportPDF() {
     setPrintMode(true);
+    // Wait for React to finish rendering the print view
     setTimeout(() => {
       const printContent = document.querySelector(".print-report");
       if (!printContent) { setPrintMode(false); return; }
-      const newWin = window.open("", "_blank", "width=900,height=700");
-      newWin.document.write(`<!DOCTYPE html><html><head><title>SEO Report</title>
-        <style>
-          * { box-sizing: border-box; margin: 0; padding: 0; }
-          body { font-family: 'Segoe UI', Arial, sans-serif; background: #fff; color: #1a1a18; }
-          @page { margin: 10mm 8mm; size: A4; }
-          @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
-        </style>
-      </head><body>${printContent.innerHTML}</body></html>`);
+      const html = printContent.innerHTML;
+      const newWin = window.open("", "_blank", "width=1000,height=800");
+      if (!newWin) { alert("Pop-up blocked — please allow pop-ups for this site and try again."); setPrintMode(false); return; }
+      newWin.document.open();
+      newWin.document.write(
+        "<!DOCTYPE html><html><head><meta charset='utf-8'><title>SEO Report</title>" +
+        "<style>" +
+        "*, *::before, *::after { box-sizing: border-box; }" +
+        "body { margin: 0; padding: 0; font-family: 'Segoe UI', Arial, sans-serif; background: #fff; color: #424143; }" +
+        "@page { margin: 12mm 10mm; size: A4; }" +
+        "@media print {" +
+        "  body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }" +
+        "  .page-break { page-break-before: always; }" +
+        "  .no-break   { page-break-inside: avoid; }" +
+        "}" +
+        "</style>" +
+        "</head><body>" + html + "</body></html>"
+      );
       newWin.document.close();
       newWin.focus();
+      // Small delay so browser paints the content before print dialog opens
       setTimeout(() => {
         newWin.print();
         newWin.close();
         setPrintMode(false);
-      }, 800);
-    }, 600);
+      }, 1000);
+    }, 700);
   }
 
   async function load(silent = false) {

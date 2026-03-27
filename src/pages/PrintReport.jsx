@@ -7,10 +7,7 @@
 const PRINT_CSS = `
   @media print {
     @page { margin: 15mm 12mm; size: A4; }
-    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    body * { visibility: hidden !important; }
-    .print-report { position: fixed !important; left: 0; top: 0; width: 100%; }
-    .print-report, .print-report * { visibility: visible !important; }
+    body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; background: #fff !important; }
     .page-break { page-break-before: always; }
     .no-break { page-break-inside: avoid; }
   }
