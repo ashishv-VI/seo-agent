@@ -7,20 +7,20 @@ const CAT_ICONS = {
 };
 
 const CAT_COLORS = {
-  Content:"#7C3AED", Technical:"#047857", Research:"#0891B2",
+  Content:"#443DCB", Technical:"#047857", Research:"#0891B2",
   GEO:"#0F766E", Local:"#B45309", Backlinks:"#1E40AF", Tools:"#9333EA"
 };
 
 const QUICK_PAGES = [
   { id:"promptcontent",  icon:"⚡", label:"Prompt-to-Content",  color:"#F59E0B", desc:"Topic → Full SEO page" },
-  { id:"competitorgap",  icon:"🕵️", label:"Competitor Gap",     color:"#7C3AED", desc:"Find what they have, you don't" },
+  { id:"competitorgap",  icon:"🕵️", label:"Competitor Gap",     color:"#443DCB", desc:"Find what they have, you don't" },
   { id:"serpsimulator",  icon:"🔎", label:"SERP Simulator",     color:"#EA4335", desc:"Google SERP preview" },
   { id:"metapreview",    icon:"🏷️", label:"Meta Previewer",     color:"#D97706", desc:"Live social preview" },
   { id:"readability",    icon:"📖", label:"Readability Checker", color:"#059669", desc:"Flesch score + fixes" },
   { id:"backlink",       icon:"🔗", label:"Backlink Analyzer",  color:"#1E40AF", desc:"DA + opportunities" },
   { id:"sitemap",        icon:"🗺️", label:"Sitemap Generator",  color:"#D97706", desc:"XML sitemap builder" },
   { id:"aimode",         icon:"🤖", label:"AI Mode Optimizer",  color:"#4285F4", desc:"Google AI Mode & Overview" },
-  { id:"aeo",            icon:"🎯", label:"AEO Optimizer",      color:"#7C3AED", desc:"Answer engine optimization" },
+  { id:"aeo",            icon:"🎯", label:"AEO Optimizer",      color:"#443DCB", desc:"Answer engine optimization" },
   { id:"gsc",            icon:"📈", label:"Search Console",     color:"#059669", desc:"GSC clicks & impressions" },
   { id:"audit",          icon:"🏥", label:"Site Audit",         color:"#DC2626", desc:"Technical SEO check" },
   { id:"report",         icon:"📄", label:"Report Generator",   color:"#9333EA", desc:"PDF client reports" },
@@ -86,7 +86,7 @@ export default function Dashboard({ onToolSelect, count, keys, dark, onPageSelec
           <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", flexWrap:"wrap", gap:16 }}>
             <div>
               <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:8 }}>
-                <div style={{ width:36, height:36, borderRadius:10, background:"#7C3AED", display:"flex", alignItems:"center", justifyContent:"center", fontSize:18 }}>🚀</div>
+                <div style={{ width:36, height:36, borderRadius:10, background:"#443DCB", display:"flex", alignItems:"center", justifyContent:"center", fontSize:18 }}>🚀</div>
                 <div>
                   <div style={{ fontSize:22, fontWeight:800, color:txt, letterSpacing:"-0.03em" }}>SEO Agent</div>
                   <div style={{ fontSize:11, color:txt2, marginTop:1 }}>v16.0 · Your complete SEO Operating System</div>
@@ -106,7 +106,7 @@ export default function Dashboard({ onToolSelect, count, keys, dark, onPageSelec
 
           <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12, marginTop:24 }}>
             {[
-              { label:"Total Tools",    value:TOOLS.length,    color:"#7C3AED", icon:"🛠️" },
+              { label:"Total Tools",    value:TOOLS.length,    color:"#443DCB", icon:"🛠️" },
               { label:"Analyses Done",  value:count,           color:"#059669", icon:"📊" },
               { label:"Categories",     value:CATS.length-1,   color:"#0891B2", icon:"📂" },
               { label:"APIs Connected", value:`${apiCount}/4`, color:apiCount>=3?"#059669":apiCount>=2?"#D97706":"#DC2626", icon:"🔑" },
@@ -189,7 +189,7 @@ export default function Dashboard({ onToolSelect, count, keys, dark, onPageSelec
             <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:16 }}>
               {["All", ...CATS.filter(c=>c!=="All")].map(c => {
                 const active = activeCat === c;
-                const color  = c==="All" ? "#7C3AED" : CAT_COLORS[c];
+                const color  = c==="All" ? "#443DCB" : CAT_COLORS[c];
                 return (
                   <div key={c} onClick={()=>setActiveCat(c)}
                     style={{ padding:"5px 14px", borderRadius:20, fontSize:12, cursor:"pointer", fontWeight:active?700:400, background:active?color+"22":"transparent", color:active?color:txt2, border:`1px solid ${active?color+"44":bdr}` }}>

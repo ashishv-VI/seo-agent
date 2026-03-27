@@ -19,7 +19,7 @@ const CHECKLIST = [
     ]
   },
   {
-    cat: "On-Page SEO", color: "#7C3AED", icon: "📝",
+    cat: "On-Page SEO", color: "#443DCB", icon: "📝",
     items: [
       { id:"o1",  text:"Unique title tag on every page (50-60 chars)",     priority:"Critical", impact:"High" },
       { id:"o2",  text:"Unique meta description on every page (150-160 chars)", priority:"Critical", impact:"Medium" },
@@ -160,7 +160,7 @@ export default function SeoChecklist({ dark }) {
     a.download = "seo-checklist.csv"; a.click();
   }
 
-  const tabStyle = (a, color="#7C3AED") => ({
+  const tabStyle = (a, color="#443DCB") => ({
     padding:"6px 14px", borderRadius:20, fontSize:12, cursor:"pointer",
     fontWeight:a?600:400, background:a?color+"22":"transparent",
     color:a?color:txt2, border:`1px solid ${a?color+"44":bdr}`,
@@ -180,7 +180,7 @@ export default function SeoChecklist({ dark }) {
         {/* Stats */}
         <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12, marginBottom:20 }}>
           {[
-            { label:"Total Items",    value:totalCount,        color:"#7C3AED" },
+            { label:"Total Items",    value:totalCount,        color:"#443DCB" },
             { label:"Completed",      value:doneCount,         color:"#059669" },
             { label:"Remaining",      value:totalCount-doneCount, color:"#D97706" },
             { label:"Critical Done",  value:`${criticalDone}/${criticalTotal}`, color:criticalDone===criticalTotal?"#059669":"#DC2626" },
@@ -194,7 +194,7 @@ export default function SeoChecklist({ dark }) {
 
         {/* Progress Bar */}
         <div style={{ background:bg3, borderRadius:20, height:10, marginBottom:8, overflow:"hidden" }}>
-          <div style={{ height:"100%", width:`${progress}%`, background:progress>=80?"#059669":progress>=50?"#D97706":"#7C3AED", borderRadius:20, transition:"width 0.4s" }} />
+          <div style={{ height:"100%", width:`${progress}%`, background:progress>=80?"#059669":progress>=50?"#D97706":"#443DCB", borderRadius:20, transition:"width 0.4s" }} />
         </div>
         <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, color:txt2, marginBottom:20 }}>
           <span>{progress}% complete</span>
@@ -206,7 +206,7 @@ export default function SeoChecklist({ dark }) {
           <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
             {/* Filter by priority */}
             {["All","Critical","High","Medium","Low","Done","Pending"].map(f => (
-              <div key={f} style={tabStyle(filter===f, f==="All"?"#7C3AED":PRIORITY_COLORS[f]||"#7C3AED")} onClick={()=>setFilter(f)}>{f}</div>
+              <div key={f} style={tabStyle(filter===f, f==="All"?"#443DCB":PRIORITY_COLORS[f]||"#443DCB")} onClick={()=>setFilter(f)}>{f}</div>
             ))}
           </div>
           <div style={{ display:"flex", gap:8 }}>

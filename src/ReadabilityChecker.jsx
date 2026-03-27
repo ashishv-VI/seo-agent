@@ -197,7 +197,7 @@ Be very specific. Reference actual sentences from the content.`;
             </div>
 
             <button onClick={runAnalysis} disabled={loading || !content.trim()}
-              style={{ padding: "11px", borderRadius: 10, border: "none", background: loading || !content.trim() ? "#333" : "#7C3AED", color: loading || !content.trim() ? txt3 : "#fff", fontWeight: 700, fontSize: 14, cursor: loading || !content.trim() ? "not-allowed" : "pointer" }}>
+              style={{ padding: "11px", borderRadius: 10, border: "none", background: loading || !content.trim() ? "#333" : "#443DCB", color: loading || !content.trim() ? txt3 : "#fff", fontWeight: 700, fontSize: 14, cursor: loading || !content.trim() ? "not-allowed" : "pointer" }}>
               {loading ? "📖 Analyzing..." : "📖 Check Readability"}
             </button>
           </div>
@@ -242,7 +242,7 @@ Be very specific. Reference actual sentences from the content.`;
                   <div style={{ fontSize: 12, fontWeight: 600, color: txt, marginBottom: 12 }}>📈 Key Metrics</div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                     {[
-                      { label: "Word Count",     value: results.wordCount,                          color: "#7C3AED" },
+                      { label: "Word Count",     value: results.wordCount,                          color: "#443DCB" },
                       { label: "Reading Time",   value: `${results.readingTime} min`,               color: "#0891B2" },
                       { label: "Sentences",      value: results.sentCount,                          color: "#059669" },
                       { label: "Paragraphs",     value: results.paraCount,                          color: "#D97706" },

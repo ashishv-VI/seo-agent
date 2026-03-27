@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 
 const DAYS = ["Monday","Tuesday","Wednesday","Thursday","Friday"];
 const CONTENT_TYPES = ["Blog Post","Social Media","Video","Email","Infographic","Case Study","Podcast","Webinar"];
-const COLORS = { "Blog Post":"#7C3AED","Social Media":"#0891B2","Video":"#DC2626","Email":"#D97706","Infographic":"#059669","Case Study":"#9333EA","Podcast":"#0F766E","Webinar":"#B45309" };
+const COLORS = { "Blog Post":"#443DCB","Social Media":"#0891B2","Video":"#DC2626","Email":"#D97706","Infographic":"#059669","Case Study":"#9333EA","Podcast":"#0F766E","Webinar":"#B45309" };
 const TYPE_ICONS = { "Blog Post":"✍️","Social Media":"📱","Video":"🎥","Email":"📧","Infographic":"📊","Case Study":"📋","Podcast":"🎙️","Webinar":"💻" };
 
 export default function ContentCalendar({ dark, keys, model }) {
@@ -155,7 +155,7 @@ Generate all ${weeks * 5} items now. No extra text.`;
   }
 
   const priorityColor = p => p==="High"?"#DC2626":p==="Medium"?"#D97706":"#059669";
-  const intentColor   = i => ({ Transactional:"#059669", Commercial:"#7C3AED", Navigational:"#0891B2", Informational:"#888" }[i] || "#888");
+  const intentColor   = i => ({ Transactional:"#059669", Commercial:"#443DCB", Navigational:"#0891B2", Informational:"#888" }[i] || "#888");
 
   const filteredItems = calendar?.items.filter(i => {
     const matchType     = filterType==="All"     || i.type===filterType;
@@ -166,7 +166,7 @@ Generate all ${weeks * 5} items now. No extra text.`;
   const doneCount    = calendar?.items.filter(i=>i.done).length || 0;
   const totalCount   = calendar?.items.length || 0;
   const progress     = totalCount ? Math.round((doneCount/totalCount)*100) : 0;
-  const tabStyle     = (a) => ({ padding:"6px 14px", borderRadius:20, fontSize:12, cursor:"pointer", fontWeight:a?600:400, background:a?"#7C3AED22":"transparent", color:a?"#A78BFA":txt2, border:`1px solid ${a?"#7C3AED44":bdr}` });
+  const tabStyle     = (a) => ({ padding:"6px 14px", borderRadius:20, fontSize:12, cursor:"pointer", fontWeight:a?600:400, background:a?"#443DCB22":"transparent", color:a?"#6B62E8":txt2, border:`1px solid ${a?"#443DCB44":bdr}` });
 
   return (
     <div style={{ flex:1, overflowY:"auto", padding:24, background:bg }}>
@@ -191,7 +191,7 @@ Generate all ${weeks * 5} items now. No extra text.`;
               </select>
             </div>
             <button onClick={generateCalendar} disabled={loading||!niche.trim()}
-              style={{ padding:"10px 20px", borderRadius:10, border:"none", background:loading||!niche.trim()?"#333":"#7C3AED", color:loading||!niche.trim()?txt3:"#fff", fontWeight:600, fontSize:13, cursor:loading||!niche.trim()?"not-allowed":"pointer" }}>
+              style={{ padding:"10px 20px", borderRadius:10, border:"none", background:loading||!niche.trim()?"#333":"#443DCB", color:loading||!niche.trim()?txt3:"#fff", fontWeight:600, fontSize:13, cursor:loading||!niche.trim()?"not-allowed":"pointer" }}>
               {loading?"Generating...":"📅 Generate"}
             </button>
           </div>
@@ -203,7 +203,7 @@ Generate all ${weeks * 5} items now. No extra text.`;
             {/* Stats */}
             <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:10, marginBottom:16 }}>
               {[
-                { label:"Total",        value:totalCount,                                              color:"#7C3AED" },
+                { label:"Total",        value:totalCount,                                              color:"#443DCB" },
                 { label:"Done",         value:doneCount,                                               color:"#059669" },
                 { label:"Pending",      value:totalCount-doneCount,                                    color:"#D97706" },
                 { label:"High Priority",value:calendar.items.filter(i=>i.priority==="High").length,    color:"#DC2626" },
@@ -218,7 +218,7 @@ Generate all ${weeks * 5} items now. No extra text.`;
 
             {/* Progress Bar */}
             <div style={{ background:bg3, borderRadius:20, height:8, marginBottom:16, overflow:"hidden", position:"relative" }}>
-              <div style={{ height:"100%", width:`${progress}%`, background:progress>=70?"#059669":progress>=40?"#D97706":"#7C3AED", borderRadius:20, transition:"width 0.5s" }} />
+              <div style={{ height:"100%", width:`${progress}%`, background:progress>=70?"#059669":progress>=40?"#D97706":"#443DCB", borderRadius:20, transition:"width 0.5s" }} />
               <div style={{ position:"absolute", right:8, top:"50%", transform:"translateY(-50%)", fontSize:10, color:txt2 }}>{progress}% complete</div>
             </div>
 
@@ -245,7 +245,7 @@ Generate all ${weeks * 5} items now. No extra text.`;
               </div>
               <div style={{ display:"flex", gap:8 }}>
                 <button onClick={downloadCSV} style={{ padding:"6px 12px", borderRadius:8, border:"1px solid #059669aa", background:"#05966911", color:"#059669", fontSize:11, cursor:"pointer", fontWeight:600 }}>⬇️ CSV</button>
-                <button onClick={exportMarkdown} style={{ padding:"6px 12px", borderRadius:8, border:"1px solid #7C3AED44", background:"#7C3AED11", color:"#A78BFA", fontSize:11, cursor:"pointer", fontWeight:600 }}>📝 Markdown</button>
+                <button onClick={exportMarkdown} style={{ padding:"6px 12px", borderRadius:8, border:"1px solid #443DCB44", background:"#443DCB11", color:"#6B62E8", fontSize:11, cursor:"pointer", fontWeight:600 }}>📝 Markdown</button>
                 <button onClick={()=>{ if(confirm("Clear saved calendar?")){ localStorage.removeItem("seo_calendar"); setCalendar(null); }}} style={{ padding:"6px 12px", borderRadius:8, border:`1px solid ${bdr}`, background:"transparent", color:txt3, fontSize:11, cursor:"pointer" }}>🗑️ Clear</button>
               </div>
             </div>
@@ -284,7 +284,7 @@ Generate all ${weeks * 5} items now. No extra text.`;
                             <div onClick={()=>setSelectedItem(item)} style={{ cursor:"pointer", opacity:item.done?0.55:1, height:"100%" }}>
                               <div style={{ display:"flex", alignItems:"center", gap:4, marginBottom:6 }}>
                                 <span style={{ fontSize:14 }}>{TYPE_ICONS[item.type]||"📝"}</span>
-                                <span style={{ fontSize:9, padding:"2px 6px", borderRadius:4, background:`${COLORS[item.type]||"#7C3AED"}22`, color:COLORS[item.type]||"#7C3AED", fontWeight:600 }}>{item.type}</span>
+                                <span style={{ fontSize:9, padding:"2px 6px", borderRadius:4, background:`${COLORS[item.type]||"#443DCB"}22`, color:COLORS[item.type]||"#443DCB", fontWeight:600 }}>{item.type}</span>
                               </div>
                               <div style={{ fontSize:12, color:item.done?txt3:txt, lineHeight:1.4, marginBottom:8, textDecoration:item.done?"line-through":"none", fontWeight:500 }}>{item.title}</div>
                               <div style={{ fontSize:10, color:txt2, marginBottom:6, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>🔑 {item.keyword}</div>
@@ -326,7 +326,7 @@ Generate all ${weeks * 5} items now. No extra text.`;
                       <div style={{ fontSize:11, color:txt2, marginTop:2 }}>Week {item.week} · {item.day} · 🔑 {item.keyword}</div>
                     </div>
                     <div style={{ display:"flex", gap:6, flexShrink:0 }}>
-                      <span style={{ fontSize:10, padding:"2px 8px", borderRadius:10, background:`${COLORS[item.type]||"#7C3AED"}22`, color:COLORS[item.type]||"#7C3AED" }}>{item.type}</span>
+                      <span style={{ fontSize:10, padding:"2px 8px", borderRadius:10, background:`${COLORS[item.type]||"#443DCB"}22`, color:COLORS[item.type]||"#443DCB" }}>{item.type}</span>
                       <span style={{ fontSize:10, padding:"2px 8px", borderRadius:10, background:`${priorityColor(item.priority)}22`, color:priorityColor(item.priority) }}>{item.priority}</span>
                       <span style={{ fontSize:10, padding:"2px 8px", borderRadius:10, background:`${intentColor(item.intent)}22`, color:intentColor(item.intent) }}>{item.intent}</span>
                     </div>
@@ -393,7 +393,7 @@ Generate all ${weeks * 5} items now. No extra text.`;
                       return (
                         <div key={wi} style={{ textAlign:"center" }}>
                           <div style={{ height:80, background:bg3, borderRadius:8, overflow:"hidden", display:"flex", alignItems:"flex-end", marginBottom:6 }}>
-                            <div style={{ width:"100%", height:`${pct}%`, background:pct>=80?"#059669":pct>=50?"#D97706":"#7C3AED", transition:"height 0.5s", minHeight:pct>0?4:0 }} />
+                            <div style={{ width:"100%", height:`${pct}%`, background:pct>=80?"#059669":pct>=50?"#D97706":"#443DCB", transition:"height 0.5s", minHeight:pct>0?4:0 }} />
                           </div>
                           <div style={{ fontSize:11, fontWeight:600, color:txt }}>W{wi+1}</div>
                           <div style={{ fontSize:10, color:txt2 }}>{wDone}/{wItems.length}</div>
@@ -423,7 +423,7 @@ Generate all ${weeks * 5} items now. No extra text.`;
 
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:14 }}>
                 {[
-                  { label:"Type",     value:selectedItem.type,              color:COLORS[selectedItem.type]||"#7C3AED" },
+                  { label:"Type",     value:selectedItem.type,              color:COLORS[selectedItem.type]||"#443DCB" },
                   { label:"Priority", value:selectedItem.priority,          color:priorityColor(selectedItem.priority) },
                   { label:"Intent",   value:selectedItem.intent,            color:intentColor(selectedItem.intent) },
                   { label:"Schedule", value:`Week ${selectedItem.week} · ${selectedItem.day}`, color:txt2 },
@@ -437,7 +437,7 @@ Generate all ${weeks * 5} items now. No extra text.`;
 
               <div style={{ background:bg3, borderRadius:8, padding:12, marginBottom:10 }}>
                 <div style={{ fontSize:10, color:txt2, marginBottom:4 }}>🔑 Target Keyword</div>
-                <div style={{ fontSize:13, color:"#A78BFA", fontWeight:500 }}>{selectedItem.keyword}</div>
+                <div style={{ fontSize:13, color:"#6B62E8", fontWeight:500 }}>{selectedItem.keyword}</div>
               </div>
 
               {selectedItem.notes && (

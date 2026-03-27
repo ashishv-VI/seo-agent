@@ -168,7 +168,7 @@ BIGGEST_OPPORTUNITY: [single most important gap to close first and why]`;
   const impactColor = i => i?.toLowerCase().includes("high") ? "#DC2626" : i?.toLowerCase().includes("med") ? "#D97706" : "#059669";
   const prioColor   = p => p?.toLowerCase().includes("high") ? "#DC2626" : p?.toLowerCase().includes("med") ? "#D97706" : "#059669";
 
-  const tabStyle = (a, color = "#7C3AED") => ({
+  const tabStyle = (a, color = "#443DCB") => ({
     padding: "6px 14px", borderRadius: 20, fontSize: 12, cursor: "pointer",
     fontWeight: a ? 600 : 400, background: a ? color + "22" : "transparent",
     color: a ? color : txt2, border: `1px solid ${a ? color + "44" : bdr}`, whiteSpace: "nowrap",
@@ -215,7 +215,7 @@ BIGGEST_OPPORTUNITY: [single most important gap to close first and why]`;
             ))}
           </div>
           <button onClick={analyze} disabled={loading || !mysite.trim() || !comp1.trim()}
-            style={{ width: "100%", padding: "11px", borderRadius: 10, border: "none", background: loading || !mysite.trim() || !comp1.trim() ? "#333" : "#7C3AED", color: loading || !mysite.trim() || !comp1.trim() ? txt3 : "#fff", fontWeight: 700, fontSize: 14, cursor: loading || !mysite.trim() || !comp1.trim() ? "not-allowed" : "pointer" }}>
+            style={{ width: "100%", padding: "11px", borderRadius: 10, border: "none", background: loading || !mysite.trim() || !comp1.trim() ? "#333" : "#443DCB", color: loading || !mysite.trim() || !comp1.trim() ? txt3 : "#fff", fontWeight: 700, fontSize: 14, cursor: loading || !mysite.trim() || !comp1.trim() ? "not-allowed" : "pointer" }}>
             {loading ? "🕵️ Analyzing gaps..." : "🕵️ Analyze Competitor Gaps"}
           </button>
         </div>
@@ -233,16 +233,16 @@ BIGGEST_OPPORTUNITY: [single most important gap to close first and why]`;
                 <div style={{ fontSize: 28, fontWeight: 800, color: impactColor(results.urgency) }}>{results.urgency}</div>
                 <div style={{ fontSize: 11, color: txt2, marginTop: 2 }}>Urgency Level</div>
               </div>
-              <div style={{ background: bg2, border: `1px solid ${bdr}`, borderRadius: 12, padding: 16, textAlign: "center", borderTop: "3px solid #7C3AED" }}>
-                <div style={{ fontSize: 28, fontWeight: 800, color: "#A78BFA" }}>{results.competitors.length}</div>
+              <div style={{ background: bg2, border: `1px solid ${bdr}`, borderRadius: 12, padding: 16, textAlign: "center", borderTop: "3px solid #443DCB" }}>
+                <div style={{ fontSize: 28, fontWeight: 800, color: "#6B62E8" }}>{results.competitors.length}</div>
                 <div style={{ fontSize: 11, color: txt2, marginTop: 2 }}>Competitors Analyzed</div>
               </div>
             </div>
 
             {/* Biggest Opportunity */}
             {results.bigOpportunity && (
-              <div style={{ background: "#7C3AED11", border: "1px solid #7C3AED33", borderRadius: 12, padding: 16, marginBottom: 16 }}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: "#A78BFA", marginBottom: 6 }}>🎯 Biggest Opportunity</div>
+              <div style={{ background: "#443DCB11", border: "1px solid #443DCB33", borderRadius: 12, padding: 16, marginBottom: 16 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: "#6B62E8", marginBottom: 6 }}>🎯 Biggest Opportunity</div>
                 <div style={{ fontSize: 13, color: txt, lineHeight: 1.7 }}>{results.bigOpportunity}</div>
               </div>
             )}
@@ -286,11 +286,11 @@ BIGGEST_OPPORTUNITY: [single most important gap to close first and why]`;
                   const action   = parts[4]?.replace("Your action:", "").trim() || "";
                   return (
                     <div key={i} style={{ padding: "14px 16px", borderBottom: `1px solid ${bdr}22`, display: "flex", gap: 14, alignItems: "flex-start" }}>
-                      <div style={{ width: 24, height: 24, borderRadius: "50%", background: "#7C3AED22", color: "#A78BFA", fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{i + 1}</div>
+                      <div style={{ width: 24, height: 24, borderRadius: "50%", background: "#443DCB22", color: "#6B62E8", fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{i + 1}</div>
                       <div style={{ flex: 1 }}>
                         <div style={{ fontSize: 14, fontWeight: 600, color: txt, marginBottom: 6 }}>{kw}</div>
                         <div style={{ display: "flex", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
-                          {volume && <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 10, background: "#7C3AED22", color: "#A78BFA" }}>{volume}</span>}
+                          {volume && <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 10, background: "#443DCB22", color: "#6B62E8" }}>{volume}</span>}
                           {diff && <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 10, background: parseInt(diff) <= 40 ? "#05966922" : "#DC262622", color: parseInt(diff) <= 40 ? "#059669" : "#DC2626" }}>Difficulty: {diff}</span>}
                         </div>
                         {why && <div style={{ fontSize: 12, color: txt2, marginBottom: 4 }}>💡 Why they rank: {why}</div>}
@@ -435,7 +435,7 @@ BIGGEST_OPPORTUNITY: [single most important gap to close first and why]`;
             {activeTab === "plan" && (
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                 {[
-                  { title: "📅 30-Day Action Plan", text: results.plan30, color: "#7C3AED" },
+                  { title: "📅 30-Day Action Plan", text: results.plan30, color: "#443DCB" },
                   { title: "🗓️ 90-Day Action Plan", text: results.plan90, color: "#0891B2" },
                 ].map((plan, i) => (
                   <div key={i} style={{ background: bg2, border: `1px solid ${bdr}`, borderRadius: 12, padding: 20 }}>

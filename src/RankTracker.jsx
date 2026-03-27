@@ -163,8 +163,8 @@ Rules:
   const diffColor  = s => { const n=parseInt(s); if(isNaN(n)) return txt2; return n<=30?"#059669":n<=60?"#D97706":"#DC2626"; };
   const trendIcon  = t => t==="growing"?"📈":t==="declining"?"📉":"➡️";
   const trendColor = t => t==="growing"?"#059669":t==="declining"?"#DC2626":"#D97706";
-  const intentColor= i => ({ informational:"#0891B2", navigational:"#7C3AED", transactional:"#059669", commercial:"#D97706" }[i?.toLowerCase()] || txt2);
-  const tabStyle   = (a) => ({ padding:"7px 16px", borderRadius:20, fontSize:12, cursor:"pointer", fontWeight:a?600:400, background:a?"#7C3AED22":"transparent", color:a?"#A78BFA":txt2, border:`1px solid ${a?"#7C3AED44":bdr}` });
+  const intentColor= i => ({ informational:"#0891B2", navigational:"#443DCB", transactional:"#059669", commercial:"#D97706" }[i?.toLowerCase()] || txt2);
+  const tabStyle   = (a) => ({ padding:"7px 16px", borderRadius:20, fontSize:12, cursor:"pointer", fontWeight:a?600:400, background:a?"#443DCB22":"transparent", color:a?"#6B62E8":txt2, border:`1px solid ${a?"#443DCB44":bdr}` });
 
   return (
     <div style={{ flex:1, overflowY:"auto", padding:24, background:bg }}>
@@ -197,7 +197,7 @@ Rules:
                 </div>
               </div>
               <button onClick={analyzeRank} disabled={analyzing||!keyword.trim()||!website.trim()}
-                style={{ width:"100%", padding:"10px", borderRadius:10, border:"none", background:analyzing||!keyword.trim()||!website.trim()?"#333":"#7C3AED", color:analyzing||!keyword.trim()||!website.trim()?txt3:"#fff", fontWeight:600, fontSize:13, cursor:analyzing||!keyword.trim()||!website.trim()?"not-allowed":"pointer" }}>
+                style={{ width:"100%", padding:"10px", borderRadius:10, border:"none", background:analyzing||!keyword.trim()||!website.trim()?"#333":"#443DCB", color:analyzing||!keyword.trim()||!website.trim()?txt3:"#fff", fontWeight:600, fontSize:13, cursor:analyzing||!keyword.trim()||!website.trim()?"not-allowed":"pointer" }}>
                 {analyzing ? "🔍 Analyzing..." : "📡 Analyze Ranking Potential"}
               </button>
             </div>
@@ -206,7 +206,7 @@ Rules:
               <>
                 <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:10, marginBottom:20 }}>
                   {[
-                    { label:"Tracked",       value: tracked.length,                                                                                          color:"#7C3AED" },
+                    { label:"Tracked",       value: tracked.length,                                                                                          color:"#443DCB" },
                     { label:"Avg Opportunity",value: Math.round(tracked.reduce((a,e)=>a+(parseInt(e.opportunityScore)||0),0)/tracked.length)+"%",            color:"#059669" },
                     { label:"Avg Difficulty", value: Math.round(tracked.reduce((a,e)=>a+(parseInt(e.difficulty)||0),0)/tracked.length)+"/100",               color:"#D97706" },
                     { label:"Easy Wins",      value: tracked.filter(e=>(parseInt(e.difficulty)||0)<=40).length,                                              color:"#0891B2" },
@@ -253,7 +253,7 @@ Rules:
                         ))}
                       </div>
                       <div style={{ display:"flex", gap:8, marginBottom:12, flexWrap:"wrap" }}>
-                        <span style={{ fontSize:11, padding:"3px 10px", borderRadius:20, background:"#7C3AED22", color:"#A78BFA" }}>Competition: {e.competition}</span>
+                        <span style={{ fontSize:11, padding:"3px 10px", borderRadius:20, background:"#443DCB22", color:"#6B62E8" }}>Competition: {e.competition}</span>
                         <span style={{ fontSize:11, padding:"3px 10px", borderRadius:20, background:"#0891B222", color:"#0891B2" }}>Content: {e.contentQuality}</span>
                       </div>
                       <div style={{ background:bg3, borderRadius:8, padding:12, marginBottom:10 }}>
@@ -314,7 +314,7 @@ Rules:
                     </div>
                   </div>
                   <button onClick={analyzeKeywordVolume} disabled={volLoading||!volKeywords.trim()}
-                    style={{ padding:"11px", borderRadius:10, border:"none", background:volLoading||!volKeywords.trim()?"#333":"#7C3AED", color:volLoading||!volKeywords.trim()?txt3:"#fff", fontWeight:700, fontSize:14, cursor:volLoading||!volKeywords.trim()?"not-allowed":"pointer" }}>
+                    style={{ padding:"11px", borderRadius:10, border:"none", background:volLoading||!volKeywords.trim()?"#333":"#443DCB", color:volLoading||!volKeywords.trim()?txt3:"#fff", fontWeight:700, fontSize:14, cursor:volLoading||!volKeywords.trim()?"not-allowed":"pointer" }}>
                     {volLoading ? "📊 Analyzing..." : "📊 Get Volume + CPC"}
                   </button>
                 </div>
@@ -326,7 +326,7 @@ Rules:
                 {/* Summary stats */}
                 <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:10, marginBottom:16 }}>
                   {[
-                    { label:"Keywords", value: volResults.length, color:"#7C3AED" },
+                    { label:"Keywords", value: volResults.length, color:"#443DCB" },
                     { label:"Growing", value: volResults.filter(r=>r.trend==="growing").length, color:"#059669" },
                     { label:"Low Difficulty", value: volResults.filter(r=>parseInt(r.difficulty)<=40).length, color:"#0891B2" },
                     { label:"Transactional", value: volResults.filter(r=>r.intent?.toLowerCase().includes("transactional")).length, color:"#D97706" },
@@ -357,7 +357,7 @@ Rules:
                         {volResults.map((r,i) => (
                           <tr key={i} style={{ borderBottom:`1px solid ${bdr}33` }}>
                             <td style={{ padding:"12px 14px", fontSize:13, color:txt, fontWeight:500 }}>{r.keyword}</td>
-                            <td style={{ padding:"12px 14px", fontSize:13, color:"#7C3AED", fontWeight:600 }}>{r.volume}</td>
+                            <td style={{ padding:"12px 14px", fontSize:13, color:"#443DCB", fontWeight:600 }}>{r.volume}</td>
                             <td style={{ padding:"12px 14px", fontSize:13, color:"#059669", fontWeight:600 }}>{r.cpc}</td>
                             <td style={{ padding:"12px 14px" }}>
                               <div style={{ display:"flex", alignItems:"center", gap:6 }}>

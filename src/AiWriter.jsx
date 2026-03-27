@@ -205,7 +205,7 @@ FILE: [filename.jpg]`;
   }
 
   const wordCount = output ? output.split(/\s+/).filter(Boolean).length : 0;
-  const tabStyle = (a) => ({ padding:"7px 16px", borderRadius:20, fontSize:12, cursor:"pointer", fontWeight:a?600:400, background:a?"#7C3AED22":"transparent", color:a?"#A78BFA":txt2, border:`1px solid ${a?"#7C3AED44":bdr}`, whiteSpace:"nowrap" });
+  const tabStyle = (a) => ({ padding:"7px 16px", borderRadius:20, fontSize:12, cursor:"pointer", fontWeight:a?600:400, background:a?"#443DCB22":"transparent", color:a?"#6B62E8":txt2, border:`1px solid ${a?"#443DCB44":bdr}`, whiteSpace:"nowrap" });
 
   return (
     <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden", background:bg }}>
@@ -229,9 +229,9 @@ FILE: [filename.jpg]`;
               <div style={{ fontSize:11, color:txt3, marginBottom:8, textTransform:"uppercase", letterSpacing:"0.06em" }}>Content Type</div>
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6, marginBottom:16 }}>
                 {TEMPLATES.map(t => (
-                  <div key={t.id} onClick={()=>setTmpl(t)} style={{ padding:"8px", borderRadius:8, border:`1px solid ${tmpl.id===t.id?"#7C3AED44":bdr}`, background:tmpl.id===t.id?"#7C3AED22":"transparent", cursor:"pointer" }}>
+                  <div key={t.id} onClick={()=>setTmpl(t)} style={{ padding:"8px", borderRadius:8, border:`1px solid ${tmpl.id===t.id?"#443DCB44":bdr}`, background:tmpl.id===t.id?"#443DCB22":"transparent", cursor:"pointer" }}>
                     <div style={{ fontSize:14, marginBottom:2 }}>{t.icon}</div>
-                    <div style={{ fontSize:11, fontWeight:tmpl.id===t.id?600:400, color:tmpl.id===t.id?"#A78BFA":txt }}>{t.label}</div>
+                    <div style={{ fontSize:11, fontWeight:tmpl.id===t.id?600:400, color:tmpl.id===t.id?"#6B62E8":txt }}>{t.label}</div>
                   </div>
                 ))}
               </div>
@@ -247,7 +247,7 @@ FILE: [filename.jpg]`;
               <div style={{ fontSize:11, color:txt3, marginBottom:6, textTransform:"uppercase", letterSpacing:"0.06em" }}>Tone</div>
               <div style={{ display:"flex", flexWrap:"wrap", gap:5, marginBottom:12 }}>
                 {TONES.map(t => (
-                  <div key={t} onClick={()=>setTone(t)} style={{ padding:"4px 10px", borderRadius:20, fontSize:11, cursor:"pointer", fontWeight:tone===t?600:400, background:tone===t?"#7C3AED22":"transparent", color:tone===t?"#A78BFA":txt2, border:`1px solid ${tone===t?"#7C3AED44":bdr}` }}>{t}</div>
+                  <div key={t} onClick={()=>setTone(t)} style={{ padding:"4px 10px", borderRadius:20, fontSize:11, cursor:"pointer", fontWeight:tone===t?600:400, background:tone===t?"#443DCB22":"transparent", color:tone===t?"#6B62E8":txt2, border:`1px solid ${tone===t?"#443DCB44":bdr}` }}>{t}</div>
                 ))}
               </div>
               <div style={{ fontSize:11, color:txt3, marginBottom:6, textTransform:"uppercase", letterSpacing:"0.06em" }}>Length</div>
@@ -256,7 +256,7 @@ FILE: [filename.jpg]`;
                 {LENGTHS.map(l => <option key={l} value={l}>{l}</option>)}
               </select>
               <button onClick={generate} disabled={loading||!topic.trim()}
-                style={{ width:"100%", padding:"11px", borderRadius:10, border:"none", background:loading||!topic.trim()?"#333":"#7C3AED", color:loading||!topic.trim()?txt3:"#fff", fontWeight:700, fontSize:14, cursor:loading||!topic.trim()?"not-allowed":"pointer" }}>
+                style={{ width:"100%", padding:"11px", borderRadius:10, border:"none", background:loading||!topic.trim()?"#333":"#443DCB", color:loading||!topic.trim()?txt3:"#fff", fontWeight:700, fontSize:14, cursor:loading||!topic.trim()?"not-allowed":"pointer" }}>
                 {loading ? "✍️ Writing..." : `✍️ Generate ${tmpl.label}`}
               </button>
             </div>
@@ -281,12 +281,12 @@ FILE: [filename.jpg]`;
                   <div style={{ display:"flex", gap:16, fontSize:12 }}>
                     <span style={{ color:txt2 }}>Words: <span style={{ color:txt, fontWeight:600 }}>{wordCount}</span></span>
                     <span style={{ color:txt2 }}>Chars: <span style={{ color:txt, fontWeight:600 }}>{output.length}</span></span>
-                    <span style={{ color:txt2 }}>Type: <span style={{ color:"#A78BFA", fontWeight:600 }}>{tmpl.label}</span></span>
+                    <span style={{ color:txt2 }}>Type: <span style={{ color:"#6B62E8", fontWeight:600 }}>{tmpl.label}</span></span>
                   </div>
                   <div style={{ display:"flex", gap:8 }}>
                     <button onClick={copyOutput} style={{ padding:"5px 12px", borderRadius:8, border:`1px solid ${bdr}`, background:"transparent", color:copied?"#059669":txt2, fontSize:12, cursor:"pointer" }}>{copied?"✅ Copied":"📋 Copy"}</button>
                     <button onClick={downloadOutput} style={{ padding:"5px 12px", borderRadius:8, border:"1px solid #0F766E44", background:"#0F766E11", color:"#0F766E", fontSize:12, cursor:"pointer" }}>⬇️ Download</button>
-                    <button onClick={generate} disabled={loading} style={{ padding:"5px 12px", borderRadius:8, border:"1px solid #7C3AED44", background:"#7C3AED11", color:"#A78BFA", fontSize:12, cursor:"pointer" }}>🔄 Regenerate</button>
+                    <button onClick={generate} disabled={loading} style={{ padding:"5px 12px", borderRadius:8, border:"1px solid #443DCB44", background:"#443DCB11", color:"#6B62E8", fontSize:12, cursor:"pointer" }}>🔄 Regenerate</button>
                   </div>
                 </div>
                 <div style={{ flex:1, overflowY:"auto", padding:20 }}>
@@ -302,7 +302,7 @@ FILE: [filename.jpg]`;
                   <div style={{ fontSize:48, marginBottom:16 }}>{tmpl.icon}</div>
                   <div style={{ fontSize:17, fontWeight:700, color:txt, marginBottom:8 }}>{tmpl.label}</div>
                   <div style={{ fontSize:13, color:txt2, marginBottom:24 }}>{tmpl.desc}</div>
-                  {loading && <div style={{ fontSize:13, color:"#A78BFA" }}>✍️ Writing your {tmpl.label}...</div>}
+                  {loading && <div style={{ fontSize:13, color:"#6B62E8" }}>✍️ Writing your {tmpl.label}...</div>}
                   {!loading && <div style={{ fontSize:12, color:txt3 }}>Fill in the details on the left and click Generate</div>}
                 </div>
               </div>
@@ -340,7 +340,7 @@ FILE: [filename.jpg]`;
                   </div>
                 </div>
                 <button onClick={generateAltText} disabled={imgLoading||!imgDesc.trim()}
-                  style={{ padding:"11px", borderRadius:10, border:"none", background:imgLoading||!imgDesc.trim()?"#333":"#7C3AED", color:imgLoading||!imgDesc.trim()?txt3:"#fff", fontWeight:700, fontSize:14, cursor:imgLoading||!imgDesc.trim()?"not-allowed":"pointer" }}>
+                  style={{ padding:"11px", borderRadius:10, border:"none", background:imgLoading||!imgDesc.trim()?"#333":"#443DCB", color:imgLoading||!imgDesc.trim()?txt3:"#fff", fontWeight:700, fontSize:14, cursor:imgLoading||!imgDesc.trim()?"not-allowed":"pointer" }}>
                   {imgLoading ? "🖼️ Generating..." : "🖼️ Generate Image SEO"}
                 </button>
               </div>
@@ -380,15 +380,15 @@ FILE: [filename.jpg]`;
                 ))}
 
                 {/* HTML snippet */}
-                <div style={{ background:bg2, border:`1px solid #7C3AED44`, borderRadius:10, padding:"12px 16px" }}>
+                <div style={{ background:bg2, border:`1px solid #443DCB44`, borderRadius:10, padding:"12px 16px" }}>
                   <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
-                    <span style={{ fontSize:12, fontWeight:600, color:"#A78BFA" }}>💻 Ready-to-use HTML</span>
+                    <span style={{ fontSize:12, fontWeight:600, color:"#6B62E8" }}>💻 Ready-to-use HTML</span>
                     <button onClick={()=>copyImg(`<img src="${imgResult.filename}" alt="${imgResult.alt1}" title="${imgResult.title}" loading="lazy">`, "html")}
-                      style={{ padding:"3px 10px", borderRadius:6, border:"1px solid #7C3AED44", background:"transparent", color:imgCopied==="html"?"#059669":"#A78BFA", fontSize:11, cursor:"pointer" }}>
+                      style={{ padding:"3px 10px", borderRadius:6, border:"1px solid #443DCB44", background:"transparent", color:imgCopied==="html"?"#059669":"#6B62E8", fontSize:11, cursor:"pointer" }}>
                       {imgCopied==="html"?"✅ Copied":"📋 Copy"}
                     </button>
                   </div>
-                  <div style={{ fontSize:12, color:"#A78BFA", background:bg3, padding:"10px 12px", borderRadius:8, fontFamily:"monospace", lineHeight:1.6 }}>
+                  <div style={{ fontSize:12, color:"#6B62E8", background:bg3, padding:"10px 12px", borderRadius:8, fontFamily:"monospace", lineHeight:1.6 }}>
                     {`<img src="${imgResult.filename}" alt="${imgResult.alt1}" title="${imgResult.title || ""}" loading="lazy">`}
                   </div>
                 </div>
@@ -421,7 +421,7 @@ FILE: [filename.jpg]`;
                 style={{ width:"100%", padding:"10px 14px", borderRadius:10, border:`1px solid ${bdr}`, background:bg3, color:txt, fontSize:13, outline:"none", resize:"none", fontFamily:"inherit", marginBottom:12, boxSizing:"border-box" }} />
               <div style={{ fontSize:11, color:txt3, marginBottom:12 }}>💡 Tip: Add " | keyword: your-keyword" after description to include a target keyword</div>
               <button onClick={generateBatch} disabled={batchLoading||!batchInput.trim()}
-                style={{ padding:"10px 24px", borderRadius:10, border:"none", background:batchLoading||!batchInput.trim()?"#333":"#7C3AED", color:batchLoading||!batchInput.trim()?txt3:"#fff", fontWeight:600, fontSize:13, cursor:batchLoading||!batchInput.trim()?"not-allowed":"pointer" }}>
+                style={{ padding:"10px 24px", borderRadius:10, border:"none", background:batchLoading||!batchInput.trim()?"#333":"#443DCB", color:batchLoading||!batchInput.trim()?txt3:"#fff", fontWeight:600, fontSize:13, cursor:batchLoading||!batchInput.trim()?"not-allowed":"pointer" }}>
                 {batchLoading?`Generating ${batchResults.length+1}...`:"▶ Generate All"}
               </button>
             </div>
@@ -441,7 +441,7 @@ FILE: [filename.jpg]`;
                           <div style={{ fontSize:11, color:txt3, marginBottom:2 }}>Alt Text:</div>
                           <div style={{ fontSize:12, color:txt, fontWeight:500 }}>{r.alt}</div>
                           <div style={{ fontSize:11, color:txt3, marginTop:6, marginBottom:2 }}>File Name:</div>
-                          <div style={{ fontSize:11, color:"#A78BFA", fontFamily:"monospace" }}>{r.file}</div>
+                          <div style={{ fontSize:11, color:"#6B62E8", fontFamily:"monospace" }}>{r.file}</div>
                         </div>
                         <button onClick={()=>copyImg(`alt="${r.alt}"`, `batch-${i}`)}
                           style={{ padding:"4px 10px", borderRadius:6, border:`1px solid ${bdr}`, background:"transparent", color:imgCopied===`batch-${i}`?"#059669":txt2, fontSize:11, cursor:"pointer", flexShrink:0 }}>

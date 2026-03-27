@@ -1,6 +1,6 @@
 export const TOOLS = [
   // ── CONTENT ──────────────────────────────────────────────
-  { id:"keyword", icon:"🔍", label:"Keyword Research", color:"#7C3AED", cat:"Content",
+  { id:"keyword", icon:"🔍", label:"Keyword Research", color:"#443DCB", cat:"Content",
     ph:"Enter topic, niche or URL...",
     prompt:i=>`You are an expert SEO keyword research specialist. For: "${i}", provide:
 1. 10 primary keywords with search intent (informational/navigational/transactional/commercial)
@@ -82,7 +82,7 @@ Be specific with exact changes needed.`},
 9. Crawl depth optimization tips
 Be specific with actual examples.`},
 
-  { id:"faq", icon:"❓", label:"FAQ Generator", color:"#7C3AED", cat:"Content",
+  { id:"faq", icon:"❓", label:"FAQ Generator", color:"#443DCB", cat:"Content",
     ph:"Enter topic or page content...",
     prompt:i=>`You are an expert SEO FAQ specialist. For: "${i}", generate:
 1. 15 FAQ questions with detailed answers
@@ -206,7 +206,7 @@ Be strategic and specific.`},
 7. 8-week content calendar
 Be specific and actionable.`},
 
-  { id:"airank", icon:"🎯", label:"AI Rank Check", color:"#7C3AED", cat:"Research",
+  { id:"airank", icon:"🎯", label:"AI Rank Check", color:"#443DCB", cat:"Research",
     ph:"Enter keyword or URL...",
     prompt:i=>`You are an expert SEO ranking analyst. For: "${i}":
 1. Ranking difficulty score (0-100)
@@ -401,7 +401,7 @@ Give specific, actionable strategies.`},
 10. Seasonal SEO calendar
 Be specific with examples.`},
 
-  { id:"voice", icon:"🎙️", label:"Voice Search SEO", color:"#7C3AED", cat:"Tools",
+  { id:"voice", icon:"🎙️", label:"Voice Search SEO", color:"#443DCB", cat:"Tools",
     ph:"Enter topic or business type...",
     prompt:i=>`You are an expert voice search optimization specialist. For: "${i}":
 1. Voice search query patterns

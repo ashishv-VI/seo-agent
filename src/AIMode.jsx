@@ -5,7 +5,7 @@ const AI_FEATURES = [
   { id:"aimode",    icon:"🤖", name:"Google AI Mode",        color:"#DB4437", desc:"Full AI-powered search experience" },
   { id:"sge",       icon:"✨", name:"Search Generative Exp.", color:"#0F9D58", desc:"Google's generative search experience" },
   { id:"featured",  icon:"⭐", name:"Featured Snippets",     color:"#F4B400", desc:"Position zero rich results" },
-  { id:"knowledge", icon:"🧠", name:"Knowledge Panel",       color:"#7C3AED", desc:"Entity knowledge cards" },
+  { id:"knowledge", icon:"🧠", name:"Knowledge Panel",       color:"#443DCB", desc:"Entity knowledge cards" },
   { id:"paa",       icon:"❓", name:"People Also Ask",       color:"#0891B2", desc:"Expandable question boxes" },
 ];
 
@@ -13,7 +13,7 @@ const QUERY_INTENTS = [
   { id:"informational", label:"Informational", icon:"📚", color:"#0891B2", desc:"How, What, Why questions" },
   { id:"transactional", label:"Transactional",  icon:"🛒", color:"#059669", desc:"Buy, Get, Download" },
   { id:"navigational",  label:"Navigational",   icon:"🧭", color:"#D97706", desc:"Brand/site searches" },
-  { id:"commercial",    label:"Commercial",      icon:"💼", color:"#7C3AED", desc:"Best, Top, Compare" },
+  { id:"commercial",    label:"Commercial",      icon:"💼", color:"#443DCB", desc:"Best, Top, Compare" },
   { id:"local",         label:"Local",           icon:"📍", color:"#DC2626", desc:"Near me, location-based" },
 ];
 
@@ -279,7 +279,7 @@ h1{color:#4285F4;}pre{white-space:pre-wrap;font-size:13px;line-height:1.8;}
         <div style={{ display:"flex", gap:8, marginBottom:20, flexWrap:"wrap" }}>
           <div style={tabStyle(activeTab==="optimizer")}            onClick={()=>setActiveTab("optimizer")}>🎯 AI Mode Optimizer</div>
           <div style={tabStyle(activeTab==="tracker","#0F9D58")}    onClick={()=>setActiveTab("tracker")}>📊 Keyword Tracker</div>
-          <div style={tabStyle(activeTab==="content","#7C3AED")}    onClick={()=>setActiveTab("content")}>✍️ Content Generator</div>
+          <div style={tabStyle(activeTab==="content","#443DCB")}    onClick={()=>setActiveTab("content")}>✍️ Content Generator</div>
           <div style={tabStyle(activeTab==="guide","#D97706")}      onClick={()=>setActiveTab("guide")}>📚 AI Mode Guide</div>
         </div>
 
@@ -471,7 +471,7 @@ h1{color:#4285F4;}pre{white-space:pre-wrap;font-size:13px;line-height:1.8;}
               </div>
 
               <button onClick={generateAIModeContent} disabled={contentLoading||!topic.trim()}
-                style={{ width:"100%", padding:"11px", borderRadius:10, border:"none", background:contentLoading||!topic.trim()?"#333":"#7C3AED", color:"#fff", fontWeight:700, fontSize:14, cursor:contentLoading||!topic.trim()?"not-allowed":"pointer" }}>
+                style={{ width:"100%", padding:"11px", borderRadius:10, border:"none", background:contentLoading||!topic.trim()?"#333":"#443DCB", color:"#fff", fontWeight:700, fontSize:14, cursor:contentLoading||!topic.trim()?"not-allowed":"pointer" }}>
                 {contentLoading ? "✍️ Generating AI Mode Content..." : "✍️ Generate AI Mode Content"}
               </button>
             </div>
@@ -486,7 +486,7 @@ h1{color:#4285F4;}pre{white-space:pre-wrap;font-size:13px;line-height:1.8;}
                       {copied==="content"?"✅ Copied":"📋 Copy"}
                     </button>
                     <button onClick={()=>{ const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([generatedContent],{type:"text/plain"})); a.download=`${topic.replace(/\s+/g,"-")}-ai-mode.txt`; a.click(); }} style={{ padding:"5px 12px", borderRadius:8, border:"1px solid #059669aa", background:"#05966911", color:"#059669", fontSize:11, cursor:"pointer" }}>⬇️ TXT</button>
-                    <button onClick={()=>exportPDF(generatedContent,"AI Mode Content")} style={{ padding:"5px 12px", borderRadius:8, border:"none", background:"#7C3AED", color:"#fff", fontSize:11, cursor:"pointer", fontWeight:600 }}>📥 PDF</button>
+                    <button onClick={()=>exportPDF(generatedContent,"AI Mode Content")} style={{ padding:"5px 12px", borderRadius:8, border:"none", background:"#443DCB", color:"#fff", fontSize:11, cursor:"pointer", fontWeight:600 }}>📥 PDF</button>
                   </div>
                 </div>
                 <div style={{ padding:"16px 20px" }}>
@@ -552,7 +552,7 @@ h1{color:#4285F4;}pre{white-space:pre-wrap;font-size:13px;line-height:1.8;}
                 ]
               },
               {
-                title:"Content Formats That Win AI Mode", icon:"✍️", color:"#7C3AED",
+                title:"Content Formats That Win AI Mode", icon:"✍️", color:"#443DCB",
                 items:[
                   "Definitive Guides — Comprehensive coverage of a topic (2000+ words)",
                   "Comparison Articles — Structured pros/cons with clear verdict",

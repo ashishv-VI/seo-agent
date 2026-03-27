@@ -66,12 +66,12 @@ export default function Compare({ dark, googleKey }) {
 
   function exportPDF() {
     if (!data) return;
-    const siteColors = ["#7C3AED","#DC2626","#059669"];
+    const siteColors = ["#443DCB","#DC2626","#059669"];
     const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Site Comparison Report</title>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
 body { font-family: 'Segoe UI', Arial, sans-serif; color:#1a1a18; padding:40px; }
-h1 { color:#7C3AED; font-size:24px; margin-bottom:4px; }
+h1 { color:#443DCB; font-size:24px; margin-bottom:4px; }
 .sub { color:#888; font-size:14px; margin-bottom:30px; }
 .sites { display:grid; grid-template-columns:repeat(${data.sites.length},1fr); gap:16px; margin-bottom:30px; }
 .site-card { border-radius:10px; padding:16px; text-align:center; }
@@ -140,8 +140,8 @@ ${[["LCP","lcp"],["TBT","tbt"],["CLS","cls"],["FCP","fcp"]].map(([label,key]) =>
   }
 
   const gradeColor = s => s>=90?"#059669":s>=50?"#D97706":"#DC2626";
-  const SITE_COLORS = ["#7C3AED","#DC2626","#059669"];
-  const tabStyle = (a) => ({ padding:"7px 16px", borderRadius:20, fontSize:12, cursor:"pointer", fontWeight:a?600:400, background:a?"#7C3AED22":"transparent", color:a?"#A78BFA":txt2, border:`1px solid ${a?"#7C3AED44":bdr}` });
+  const SITE_COLORS = ["#443DCB","#DC2626","#059669"];
+  const tabStyle = (a) => ({ padding:"7px 16px", borderRadius:20, fontSize:12, cursor:"pointer", fontWeight:a?600:400, background:a?"#443DCB22":"transparent", color:a?"#6B62E8":txt2, border:`1px solid ${a?"#443DCB44":bdr}` });
 
   const ScoreBar = ({ value, color, max=100 }) => (
     <div style={{ display:"flex", alignItems:"center", gap:8 }}>
@@ -167,7 +167,7 @@ ${[["LCP","lcp"],["TBT","tbt"],["CLS","cls"],["FCP","fcp"]].map(([label,key]) =>
         <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:12, padding:20, marginBottom:20 }}>
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12, marginBottom:12 }}>
             {[
-              { val:site1, set:setSite1, label:"Site 1 (Your site)", ph:"https://yoursite.com", color:"#7C3AED" },
+              { val:site1, set:setSite1, label:"Site 1 (Your site)", ph:"https://yoursite.com", color:"#443DCB" },
               { val:site2, set:setSite2, label:"Site 2 (Competitor)", ph:"https://competitor.com", color:"#DC2626" },
               { val:site3, set:setSite3, label:"Site 3 (Optional)", ph:"https://competitor2.com", color:"#059669" },
             ].map((s,i) => (
@@ -175,12 +175,12 @@ ${[["LCP","lcp"],["TBT","tbt"],["CLS","cls"],["FCP","fcp"]].map(([label,key]) =>
                 <div style={{ fontSize:11, color:s.color, marginBottom:6, fontWeight:600 }}>{s.label}</div>
                 <input value={s.val} onChange={e=>s.set(e.target.value)} onKeyDown={e=>e.key==="Enter"&&compare()}
                   placeholder={s.ph}
-                  style={{ width:"100%", padding:"10px 14px", borderRadius:10, border:`1px solid ${i===0?"#7C3AED44":i===1?"#DC262633":bdr}`, background:bg3, color:txt, fontSize:13, outline:"none", boxSizing:"border-box" }} />
+                  style={{ width:"100%", padding:"10px 14px", borderRadius:10, border:`1px solid ${i===0?"#443DCB44":i===1?"#DC262633":bdr}`, background:bg3, color:txt, fontSize:13, outline:"none", boxSizing:"border-box" }} />
               </div>
             ))}
           </div>
           <button onClick={compare} disabled={loading||!site1.trim()||!site2.trim()}
-            style={{ width:"100%", padding:"11px", borderRadius:10, border:"none", background:loading||!site1.trim()||!site2.trim()?"#333":"#7C3AED", color:loading||!site1.trim()||!site2.trim()?txt3:"#fff", fontWeight:700, fontSize:14, cursor:loading||!site1.trim()||!site2.trim()?"not-allowed":"pointer" }}>
+            style={{ width:"100%", padding:"11px", borderRadius:10, border:"none", background:loading||!site1.trim()||!site2.trim()?"#333":"#443DCB", color:loading||!site1.trim()||!site2.trim()?txt3:"#fff", fontWeight:700, fontSize:14, cursor:loading||!site1.trim()||!site2.trim()?"not-allowed":"pointer" }}>
             {loading ? "⚔️ Comparing sites..." : "⚔️ Compare Now"}
           </button>
           {error && <div style={{ fontSize:12, color:"#DC2626", marginTop:8, padding:"8px 12px", background:"#DC262611", borderRadius:8 }}>{error}</div>}
@@ -221,7 +221,7 @@ ${[["LCP","lcp"],["TBT","tbt"],["CLS","cls"],["FCP","fcp"]].map(([label,key]) =>
             {/* Export Buttons */}
             <div style={{ display:"flex", gap:8, marginBottom:16, justifyContent:"flex-end" }}>
               <button onClick={exportCSV} style={{ padding:"6px 14px", borderRadius:8, border:"1px solid #059669aa", background:"#05966911", color:"#059669", fontSize:12, cursor:"pointer", fontWeight:600 }}>⬇️ CSV</button>
-              <button onClick={exportPDF} style={{ padding:"6px 14px", borderRadius:8, border:"1px solid #7C3AED44", background:"#7C3AED", color:"#fff", fontSize:12, cursor:"pointer", fontWeight:600 }}>📥 PDF Report</button>
+              <button onClick={exportPDF} style={{ padding:"6px 14px", borderRadius:8, border:"1px solid #443DCB44", background:"#443DCB", color:"#fff", fontSize:12, cursor:"pointer", fontWeight:600 }}>📥 PDF Report</button>
             </div>
 
             {/* Tabs */}

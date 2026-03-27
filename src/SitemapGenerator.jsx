@@ -155,7 +155,7 @@ ${validUrls.map(u => {
     if (parsed.length) setUrls(parsed);
   }
 
-  const tabStyle = (a, color = "#7C3AED") => ({
+  const tabStyle = (a, color = "#443DCB") => ({
     padding: "6px 14px", borderRadius: 20, fontSize: 12, cursor: "pointer",
     fontWeight: a ? 600 : 400, background: a ? color + "22" : "transparent",
     color: a ? color : txt2, border: `1px solid ${a ? color + "44" : bdr}`, whiteSpace: "nowrap",
@@ -185,7 +185,7 @@ ${validUrls.map(u => {
                 style={{ ...inp, width: "100%", boxSizing: "border-box", padding: "10px 14px", borderRadius: 10, fontSize: 13 }} />
             </div>
             <div style={{ fontSize: 11, color: txt2, textAlign: "center", marginTop: 20 }}>
-              <div style={{ fontSize: 20, fontWeight: 800, color: "#7C3AED" }}>{urls.filter(u => u.loc.trim()).length}</div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: "#443DCB" }}>{urls.filter(u => u.loc.trim()).length}</div>
               <div>URLs</div>
             </div>
           </div>
@@ -255,7 +255,7 @@ ${validUrls.map(u => {
                 + Add URL
               </button>
               <button onClick={() => generateXML()}
-                style={{ flex: 1, padding: "10px", borderRadius: 10, border: "none", background: "#7C3AED", color: "#fff", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
+                style={{ flex: 1, padding: "10px", borderRadius: 10, border: "none", background: "#443DCB", color: "#fff", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
                 🗺️ Generate Sitemap XML
               </button>
             </div>
@@ -334,7 +334,7 @@ ${validUrls.map(u => {
                   {copied ? "✅ Copied!" : "📋 Copy XML"}
                 </button>
                 <button onClick={downloadXML}
-                  style={{ padding: "6px 14px", borderRadius: 8, border: "none", background: "#7C3AED", color: "#fff", fontSize: 12, cursor: "pointer", fontWeight: 600 }}>
+                  style={{ padding: "6px 14px", borderRadius: 8, border: "none", background: "#443DCB", color: "#fff", fontSize: 12, cursor: "pointer", fontWeight: 600 }}>
                   ⬇️ Download sitemap.xml
                 </button>
               </div>
@@ -344,8 +344,8 @@ ${validUrls.map(u => {
             </div>
 
             {/* Submission Guide */}
-            <div style={{ padding: 16, borderTop: `1px solid ${bdr}`, background: "#7C3AED11" }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: "#A78BFA", marginBottom: 8 }}>📋 Next Steps</div>
+            <div style={{ padding: 16, borderTop: `1px solid ${bdr}`, background: "#443DCB11" }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: "#6B62E8", marginBottom: 8 }}>📋 Next Steps</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                 {[
                   "Upload sitemap.xml to your domain root",
@@ -354,7 +354,7 @@ ${validUrls.map(u => {
                   "Submit in Bing Webmaster Tools",
                 ].map((step, i) => (
                   <div key={i} style={{ display: "flex", gap: 8, fontSize: 12, color: txt }}>
-                    <span style={{ color: "#7C3AED", fontWeight: 700, flexShrink: 0 }}>{i + 1}.</span>{step}
+                    <span style={{ color: "#443DCB", fontWeight: 700, flexShrink: 0 }}>{i + 1}.</span>{step}
                   </div>
                 ))}
               </div>

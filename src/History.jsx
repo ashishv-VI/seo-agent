@@ -82,7 +82,7 @@ export default function History({ msgs, onToolSelect, dark }) {
     count: TOOLS.filter(t=>t.cat===cat).reduce((a,t) => a + Math.floor((msgs[t.id]||[]).length/2), 0)
   })).filter(x=>x.count>0);
 
-  const tabStyle = (a, color="#7C3AED") => ({
+  const tabStyle = (a, color="#443DCB") => ({
     padding:"5px 12px", borderRadius:20, fontSize:11, cursor:"pointer",
     fontWeight:a?600:400, background:a?color+"22":"transparent",
     color:a?color:txt2, border:`1px solid ${a?color+"44":bdr}`,
@@ -101,7 +101,7 @@ export default function History({ msgs, onToolSelect, dark }) {
         {allItems.length > 0 && (
           <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:10, marginBottom:20 }}>
             {[
-              { label:"Total Analyses", value:allItems.length,                           color:"#7C3AED" },
+              { label:"Total Analyses", value:allItems.length,                           color:"#443DCB" },
               { label:"Tools Used",     value:toolUsage.length,                          color:"#059669" },
               { label:"Categories",     value:catStats.length,                           color:"#0891B2" },
               { label:"Most Used",      value:toolUsage[0]?.tool.label.slice(0,12)||"—", color:"#D97706" },

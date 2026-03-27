@@ -19,12 +19,12 @@ body {
 ::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 2px; }
 ::-webkit-scrollbar-thumb:hover { background: #444; }
 
-::selection { background: #7C3AED44; color: #e8e8e8; }
+::selection { background: #443DCB44; color: #e8e8e8; }
 
 input, textarea, button { font-family: inherit; }
 
-textarea:focus { outline: 2px solid #7C3AED66; outline-offset: 1px; }
-input:focus { outline: 2px solid #7C3AED66; outline-offset: 1px; }
+textarea:focus { outline: 2px solid #443DCB66; outline-offset: 1px; }
+input:focus { outline: 2px solid #443DCB66; outline-offset: 1px; }
 
 * { transition: none; }
 button { transition: background 0.15s, color 0.15s !important; }

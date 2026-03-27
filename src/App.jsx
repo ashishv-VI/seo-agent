@@ -227,25 +227,25 @@ function MainApp({ onLogout }) {
     app:     { fontFamily:"Inter,system-ui,sans-serif", display:"flex", height:"100vh", background:bg, color:txt, overflow:"hidden" },
     side:    { width:sideOpen?240:0, minWidth:sideOpen?240:0, background:bg2, borderRight:`1px solid ${bdr}`, display:"flex", flexDirection:"column", transition:"all 0.2s", overflow:"hidden", flexShrink:0 },
     logo:    { padding:"14px 16px", borderBottom:`1px solid ${bdr}`, display:"flex", alignItems:"center", gap:10, flexShrink:0 },
-    badge:   { width:32, height:32, borderRadius:8, background:"#7C3AED", display:"flex", alignItems:"center", justifyContent:"center", fontWeight:800, fontSize:14, color:"#fff", flexShrink:0 },
+    badge:   { width:32, height:32, borderRadius:8, background:"#443DCB", display:"flex", alignItems:"center", justifyContent:"center", fontWeight:800, fontSize:14, color:"#fff", flexShrink:0 },
     nav:     { flex:1, overflowY:"auto", padding:"6px" },
     catRow:  { display:"flex", flexWrap:"wrap", gap:4, padding:"8px 4px 4px" },
-    catBtn:  a => ({ padding:"3px 9px", borderRadius:20, fontSize:11, fontWeight:a?600:400, cursor:"pointer", border:"1px solid", background:a?"#7C3AED22":"transparent", color:a?"#A78BFA":txt2, borderColor:a?"#7C3AED44":bdr }),
+    catBtn:  a => ({ padding:"3px 9px", borderRadius:20, fontSize:11, fontWeight:a?600:400, cursor:"pointer", border:"1px solid", background:a?"#443DCB22":"transparent", color:a?"#6B62E8":txt2, borderColor:a?"#443DCB44":bdr }),
     secLabel:{ fontSize:10, color:txt3, padding:"8px 8px 3px", textTransform:"uppercase", letterSpacing:"0.08em" },
     navItem: (a, color) => ({ display:"flex", alignItems:"center", gap:8, padding:"7px 10px", borderRadius:8, marginBottom:1, cursor:"pointer", fontSize:12, fontWeight:a?600:400, background:a?color+"22":"transparent", color:a?color:txt2, border:a?`1px solid ${color}33`:"1px solid transparent", whiteSpace:"nowrap" }),
     main:    { flex:1, display:"flex", flexDirection:"column", overflow:"hidden", minWidth:0 },
     header:  { padding:"10px 16px", borderBottom:`1px solid ${bdr}`, background:bg2, display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, flexShrink:0 },
     msgs:    { flex:1, overflowY:"auto", padding:"20px", display:"flex", flexDirection:"column", gap:14 },
-    uBub:    { alignSelf:"flex-end", background:"#7C3AED", color:"#fff", padding:"10px 14px", borderRadius:"12px 12px 4px 12px", maxWidth:"75%", fontSize:13, lineHeight:1.6, whiteSpace:"pre-wrap" },
+    uBub:    { alignSelf:"flex-end", background:"#443DCB", color:"#fff", padding:"10px 14px", borderRadius:"12px 12px 4px 12px", maxWidth:"75%", fontSize:13, lineHeight:1.6, whiteSpace:"pre-wrap" },
     aBub:    { alignSelf:"flex-start", background:bg3, border:`1px solid ${bdr}`, color:txt, padding:"14px 16px", borderRadius:"4px 12px 12px 12px", maxWidth:"88%", fontSize:13 },
     inputArea:{ padding:"12px 16px", borderTop:`1px solid ${bdr}`, background:bg2, flexShrink:0 },
     textarea: { flex:1, padding:"10px 14px", borderRadius:10, border:`1px solid ${bdr}`, background:bg3, color:txt, fontSize:13, resize:"none", outline:"none", fontFamily:"inherit", lineHeight:1.5 },
-    runBtn:  ok => ({ padding:"0 18px", borderRadius:10, border:"none", background:ok?"#7C3AED":bdr, color:ok?"#fff":txt3, fontWeight:600, fontSize:13, cursor:ok?"pointer":"not-allowed", flexShrink:0, minWidth:64 }),
+    runBtn:  ok => ({ padding:"0 18px", borderRadius:10, border:"none", background:ok?"#443DCB":bdr, color:ok?"#fff":txt3, fontWeight:600, fontSize:13, cursor:ok?"pointer":"not-allowed", flexShrink:0, minWidth:64 }),
     overlay: { position:"fixed", inset:0, background:"rgba(0,0,0,0.85)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:100 },
     modal:   { background:bg2, border:`1px solid ${bdr}`, borderRadius:16, padding:28, width:440, maxWidth:"92vw" },
     label:   { fontSize:12, color:txt2, marginBottom:4, display:"block", marginTop:12 },
     inp:     { width:"100%", padding:"9px 12px", borderRadius:8, border:`1px solid ${bdr}`, background:bg3, color:txt, fontSize:13, outline:"none", boxSizing:"border-box" },
-    saveBtn: { width:"100%", padding:11, borderRadius:8, border:"none", background:"#7C3AED", color:"#fff", fontWeight:600, fontSize:14, cursor:"pointer", marginTop:16 },
+    saveBtn: { width:"100%", padding:11, borderRadius:8, border:"none", background:"#443DCB", color:"#fff", fontWeight:600, fontSize:14, cursor:"pointer", marginTop:16 },
   };
 
   const pageLabels = {
@@ -305,26 +305,26 @@ function MainApp({ onLogout }) {
 
             {/* User Info */}
             <div style={{ padding:"8px 10px", marginBottom:6, background:bg3, borderRadius:8, display:"flex", alignItems:"center", gap:8 }}>
-              <div style={{ width:28, height:28, borderRadius:"50%", background:"#7C3AED", display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, color:"#fff", fontWeight:700, flexShrink:0 }}>
+              <div style={{ width:28, height:28, borderRadius:"50%", background:"#443DCB", display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, color:"#fff", fontWeight:700, flexShrink:0 }}>
                 {user?.displayName?.[0]?.toUpperCase() || user?.email?.[0]?.toUpperCase() || "U"}
               </div>
               <div style={{ flex:1, minWidth:0 }}>
                 <div style={{ fontSize:11, fontWeight:600, color:txt, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
                   {user?.displayName || user?.email?.split("@")[0] || "User"}
                 </div>
-                <div style={{ fontSize:9, color:"#A78BFA" }}>Free Plan</div>
+                <div style={{ fontSize:9, color:"#6B62E8" }}>Free Plan</div>
               </div>
               <div onClick={onLogout} title="Logout"
                 style={{ fontSize:14, cursor:"pointer", color:txt3 }}>🚪</div>
             </div>
 
             <div style={s.secLabel}>Agency</div>
-            <div onClick={()=>setPage("clients")} style={s.navItem(page==="clients", "#7C3AED")}>🏢 <span>Client Manager</span></div>
+            <div onClick={()=>setPage("clients")} style={s.navItem(page==="clients", "#443DCB")}>🏢 <span>Client Manager</span></div>
 
             <div style={s.secLabel}>Main</div>
-            <div onClick={()=>setPage("dashboard")}     style={s.navItem(page==="dashboard",     "#7C3AED")}>🏠 <span>Dashboard</span></div>
+            <div onClick={()=>setPage("dashboard")}     style={s.navItem(page==="dashboard",     "#443DCB")}>🏠 <span>Dashboard</span></div>
             <div onClick={()=>setPage("promptcontent")} style={s.navItem(page==="promptcontent", "#F59E0B")}>⚡ <span>Prompt-to-Content</span></div>
-            <div onClick={()=>setPage("writer")}        style={s.navItem(page==="writer",        "#7C3AED")}>✍️ <span>AI Writer</span></div>
+            <div onClick={()=>setPage("writer")}        style={s.navItem(page==="writer",        "#443DCB")}>✍️ <span>AI Writer</span></div>
 
             <div style={s.secLabel}>Analytics</div>
             <div onClick={()=>setPage("gsc")}           style={s.navItem(page==="gsc",           "#059669")}>📈 <span>Search Console</span></div>
@@ -335,13 +335,13 @@ function MainApp({ onLogout }) {
             <div style={s.secLabel}>SEO Tools</div>
             <div onClick={()=>setPage("audit")}         style={s.navItem(page==="audit",         "#DC2626")}>🏥 <span>Site Audit</span></div>
             <div onClick={()=>setPage("compare")}       style={s.navItem(page==="compare",       "#0891B2")}>⚔️ <span>Compare Sites</span></div>
-            <div onClick={()=>setPage("competitorgap")} style={s.navItem(page==="competitorgap", "#7C3AED")}>🕵️ <span>Competitor Gap</span></div>
+            <div onClick={()=>setPage("competitorgap")} style={s.navItem(page==="competitorgap", "#443DCB")}>🕵️ <span>Competitor Gap</span></div>
             <div onClick={()=>setPage("backlink")}      style={s.navItem(page==="backlink",      "#1E40AF")}>🔗 <span>Backlink Analyzer</span></div>
             <div onClick={()=>setPage("readability")}   style={s.navItem(page==="readability",   "#059669")}>📖 <span>Readability Checker</span></div>
             <div onClick={()=>setPage("sitemap")}       style={s.navItem(page==="sitemap",       "#D97706")}>🗺️ <span>Sitemap Generator</span></div>
 
             <div style={s.secLabel}>AI Optimization</div>
-            <div onClick={()=>setPage("aeo")}           style={s.navItem(page==="aeo",           "#7C3AED")}>🎯 <span>AEO Optimizer</span></div>
+            <div onClick={()=>setPage("aeo")}           style={s.navItem(page==="aeo",           "#443DCB")}>🎯 <span>AEO Optimizer</span></div>
             <div onClick={()=>setPage("aimode")}        style={s.navItem(page==="aimode",        "#4285F4")}>🤖 <span>AI Mode Optimizer</span></div>
             <div onClick={()=>setPage("location")}      style={s.navItem(page==="location",      "#059669")}>🌍 <span>Location Keywords</span></div>
             <div onClick={()=>setPage("serpsimulator")} style={s.navItem(page==="serpsimulator", "#EA4335")}>🔎 <span>SERP Simulator</span></div>
@@ -380,7 +380,7 @@ function MainApp({ onLogout }) {
         <div style={{ padding:8, borderTop:`1px solid ${bdr}`, flexShrink:0 }}>
           <div style={{ padding:"6px 8px", fontSize:11, color:txt3, display:"flex", justifyContent:"space-between" }}>
             <span>Total analyses</span>
-            <span style={{ color:"#7C3AED", fontWeight:600 }}>{count}</span>
+            <span style={{ color:"#443DCB", fontWeight:600 }}>{count}</span>
           </div>
           <div onClick={()=>{ setTmpKeys({...keys}); setShowSettings(true); }}
             style={{ padding:"8px 10px", borderRadius:8, cursor:"pointer", fontSize:12, color:txt2, display:"flex", alignItems:"center", gap:8 }}>
@@ -462,7 +462,7 @@ function MainApp({ onLogout }) {
                 <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
                   {bulkResults.map((r,i) => (
                     <div key={i} style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, padding:"12px 16px" }}>
-                      <div style={{ fontWeight:600, color:"#7C3AED", fontSize:13, marginBottom:6 }}>🔍 {r.keyword}</div>
+                      <div style={{ fontWeight:600, color:"#443DCB", fontSize:13, marginBottom:6 }}>🔍 {r.keyword}</div>
                       <div style={{ fontSize:12, color:txt2, lineHeight:1.7 }}>{r.result}</div>
                     </div>
                   ))}

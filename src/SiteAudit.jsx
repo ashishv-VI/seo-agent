@@ -162,7 +162,7 @@ Provide: 1) Overall assessment 2) Top 3 priority fixes with exact steps 3) Expec
     </div>
   );
 
-  const tabStyle = (a) => ({ padding:"8px 18px", borderRadius:20, fontSize:12, cursor:"pointer", fontWeight:a?600:400, background:a?"#7C3AED22":"transparent", color:a?"#A78BFA":txt2, border:`1px solid ${a?"#7C3AED44":bdr}` });
+  const tabStyle = (a) => ({ padding:"8px 18px", borderRadius:20, fontSize:12, cursor:"pointer", fontWeight:a?600:400, background:a?"#443DCB22":"transparent", color:a?"#6B62E8":txt2, border:`1px solid ${a?"#443DCB44":bdr}` });
 
   return (
     <div style={{ flex:1, overflowY:"auto", padding:24, background:bg }}>
@@ -187,7 +187,7 @@ Provide: 1) Overall assessment 2) Top 3 priority fixes with exact steps 3) Expec
                   placeholder="https://yourdomain.com"
                   style={{ flex:1, padding:"10px 14px", borderRadius:10, border:`1px solid ${bdr}`, background:bg3, color:txt, fontSize:13, outline:"none" }} />
                 <button onClick={runAudit} disabled={loading||!url.trim()}
-                  style={{ padding:"10px 20px", borderRadius:10, border:"none", background:loading||!url.trim()?"#333":"#7C3AED", color:loading||!url.trim()?txt3:"#fff", fontWeight:600, fontSize:13, cursor:loading||!url.trim()?"not-allowed":"pointer" }}>
+                  style={{ padding:"10px 20px", borderRadius:10, border:"none", background:loading||!url.trim()?"#333":"#443DCB", color:loading||!url.trim()?txt3:"#fff", fontWeight:600, fontSize:13, cursor:loading||!url.trim()?"not-allowed":"pointer" }}>
                   {loading?"Auditing...":"Run Audit"}
                 </button>
               </div>
@@ -257,7 +257,7 @@ Provide: 1) Overall assessment 2) Top 3 priority fixes with exact steps 3) Expec
                     <div style={{ fontSize:13, fontWeight:600, color:txt }}>🤖 AI Recommendations</div>
                     {!aiInsights && (
                       <button onClick={getAiInsights} disabled={aiLoading}
-                        style={{ padding:"6px 16px", borderRadius:8, border:"none", background:aiLoading?"#333":"#7C3AED", color:aiLoading?txt3:"#fff", fontSize:12, cursor:aiLoading?"not-allowed":"pointer" }}>
+                        style={{ padding:"6px 16px", borderRadius:8, border:"none", background:aiLoading?"#333":"#443DCB", color:aiLoading?txt3:"#fff", fontSize:12, cursor:aiLoading?"not-allowed":"pointer" }}>
                         {aiLoading?"Analyzing...":"Get AI Insights"}
                       </button>
                     )}
@@ -292,7 +292,7 @@ Provide: 1) Overall assessment 2) Top 3 priority fixes with exact steps 3) Expec
                   placeholder="https://yourdomain.com/page"
                   style={{ flex:1, padding:"10px 14px", borderRadius:10, border:`1px solid ${bdr}`, background:bg3, color:txt, fontSize:13, outline:"none" }} />
                 <button onClick={()=>checkIndexing(indexUrl)} disabled={indexLoading||!indexUrl.trim()}
-                  style={{ padding:"10px 20px", borderRadius:10, border:"none", background:indexLoading||!indexUrl.trim()?"#333":"#7C3AED", color:indexLoading||!indexUrl.trim()?txt3:"#fff", fontWeight:600, fontSize:13, cursor:indexLoading||!indexUrl.trim()?"not-allowed":"pointer" }}>
+                  style={{ padding:"10px 20px", borderRadius:10, border:"none", background:indexLoading||!indexUrl.trim()?"#333":"#443DCB", color:indexLoading||!indexUrl.trim()?txt3:"#fff", fontWeight:600, fontSize:13, cursor:indexLoading||!indexUrl.trim()?"not-allowed":"pointer" }}>
                   {indexLoading?"Checking...":"Check Index"}
                 </button>
               </div>
@@ -357,7 +357,7 @@ Provide: 1) Overall assessment 2) Top 3 priority fixes with exact steps 3) Expec
                 rows={6}
                 style={{ width:"100%", padding:"10px 14px", borderRadius:10, border:`1px solid ${bdr}`, background:bg3, color:txt, fontSize:13, outline:"none", resize:"none", fontFamily:"inherit", marginBottom:10, boxSizing:"border-box" }} />
               <button onClick={checkBulkIndexing} disabled={bulkLoading||!bulkUrls.trim()}
-                style={{ padding:"10px 24px", borderRadius:10, border:"none", background:bulkLoading||!bulkUrls.trim()?"#333":"#7C3AED", color:bulkLoading||!bulkUrls.trim()?txt3:"#fff", fontWeight:600, fontSize:13, cursor:bulkLoading||!bulkUrls.trim()?"not-allowed":"pointer" }}>
+                style={{ padding:"10px 24px", borderRadius:10, border:"none", background:bulkLoading||!bulkUrls.trim()?"#333":"#443DCB", color:bulkLoading||!bulkUrls.trim()?txt3:"#fff", fontWeight:600, fontSize:13, cursor:bulkLoading||!bulkUrls.trim()?"not-allowed":"pointer" }}>
                 {bulkLoading?`Checking ${bulkResults.length+1}...`:"▶ Check All URLs"}
               </button>
             </div>

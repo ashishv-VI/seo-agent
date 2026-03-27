@@ -105,15 +105,15 @@ export default function GscDashboard({ dark, gscToken }) {
     statNum:{ fontSize:24, fontWeight:700, color:txt, marginBottom:4 },
     statLbl:{ fontSize:11, color:txt2 },
     tabRow: { display:"flex", gap:8, marginBottom:16, flexWrap:"wrap" },
-    tab:    (a) => ({ padding:"6px 16px", borderRadius:20, fontSize:12, cursor:"pointer", fontWeight:a?600:400, background:a?"#7C3AED22":"transparent", color:a?"#A78BFA":txt2, border:`1px solid ${a?"#7C3AED44":bdr}` }),
+    tab:    (a) => ({ padding:"6px 16px", borderRadius:20, fontSize:12, cursor:"pointer", fontWeight:a?600:400, background:a?"#443DCB22":"transparent", color:a?"#6B62E8":txt2, border:`1px solid ${a?"#443DCB44":bdr}` }),
     table:  { width:"100%", borderCollapse:"collapse" },
     th:     { textAlign:"left", padding:"8px 12px", fontSize:11, color:txt2, fontWeight:500, borderBottom:`1px solid ${bdr}`, textTransform:"uppercase", letterSpacing:"0.05em" },
     td:     { padding:"10px 12px", fontSize:12, color:txt, borderBottom:`1px solid ${bdr}33` },
     inp:    { flex:1, padding:"10px 14px", borderRadius:10, border:`1px solid ${bdr}`, background:bg3, color:txt, fontSize:13, outline:"none", fontFamily:"inherit" },
-    btn:    (ok,color="#7C3AED") => ({ padding:"10px 20px", borderRadius:10, border:"none", background:ok?color:bdr, color:ok?"#fff":txt3, fontWeight:600, fontSize:13, cursor:ok?"pointer":"not-allowed" }),
+    btn:    (ok,color="#443DCB") => ({ padding:"10px 20px", borderRadius:10, border:"none", background:ok?color:bdr, color:ok?"#fff":txt3, fontWeight:600, fontSize:13, cursor:ok?"pointer":"not-allowed" }),
     sel:    { padding:"8px 12px", borderRadius:8, border:`1px solid ${bdr}`, background:bg3, color:txt, fontSize:12, cursor:"pointer", outline:"none" },
-    bar:    { height:4, borderRadius:2, background:"#7C3AED33", marginTop:4, overflow:"hidden" },
-    barFill:(pct) => ({ height:"100%", width:`${Math.min(pct,100)}%`, background:"#7C3AED", borderRadius:2 }),
+    bar:    { height:4, borderRadius:2, background:"#443DCB33", marginTop:4, overflow:"hidden" },
+    barFill:(pct) => ({ height:"100%", width:`${Math.min(pct,100)}%`, background:"#443DCB", borderRadius:2 }),
   };
 
   const maxClicks = data?.queries?.length ? Math.max(...data.queries.map(r=>r.clicks),1) : 1;
@@ -156,7 +156,7 @@ export default function GscDashboard({ dark, gscToken }) {
           {/* Stats */}
           <div style={s.statGrid}>
             {[
-              { label:"Total Clicks", val:data.totalClicks.toLocaleString(), color:"#7C3AED" },
+              { label:"Total Clicks", val:data.totalClicks.toLocaleString(), color:"#443DCB" },
               { label:"Impressions",  val:data.totalImpressions.toLocaleString(), color:"#0891B2" },
               { label:"Avg CTR",      val:data.avgCTR+"%", color:"#059669" },
               { label:"Avg Position", val:"#"+data.avgPosition, color:"#D97706" },
@@ -192,7 +192,7 @@ export default function GscDashboard({ dark, gscToken }) {
                     <div key={i} style={{ display:"flex", justifyContent:"space-between", padding:"7px 0", borderBottom:`1px solid ${bdr}33`, fontSize:12 }}>
                       <span style={{ color:txt, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:"65%" }}>{r.keys[0]}</span>
                       <div style={{ display:"flex", gap:8, flexShrink:0 }}>
-                        <span style={{ color:"#7C3AED", fontWeight:600 }}>{r.clicks}</span>
+                        <span style={{ color:"#443DCB", fontWeight:600 }}>{r.clicks}</span>
                         <span style={{ color:posColor(r.position), fontSize:11 }}>#{r.position.toFixed(0)}</span>
                       </div>
                     </div>
@@ -229,7 +229,7 @@ export default function GscDashboard({ dark, gscToken }) {
                         <div style={{ fontWeight:500 }}>{r.keys[0]}</div>
                         <div style={s.bar}><div style={s.barFill((r.clicks/maxClicks)*100)} /></div>
                       </td>
-                      <td style={{ ...s.td, color:"#7C3AED", fontWeight:600 }}>{r.clicks}</td>
+                      <td style={{ ...s.td, color:"#443DCB", fontWeight:600 }}>{r.clicks}</td>
                       <td style={s.td}>{r.impressions.toLocaleString()}</td>
                       <td style={{ ...s.td, color:ctrColor(r.ctr) }}>{(r.ctr*100).toFixed(1)}%</td>
                       <td style={{ ...s.td, color:posColor(r.position), fontWeight:600 }}>#{r.position.toFixed(0)}</td>
@@ -256,7 +256,7 @@ export default function GscDashboard({ dark, gscToken }) {
                           {r.keys[0].replace(/^https?:\/\/[^/]+/,"")||"/"}
                         </div>
                       </td>
-                      <td style={{ ...s.td, color:"#7C3AED", fontWeight:600 }}>{r.clicks}</td>
+                      <td style={{ ...s.td, color:"#443DCB", fontWeight:600 }}>{r.clicks}</td>
                       <td style={s.td}>{r.impressions.toLocaleString()}</td>
                       <td style={{ ...s.td, color:ctrColor(r.ctr) }}>{(r.ctr*100).toFixed(1)}%</td>
                       <td style={{ ...s.td, color:posColor(r.position), fontWeight:600 }}>#{r.position.toFixed(0)}</td>
@@ -279,7 +279,7 @@ export default function GscDashboard({ dark, gscToken }) {
                   {data.countries.map((r,i) => (
                     <tr key={i}>
                       <td style={{ ...s.td, fontWeight:500, textTransform:"uppercase" }}>{r.keys[0]}</td>
-                      <td style={{ ...s.td, color:"#7C3AED", fontWeight:600 }}>{r.clicks}</td>
+                      <td style={{ ...s.td, color:"#443DCB", fontWeight:600 }}>{r.clicks}</td>
                       <td style={s.td}>{r.impressions.toLocaleString()}</td>
                       <td style={{ ...s.td, color:ctrColor(r.ctr) }}>{(r.ctr*100).toFixed(1)}%</td>
                       <td style={{ ...s.td, color:posColor(r.position), fontWeight:600 }}>#{r.position.toFixed(0)}</td>
@@ -297,7 +297,7 @@ export default function GscDashboard({ dark, gscToken }) {
               <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:12 }}>
                 {data.devices.map((r,i) => {
                   const icons = { mobile:"📱", desktop:"🖥️", tablet:"📟" };
-                  const colors = { mobile:"#7C3AED", desktop:"#0891B2", tablet:"#059669" };
+                  const colors = { mobile:"#443DCB", desktop:"#0891B2", tablet:"#059669" };
                   const dev = r.keys[0];
                   return (
                     <div key={i} style={{ background:bg3, border:`1px solid ${bdr}`, borderRadius:10, padding:16, textAlign:"center" }}>
@@ -306,7 +306,7 @@ export default function GscDashboard({ dark, gscToken }) {
                       <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
                         <div style={{ display:"flex", justifyContent:"space-between", fontSize:12 }}>
                           <span style={{ color:txt2 }}>Clicks</span>
-                          <span style={{ color:colors[dev]||"#7C3AED", fontWeight:600 }}>{r.clicks}</span>
+                          <span style={{ color:colors[dev]||"#443DCB", fontWeight:600 }}>{r.clicks}</span>
                         </div>
                         <div style={{ display:"flex", justifyContent:"space-between", fontSize:12 }}>
                           <span style={{ color:txt2 }}>Impressions</span>

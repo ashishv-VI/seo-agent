@@ -149,7 +149,7 @@ function GoogleIcon() {
 }
 
 /* ─── Mini bar chart ─────────────────────────────────────────────────────── */
-function MiniBarChart({ color = "#A78BFA" }) {
+function MiniBarChart({ color = "#6B62E8" }) {
   const bars = [30, 50, 38, 70, 55, 82, 65, 90, 74, 100];
   return (
     <div style={{ display:"flex", alignItems:"flex-end", gap:3, height:38 }}>
@@ -225,22 +225,22 @@ function CircuitOverlay() {
       <defs>
         <pattern id="circuit" x="0" y="0" width="120" height="120" patternUnits="userSpaceOnUse">
           {/* Horizontal traces */}
-          <line x1="0" y1="30" x2="50" y2="30" stroke="#A78BFA" strokeWidth="1"/>
-          <line x1="70" y1="30" x2="120" y2="30" stroke="#A78BFA" strokeWidth="1"/>
+          <line x1="0" y1="30" x2="50" y2="30" stroke="#6B62E8" strokeWidth="1"/>
+          <line x1="70" y1="30" x2="120" y2="30" stroke="#6B62E8" strokeWidth="1"/>
           <line x1="0" y1="90" x2="40" y2="90" stroke="#818CF8" strokeWidth="1"/>
           <line x1="80" y1="90" x2="120" y2="90" stroke="#818CF8" strokeWidth="1"/>
           {/* Vertical traces */}
-          <line x1="30" y1="0" x2="30" y2="20" stroke="#A78BFA" strokeWidth="1"/>
-          <line x1="30" y1="40" x2="30" y2="80" stroke="#A78BFA" strokeWidth="1"/>
+          <line x1="30" y1="0" x2="30" y2="20" stroke="#6B62E8" strokeWidth="1"/>
+          <line x1="30" y1="40" x2="30" y2="80" stroke="#6B62E8" strokeWidth="1"/>
           <line x1="90" y1="0" x2="90" y2="60" stroke="#818CF8" strokeWidth="1"/>
           <line x1="90" y1="100" x2="90" y2="120" stroke="#818CF8" strokeWidth="1"/>
           {/* Nodes */}
-          <circle cx="30" cy="30" r="3" fill="none" stroke="#A78BFA" strokeWidth="1"/>
+          <circle cx="30" cy="30" r="3" fill="none" stroke="#6B62E8" strokeWidth="1"/>
           <circle cx="90" cy="90" r="3" fill="none" stroke="#818CF8" strokeWidth="1"/>
-          <circle cx="30" cy="90" r="2" fill="#A78BFA" opacity="0.5"/>
+          <circle cx="30" cy="90" r="2" fill="#6B62E8" opacity="0.5"/>
           <circle cx="90" cy="30" r="2" fill="#818CF8" opacity="0.5"/>
           {/* Corner traces */}
-          <path d="M50,30 Q60,30 60,40 L60,80 Q60,90 70,90" fill="none" stroke="#A78BFA" strokeWidth="1"/>
+          <path d="M50,30 Q60,30 60,40 L60,80 Q60,90 70,90" fill="none" stroke="#6B62E8" strokeWidth="1"/>
           <path d="M40,90 Q40,60 50,60 L70,60 Q80,60 80,30" fill="none" stroke="#818CF8" strokeWidth="1"/>
         </pattern>
       </defs>
@@ -255,13 +255,13 @@ function CityLights() {
     { top:"8%",  left:"15%",  size:6,  color:"#EA2227", anim:"city-flicker 3s .2s infinite" },
     { top:"12%", left:"45%",  size:4,  color:"#F97316", anim:"city-flicker 4s 1s infinite" },
     { top:"18%", left:"72%",  size:8,  color:"#3B82F6", anim:"city-flicker 2.5s .5s infinite" },
-    { top:"25%", left:"28%",  size:5,  color:"#A78BFA", anim:"city-flicker 5s 0s infinite" },
+    { top:"25%", left:"28%",  size:5,  color:"#6B62E8", anim:"city-flicker 5s 0s infinite" },
     { top:"55%", left:"10%",  size:7,  color:"#F59E0B", anim:"city-flicker 3.5s .8s infinite" },
     { top:"62%", left:"55%",  size:4,  color:"#EA2227", anim:"city-flicker 4.5s .3s infinite" },
     { top:"70%", left:"80%",  size:6,  color:"#10B981", anim:"city-flicker 3s 1.5s infinite" },
     { top:"80%", left:"35%",  size:5,  color:"#3B82F6", anim:"city-flicker 2s .7s infinite" },
     { top:"85%", left:"65%",  size:8,  color:"#F97316", anim:"city-flicker 4s .2s infinite" },
-    { top:"40%", left:"88%",  size:4,  color:"#A78BFA", anim:"city-flicker 3.5s 1.2s infinite" },
+    { top:"40%", left:"88%",  size:4,  color:"#6B62E8", anim:"city-flicker 3.5s 1.2s infinite" },
     { top:"50%", left:"3%",   size:5,  color:"#EA2227", anim:"city-flicker 5s .6s infinite" },
     { top:"33%", left:"62%",  size:3,  color:"#F59E0B", anim:"city-flicker 2.5s .9s infinite" },
   ];
@@ -396,7 +396,7 @@ export default function Login() {
           {/* Card 1 — Traffic growth */}
           <div className="glass-card" style={{ top:"9%", right:"6%", animation:"float-up 4.5s ease-in-out 0s infinite" }}>
             <div style={{ fontSize:10, color:"rgba(255,255,255,0.4)", marginBottom:4, letterSpacing:.6 }}>📊 Avg. Traffic Growth</div>
-            <div style={{ fontSize:26, fontWeight:900, background:"linear-gradient(90deg,#fff,#A78BFA)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>600%</div>
+            <div style={{ fontSize:26, fontWeight:900, background:"linear-gradient(90deg,#fff,#6B62E8)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>600%</div>
             <div style={{ fontSize:9, color:"#10B981", marginTop:2, fontWeight:600 }}>↑ +128% vs last quarter</div>
           </div>
 
@@ -415,7 +415,7 @@ export default function Login() {
           {/* Card 4 — Mini chart */}
           <div className="glass-card" style={{ bottom:"8%", left:"4%", minWidth:190, animation:"float-down 4.5s ease-in-out 1.1s infinite" }}>
             <div style={{ fontSize:10, color:"rgba(255,255,255,0.4)", marginBottom:8 }}>📈 Organic Clicks</div>
-            <MiniBarChart color="#A78BFA"/>
+            <MiniBarChart color="#6B62E8"/>
             <div style={{ fontSize:9, color:"#10B981", marginTop:6, fontWeight:600 }}>↑ 300% this quarter</div>
           </div>
 
@@ -571,7 +571,7 @@ export default function Login() {
                 <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:7 }}>
                   <label style={{ fontSize:12, color:"rgba(255,255,255,0.4)", fontWeight:600, letterSpacing:.3 }}>PASSWORD</label>
                   {isLogin && (
-                    <span style={{ fontSize:11.5, color:"#A78BFA", cursor:"pointer", fontWeight:600 }}>Forgot?</span>
+                    <span style={{ fontSize:11.5, color:"#6B62E8", cursor:"pointer", fontWeight:600 }}>Forgot?</span>
                   )}
                 </div>
                 <input
@@ -605,7 +605,7 @@ export default function Login() {
               {isLogin ? "New here? " : "Have an account? "}
               <span
                 onClick={()=>{ setIsLogin(!isLogin); setError(""); }}
-                style={{ color:"#A78BFA", cursor:"pointer", fontWeight:700 }}
+                style={{ color:"#6B62E8", cursor:"pointer", fontWeight:700 }}
               >
                 {isLogin ? "Create free account" : "Sign in"}
               </span>

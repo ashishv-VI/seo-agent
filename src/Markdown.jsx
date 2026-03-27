@@ -59,7 +59,7 @@ export default function Markdown({ text, dark }) {
     // Blockquote
     else if (line.startsWith("> ")) {
       elements.push(
-        <blockquote key={i} style={{ borderLeft: dark?"3px solid #7C3AED":"3px solid #7C3AED", paddingLeft:12, margin:"6px 0", color: dark?"#aaa":"#555", fontStyle:"italic", fontSize:13 }}>
+        <blockquote key={i} style={{ borderLeft: dark?"3px solid #443DCB":"3px solid #443DCB", paddingLeft:12, margin:"6px 0", color: dark?"#aaa":"#555", fontStyle:"italic", fontSize:13 }}>
           {parseLine(line.slice(2))}
         </blockquote>
       );
@@ -117,7 +117,7 @@ function parseLine(text) {
     const cMatch = remaining.match(/^(.*?)`(.*?)`/s);
     if (cMatch && cMatch[1] !== undefined) {
       if (cMatch[1]) parts.push(<span key={key++}>{cMatch[1]}</span>);
-      parts.push(<code key={key++} style={{ background:"#7C3AED22", color:"#A78BFA", padding:"1px 5px", borderRadius:4, fontSize:12, fontFamily:"monospace" }}>{cMatch[2]}</code>);
+      parts.push(<code key={key++} style={{ background:"#443DCB22", color:"#6B62E8", padding:"1px 5px", borderRadius:4, fontSize:12, fontFamily:"monospace" }}>{cMatch[2]}</code>);
       remaining = remaining.slice(cMatch[0].length);
       continue;
     }

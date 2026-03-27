@@ -159,7 +159,7 @@ ${meta.twitterSite ? `<meta property="twitter:site" content="${meta.twitterSite}
     navigator.clipboard.writeText(code);
   }
 
-  const tabStyle = (a, color = "#7C3AED") => ({
+  const tabStyle = (a, color = "#443DCB") => ({
     padding: "6px 14px", borderRadius: 20, fontSize: 12, cursor: "pointer",
     fontWeight: a ? 600 : 400, background: a ? color + "22" : "transparent",
     color: a ? color : txt2, border: `1px solid ${a ? color + "44" : bdr}`,
@@ -209,7 +209,7 @@ ${meta.twitterSite ? `<meta property="twitter:site" content="${meta.twitterSite}
                   placeholder="Enter page topic or keyword..."
                   style={{ ...inp, flex: 1 }} />
                 <button onClick={generateWithAI} disabled={aiLoading || !topic.trim()}
-                  style={{ padding: "9px 16px", borderRadius: 8, border: "none", background: aiLoading || !topic.trim() ? "#333" : "#7C3AED", color: aiLoading || !topic.trim() ? txt3 : "#fff", fontWeight: 600, fontSize: 12, cursor: aiLoading || !topic.trim() ? "not-allowed" : "pointer", whiteSpace: "nowrap" }}>
+                  style={{ padding: "9px 16px", borderRadius: 8, border: "none", background: aiLoading || !topic.trim() ? "#333" : "#443DCB", color: aiLoading || !topic.trim() ? txt3 : "#fff", fontWeight: 600, fontSize: 12, cursor: aiLoading || !topic.trim() ? "not-allowed" : "pointer", whiteSpace: "nowrap" }}>
                   {aiLoading ? "..." : "✨ Generate"}
                 </button>
               </div>
@@ -315,7 +315,7 @@ ${meta.twitterSite ? `<meta property="twitter:site" content="${meta.twitterSite}
 
             {/* Export */}
             <button onClick={exportCode}
-              style={{ padding: "11px", borderRadius: 10, border: "none", background: "#7C3AED", color: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+              style={{ padding: "11px", borderRadius: 10, border: "none", background: "#443DCB", color: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
               📋 Copy HTML Code
             </button>
           </div>
@@ -339,7 +339,7 @@ ${meta.twitterSite ? `<meta property="twitter:site" content="${meta.twitterSite}
                 <div style={{ background: dark ? "#1a1a1a" : "#fff", borderRadius: 10, padding: "16px 20px", border: `1px solid ${bdr}` }}>
                   {/* Favicon + URL */}
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                    <div style={{ width: 18, height: 18, borderRadius: "50%", background: "#7C3AED22", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11 }}>
+                    <div style={{ width: 18, height: 18, borderRadius: "50%", background: "#443DCB22", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11 }}>
                       {meta.favicon}
                     </div>
                     <div>
@@ -377,7 +377,7 @@ ${meta.twitterSite ? `<meta property="twitter:site" content="${meta.twitterSite}
                 <div style={{ width: 320, background: dark ? "#1a1a1a" : "#fff", borderRadius: 16, padding: 16, border: `1px solid ${bdr}`, boxShadow: "0 4px 20px rgba(0,0,0,0.15)" }}>
                   <div style={{ fontSize: 10, color: dark ? "#888" : "#70757a", marginBottom: 8 }}>Google Search · Mobile</div>
                   <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
-                    <div style={{ width: 16, height: 16, borderRadius: "50%", background: "#7C3AED22", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9 }}>{meta.favicon}</div>
+                    <div style={{ width: 16, height: 16, borderRadius: "50%", background: "#443DCB22", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9 }}>{meta.favicon}</div>
                     <div style={{ fontSize: 11, color: dark ? "#bbb" : "#202124" }}>{meta.siteName || "Your Site"}</div>
                   </div>
                   <div style={{ fontSize: 16, color: dark ? "#8ab4f8" : "#1a0dab", marginBottom: 4, lineHeight: 1.3, fontWeight: 400 }}>
@@ -395,7 +395,7 @@ ${meta.twitterSite ? `<meta property="twitter:site" content="${meta.twitterSite}
               <div style={{ background: bg2, border: `1px solid ${bdr}`, borderRadius: 12, padding: 20 }}>
                 <div style={{ fontSize: 11, color: txt2, marginBottom: 14, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>Twitter/X Card Preview</div>
                 <div style={{ background: dark ? "#15202b" : "#fff", borderRadius: 16, overflow: "hidden", border: `1px solid ${dark ? "#2f3336" : "#e1e8ed"}`, maxWidth: 440 }}>
-                  <div style={{ height: 220, background: `linear-gradient(135deg, #7C3AED, #4F46E5)`, display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
+                  <div style={{ height: 220, background: `linear-gradient(135deg, #443DCB, #4F46E5)`, display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
                     {meta.ogImage && meta.ogImage.startsWith("http") ? (
                       <img src={meta.ogImage} alt="OG" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => e.target.style.display = "none"} />
                     ) : (
@@ -420,7 +420,7 @@ ${meta.twitterSite ? `<meta property="twitter:site" content="${meta.twitterSite}
               <div style={{ background: bg2, border: `1px solid ${bdr}`, borderRadius: 12, padding: 20 }}>
                 <div style={{ fontSize: 11, color: txt2, marginBottom: 14, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>Facebook OG Preview</div>
                 <div style={{ background: dark ? "#242526" : "#f0f2f5", borderRadius: 8, overflow: "hidden", border: `1px solid ${dark ? "#3a3b3c" : "#dddfe2"}`, maxWidth: 440 }}>
-                  <div style={{ height: 230, background: `linear-gradient(135deg, #4285F4, #7C3AED)`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <div style={{ height: 230, background: `linear-gradient(135deg, #4285F4, #443DCB)`, display: "flex", alignItems: "center", justifyContent: "center" }}>
                     {meta.ogImage && meta.ogImage.startsWith("http") ? (
                       <img src={meta.ogImage} alt="OG" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => e.target.style.display = "none"} />
                     ) : (
@@ -473,10 +473,10 @@ ${meta.twitterSite ? `<meta property="twitter:site" content="${meta.twitterSite}
             <div style={{ background: bg2, border: `1px solid ${bdr}`, borderRadius: 12, overflow: "hidden" }}>
               <div style={{ padding: "10px 16px", borderBottom: `1px solid ${bdr}`, display: "flex", justifyContent: "space-between", alignItems: "center", background: bg3 }}>
                 <div style={{ fontSize: 12, fontWeight: 600, color: txt }}>💻 HTML Code</div>
-                <button onClick={exportCode} style={{ padding: "4px 12px", borderRadius: 6, border: "none", background: "#7C3AED", color: "#fff", fontSize: 11, cursor: "pointer", fontWeight: 600 }}>📋 Copy</button>
+                <button onClick={exportCode} style={{ padding: "4px 12px", borderRadius: 6, border: "none", background: "#443DCB", color: "#fff", fontSize: 11, cursor: "pointer", fontWeight: 600 }}>📋 Copy</button>
               </div>
               <div style={{ padding: "12px 16px", overflowX: "auto" }}>
-                <pre style={{ fontSize: 11, color: "#A78BFA", fontFamily: "monospace", lineHeight: 1.7, margin: 0, whiteSpace: "pre-wrap" }}>
+                <pre style={{ fontSize: 11, color: "#6B62E8", fontFamily: "monospace", lineHeight: 1.7, margin: 0, whiteSpace: "pre-wrap" }}>
 {`<title>${meta.title || "Your Title"}</title>
 <meta name="description" content="${meta.description || "Your description"}">
 <meta property="og:title" content="${ogTitle || "Your OG Title"}">

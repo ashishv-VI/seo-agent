@@ -276,7 +276,7 @@ Provide comparison analysis:
     if (!aiAnalysis || !ds) return;
     const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>GA4 Analysis — ${ds.name}</title>
 <style>body{font-family:Arial,sans-serif;max-width:800px;margin:40px auto;color:#333;line-height:1.7;}
-h1{color:#7C3AED;border-bottom:3px solid #7C3AED;padding-bottom:10px;}
+h1{color:#443DCB;border-bottom:3px solid #443DCB;padding-bottom:10px;}
 .meta{background:#f8f5ff;padding:16px;border-radius:8px;margin-bottom:24px;font-size:14px;}
 pre{white-space:pre-wrap;font-family:Arial;font-size:13px;}
 .footer{margin-top:30px;text-align:center;font-size:11px;color:#888;border-top:1px solid #eee;padding-top:16px;}
@@ -296,7 +296,7 @@ pre{white-space:pre-wrap;font-family:Arial;font-size:13px;}
     win.onload = () => setTimeout(() => win.print(), 500);
   }
 
-  const tabStyle = (a, color="#7C3AED") => ({
+  const tabStyle = (a, color="#443DCB") => ({
     padding:"6px 14px", borderRadius:20, fontSize:12, cursor:"pointer",
     fontWeight:a?600:400, background:a?color+"22":"transparent",
     color:a?color:txt2, border:`1px solid ${a?color+"44":bdr}`,
@@ -338,17 +338,17 @@ pre{white-space:pre-wrap;font-family:Arial;font-size:13px;}
         {/* ── IMPORT TAB ── */}
         {activeTab==="import" && (
           <div>
-            <div style={{ background:"#7C3AED11", border:"1px solid #7C3AED33", borderRadius:10, padding:"12px 16px", marginBottom:16 }}>
-              <div style={{ fontSize:12, fontWeight:600, color:"#A78BFA", marginBottom:8 }}>📥 How to export GA4 CSV:</div>
+            <div style={{ background:"#443DCB11", border:"1px solid #443DCB33", borderRadius:10, padding:"12px 16px", marginBottom:16 }}>
+              <div style={{ fontSize:12, fontWeight:600, color:"#6B62E8", marginBottom:8 }}>📥 How to export GA4 CSV:</div>
               <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:8 }}>
                 {["Go to analytics.google.com","Reports → choose any report","Click ⬇️ Download → Download CSV","Upload below or paste data"].map((t,i) => (
                   <div key={i} style={{ display:"flex", gap:6 }}>
-                    <div style={{ width:18,height:18,borderRadius:"50%",background:"#7C3AED",color:"#fff",fontSize:10,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>{i+1}</div>
+                    <div style={{ width:18,height:18,borderRadius:"50%",background:"#443DCB",color:"#fff",fontSize:10,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>{i+1}</div>
                     <div style={{ fontSize:11, color:txt2 }}>{t}</div>
                   </div>
                 ))}
               </div>
-              <div style={{ marginTop:10, fontSize:11, color:"#A78BFA" }}>
+              <div style={{ marginTop:10, fontSize:11, color:"#6B62E8" }}>
                 💡 Export these reports for best analysis: Traffic Acquisition · Pages · Geography · Tech (Device)
               </div>
             </div>
@@ -357,7 +357,7 @@ pre{white-space:pre-wrap;font-family:Arial;font-size:13px;}
             <div
               onDrop={handleDrop} onDragOver={e=>{e.preventDefault();setDragOver(true);}} onDragLeave={()=>setDragOver(false)}
               onClick={()=>fileRef.current?.click()}
-              style={{ border:`2px dashed ${dragOver?"#7C3AED":bdr}`, borderRadius:16, padding:"40px 24px", textAlign:"center", cursor:"pointer", background:dragOver?"#7C3AED08":bg2, marginBottom:16 }}>
+              style={{ border:`2px dashed ${dragOver?"#443DCB":bdr}`, borderRadius:16, padding:"40px 24px", textAlign:"center", cursor:"pointer", background:dragOver?"#443DCB08":bg2, marginBottom:16 }}>
               <div style={{ fontSize:36, marginBottom:10 }}>📂</div>
               <div style={{ fontSize:14, fontWeight:600, color:txt, marginBottom:4 }}>Drop GA4 CSV here</div>
               <div style={{ fontSize:11, color:txt2 }}>Supports Traffic, Geography, Pages, Device reports</div>
@@ -375,7 +375,7 @@ pre{white-space:pre-wrap;font-family:Arial;font-size:13px;}
                 rows={7}
                 style={{ width:"100%", padding:"10px 14px", borderRadius:10, border:`1px solid ${bdr}`, background:bg3, color:txt, fontSize:12, outline:"none", resize:"none", fontFamily:"monospace", boxSizing:"border-box", marginBottom:12 }} />
               <button onClick={handlePaste} disabled={!csvText.trim()}
-                style={{ padding:"10px 24px", borderRadius:10, border:"none", background:csvText.trim()?"#7C3AED":"#333", color:csvText.trim()?"#fff":txt3, fontWeight:600, fontSize:13, cursor:csvText.trim()?"pointer":"not-allowed" }}>
+                style={{ padding:"10px 24px", borderRadius:10, border:"none", background:csvText.trim()?"#443DCB":"#333", color:csvText.trim()?"#fff":txt3, fontWeight:600, fontSize:13, cursor:csvText.trim()?"pointer":"not-allowed" }}>
                 📊 Import & Analyze
               </button>
             </div>
@@ -388,7 +388,7 @@ pre{white-space:pre-wrap;font-family:Arial;font-size:13px;}
             {/* Stats */}
             <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12, marginBottom:20 }}>
               {[
-                { label:"Data Rows",   val:ds.rows.length.toLocaleString(),                                              color:"#7C3AED" },
+                { label:"Data Rows",   val:ds.rows.length.toLocaleString(),                                              color:"#443DCB" },
                 { label:"Sessions",    val:ds.cols.sessions>=0 ? Math.round(sumCol(ds,ds.cols.sessions)).toLocaleString():"—", color:"#0891B2" },
                 { label:"Users",       val:ds.cols.users>=0    ? Math.round(sumCol(ds,ds.cols.users)).toLocaleString():"—",    color:"#059669" },
                 { label:"Countries",   val:countryData.length > 0 ? countryData.length : ds.cols.country>=0?"See table":"—",   color:"#D97706" },
@@ -406,7 +406,7 @@ pre{white-space:pre-wrap;font-family:Arial;font-size:13px;}
               <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
                 {ds.headers.map((h,i) => {
                   const isDetected = Object.values(ds.cols).includes(i);
-                  return <span key={i} style={{ padding:"2px 10px", borderRadius:20, fontSize:11, background:isDetected?"#7C3AED22":"transparent", color:isDetected?"#A78BFA":txt2, border:`1px solid ${isDetected?"#7C3AED44":bdr}` }}>{h}</span>;
+                  return <span key={i} style={{ padding:"2px 10px", borderRadius:20, fontSize:11, background:isDetected?"#443DCB22":"transparent", color:isDetected?"#6B62E8":txt2, border:`1px solid ${isDetected?"#443DCB44":bdr}` }}>{h}</span>;
                 })}
               </div>
             </div>
@@ -439,10 +439,10 @@ pre{white-space:pre-wrap;font-family:Arial;font-size:13px;}
                   { id:"compare",  icon:"⚔️", label:"Period Comparison",          desc:"Compare two datasets side by side", disabled:!compareMode||!compareDs },
                 ].map(opt => (
                   <div key={opt.id} onClick={()=>!opt.disabled&&setAnalysisType(opt.id)}
-                    style={{ padding:"12px 14px", borderRadius:10, border:`1px solid ${analysisType===opt.id?"#7C3AED44":bdr}`, background:analysisType===opt.id?"#7C3AED11":bg3, cursor:opt.disabled?"not-allowed":"pointer", opacity:opt.disabled?0.4:1 }}>
+                    style={{ padding:"12px 14px", borderRadius:10, border:`1px solid ${analysisType===opt.id?"#443DCB44":bdr}`, background:analysisType===opt.id?"#443DCB11":bg3, cursor:opt.disabled?"not-allowed":"pointer", opacity:opt.disabled?0.4:1 }}>
                     <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
                       <span style={{ fontSize:16 }}>{opt.icon}</span>
-                      <span style={{ fontSize:12, fontWeight:600, color:analysisType===opt.id?"#A78BFA":txt }}>{opt.label}</span>
+                      <span style={{ fontSize:12, fontWeight:600, color:analysisType===opt.id?"#6B62E8":txt }}>{opt.label}</span>
                     </div>
                     <div style={{ fontSize:11, color:txt2 }}>{opt.desc}</div>
                   </div>
@@ -471,16 +471,16 @@ pre{white-space:pre-wrap;font-family:Arial;font-size:13px;}
                       <div style={{ display:"flex", alignItems:"center", gap:6 }}>
                         <span style={{ fontSize:16 }}>{flag}</span>
                         <span style={{ fontWeight:600, color:txt }}>{c.country}</span>
-                        <span style={{ fontSize:10, padding:"1px 6px", borderRadius:10, background:"#7C3AED22", color:"#A78BFA" }}>#{i+1}</span>
+                        <span style={{ fontSize:10, padding:"1px 6px", borderRadius:10, background:"#443DCB22", color:"#6B62E8" }}>#{i+1}</span>
                       </div>
                       <div style={{ display:"flex", gap:12 }}>
-                        {c.sessions > 0 && <span style={{ color:"#7C3AED", fontWeight:600 }}>{c.sessions.toLocaleString()} sessions</span>}
+                        {c.sessions > 0 && <span style={{ color:"#443DCB", fontWeight:600 }}>{c.sessions.toLocaleString()} sessions</span>}
                         {c.users > 0    && <span style={{ color:txt2 }}>{c.users.toLocaleString()} users</span>}
-                        {!c.sessions && <span style={{ color:"#7C3AED", fontWeight:600 }}>{c.rows} rows</span>}
+                        {!c.sessions && <span style={{ color:"#443DCB", fontWeight:600 }}>{c.rows} rows</span>}
                       </div>
                     </div>
                     <div style={{ height:8, borderRadius:4, background:bg3, overflow:"hidden" }}>
-                      <div style={{ height:"100%", width:`${pct}%`, background: i===0?"#7C3AED":i===1?"#0891B2":i===2?"#059669":"#A78BFA66", borderRadius:4, transition:"width 0.6s" }} />
+                      <div style={{ height:"100%", width:`${pct}%`, background: i===0?"#443DCB":i===1?"#0891B2":i===2?"#059669":"#6B62E866", borderRadius:4, transition:"width 0.6s" }} />
                     </div>
                   </div>
                 );
@@ -543,8 +543,8 @@ pre{white-space:pre-wrap;font-family:Arial;font-size:13px;}
                   <div style={{ display:"flex", gap:8 }}>
                     <button onClick={()=>navigator.clipboard.writeText(aiAnalysis)} style={{ padding:"5px 12px", borderRadius:8, border:`1px solid ${bdr}`, background:"transparent", color:txt2, fontSize:11, cursor:"pointer" }}>📋 Copy</button>
                     <button onClick={()=>{ const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([aiAnalysis],{type:"text/plain"})); a.download="ga4-analysis.txt"; a.click(); }} style={{ padding:"5px 12px", borderRadius:8, border:"1px solid #059669aa", background:"#05966911", color:"#059669", fontSize:11, cursor:"pointer" }}>⬇️ TXT</button>
-                    <button onClick={exportPDF} style={{ padding:"5px 12px", borderRadius:8, border:"none", background:"#7C3AED", color:"#fff", fontSize:11, cursor:"pointer", fontWeight:600 }}>📥 PDF</button>
-                    <button onClick={runAiAnalysis} disabled={aiLoading} style={{ padding:"5px 12px", borderRadius:8, border:"1px solid #7C3AED44", background:"#7C3AED11", color:"#A78BFA", fontSize:11, cursor:"pointer" }}>🔄 Re-run</button>
+                    <button onClick={exportPDF} style={{ padding:"5px 12px", borderRadius:8, border:"none", background:"#443DCB", color:"#fff", fontSize:11, cursor:"pointer", fontWeight:600 }}>📥 PDF</button>
+                    <button onClick={runAiAnalysis} disabled={aiLoading} style={{ padding:"5px 12px", borderRadius:8, border:"1px solid #443DCB44", background:"#443DCB11", color:"#6B62E8", fontSize:11, cursor:"pointer" }}>🔄 Re-run</button>
                   </div>
                 </div>
                 <div style={{ fontSize:13, color:txt, lineHeight:1.9, whiteSpace:"pre-wrap" }}>{aiAnalysis}</div>
@@ -553,7 +553,7 @@ pre{white-space:pre-wrap;font-family:Arial;font-size:13px;}
               <div style={{ textAlign:"center", padding:60, color:txt3 }}>
                 <div style={{ fontSize:40, marginBottom:12 }}>🤖</div>
                 <div style={{ fontSize:14, color:txt2, marginBottom:16 }}>Run AI Analysis from Overview tab</div>
-                <button onClick={()=>setActiveTab("overview")} style={{ padding:"10px 24px", borderRadius:10, border:"none", background:"#7C3AED", color:"#fff", fontWeight:600, fontSize:13, cursor:"pointer" }}>Go to Overview →</button>
+                <button onClick={()=>setActiveTab("overview")} style={{ padding:"10px 24px", borderRadius:10, border:"none", background:"#443DCB", color:"#fff", fontWeight:600, fontSize:13, cursor:"pointer" }}>Go to Overview →</button>
               </div>
             )}
           </div>
@@ -564,7 +564,7 @@ pre{white-space:pre-wrap;font-family:Arial;font-size:13px;}
           <div style={{ textAlign:"center", padding:60, color:txt3 }}>
             <div style={{ fontSize:40, marginBottom:12 }}>📂</div>
             <div style={{ fontSize:14, color:txt2 }}>Import a CSV file first</div>
-            <button onClick={()=>setActiveTab("import")} style={{ marginTop:12, padding:"8px 20px", borderRadius:10, border:"none", background:"#7C3AED", color:"#fff", fontWeight:600, fontSize:13, cursor:"pointer" }}>Import CSV →</button>
+            <button onClick={()=>setActiveTab("import")} style={{ marginTop:12, padding:"8px 20px", borderRadius:10, border:"none", background:"#443DCB", color:"#fff", fontWeight:600, fontSize:13, cursor:"pointer" }}>Import CSV →</button>
           </div>
         )}
       </div>

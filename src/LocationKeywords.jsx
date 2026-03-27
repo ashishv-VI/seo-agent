@@ -348,7 +348,7 @@ TOP_TIP: [one specific actionable tip for ${country.name}]`;
       return `<h2>${country?.flag} ${country?.name}</h2><pre>${result.replace(/</g,"&lt;")}</pre><hr>`;
     }).join("\n");
     const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Location Keywords — ${keyword}</title>
-<style>body{font-family:Arial,sans-serif;max-width:800px;margin:40px auto;color:#333;}h1{color:#7C3AED;}h2{color:#0891B2;margin-top:30px;}pre{white-space:pre-wrap;font-size:12px;line-height:1.7;}hr{border:none;border-top:1px solid #eee;margin:20px 0;}</style>
+<style>body{font-family:Arial,sans-serif;max-width:800px;margin:40px auto;color:#333;}h1{color:#443DCB;}h2{color:#0891B2;margin-top:30px;}pre{white-space:pre-wrap;font-size:12px;line-height:1.7;}hr{border:none;border-top:1px solid #eee;margin:20px 0;}</style>
 </head><body><h1>🌍 Location Keyword Research: "${keyword}"</h1><p>Analysis Type: ${mode} · Generated: ${new Date().toLocaleDateString()}</p>${sections}</body></html>`;
     const win = window.open("","_blank","width=900,height=700");
     win.document.write(html); win.document.close();
@@ -356,7 +356,7 @@ TOP_TIP: [one specific actionable tip for ${country.name}]`;
   }
 
   const oppColor = o => o==="High"?"#059669":o==="Medium"?"#D97706":"#888";
-  const tabStyle = (a, color="#7C3AED") => ({ padding:"6px 14px", borderRadius:20, fontSize:12, cursor:"pointer", fontWeight:a?600:400, background:a?color+"22":"transparent", color:a?color:txt2, border:`1px solid ${a?color+"44":bdr}`, whiteSpace:"nowrap" });
+  const tabStyle = (a, color="#443DCB") => ({ padding:"6px 14px", borderRadius:20, fontSize:12, cursor:"pointer", fontWeight:a?600:400, background:a?color+"22":"transparent", color:a?color:txt2, border:`1px solid ${a?color+"44":bdr}`, whiteSpace:"nowrap" });
 
   return (
     <div style={{ flex:1, overflowY:"auto", padding:24, background:bg }}>
@@ -380,7 +380,7 @@ TOP_TIP: [one specific actionable tip for ${country.name}]`;
                   placeholder="Enter keyword, niche or topic..."
                   style={{ flex:1, minWidth:200, padding:"10px 14px", borderRadius:10, border:`1px solid ${bdr}`, background:bg3, color:txt, fontSize:13, outline:"none" }} />
                 <button onClick={runAnalysis} disabled={loading||!keyword.trim()||selectedCountries.length===0}
-                  style={{ padding:"10px 24px", borderRadius:10, border:"none", background:loading||!keyword.trim()?"#333":"#7C3AED", color:loading||!keyword.trim()?txt3:"#fff", fontWeight:700, fontSize:13, cursor:loading||!keyword.trim()?"not-allowed":"pointer" }}>
+                  style={{ padding:"10px 24px", borderRadius:10, border:"none", background:loading||!keyword.trim()?"#333":"#443DCB", color:loading||!keyword.trim()?txt3:"#fff", fontWeight:700, fontSize:13, cursor:loading||!keyword.trim()?"not-allowed":"pointer" }}>
                   {loading ? "Analyzing..." : "🌍 Analyze"}
                 </button>
               </div>
@@ -391,10 +391,10 @@ TOP_TIP: [one specific actionable tip for ${country.name}]`;
                 <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
                   {ANALYSIS_MODES.map(m => (
                     <div key={m.id} onClick={()=>setMode(m.id)}
-                      style={{ padding:"7px 12px", borderRadius:8, border:`1px solid ${mode===m.id?"#7C3AED44":bdr}`, background:mode===m.id?"#7C3AED11":bg3, cursor:"pointer", display:"flex", alignItems:"center", gap:6 }}>
+                      style={{ padding:"7px 12px", borderRadius:8, border:`1px solid ${mode===m.id?"#443DCB44":bdr}`, background:mode===m.id?"#443DCB11":bg3, cursor:"pointer", display:"flex", alignItems:"center", gap:6 }}>
                       <span style={{ fontSize:14 }}>{m.icon}</span>
                       <div>
-                        <div style={{ fontSize:11, fontWeight:mode===m.id?600:400, color:mode===m.id?"#A78BFA":txt }}>{m.label}</div>
+                        <div style={{ fontSize:11, fontWeight:mode===m.id?600:400, color:mode===m.id?"#6B62E8":txt }}>{m.label}</div>
                         <div style={{ fontSize:9, color:txt2 }}>{m.desc}</div>
                       </div>
                     </div>
@@ -412,13 +412,13 @@ TOP_TIP: [one specific actionable tip for ${country.name}]`;
                     const selected = selectedCountries.includes(c.code);
                     return (
                       <div key={c.code} onClick={()=>toggleCountry(c.code)}
-                        style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 10px", borderRadius:8, border:`1px solid ${selected?"#7C3AED44":bdr}`, background:selected?"#7C3AED11":bg3, cursor:"pointer", transition:"all 0.15s" }}>
+                        style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 10px", borderRadius:8, border:`1px solid ${selected?"#443DCB44":bdr}`, background:selected?"#443DCB11":bg3, cursor:"pointer", transition:"all 0.15s" }}>
                         <span style={{ fontSize:18 }}>{c.flag}</span>
                         <div>
-                          <div style={{ fontSize:11, fontWeight:selected?600:400, color:selected?"#A78BFA":txt }}>{c.name}</div>
+                          <div style={{ fontSize:11, fontWeight:selected?600:400, color:selected?"#6B62E8":txt }}>{c.name}</div>
                           <div style={{ fontSize:9, color:txt2 }}>{c.lang}</div>
                         </div>
-                        {selected && <span style={{ marginLeft:"auto", fontSize:12, color:"#7C3AED" }}>✓</span>}
+                        {selected && <span style={{ marginLeft:"auto", fontSize:12, color:"#443DCB" }}>✓</span>}
                       </div>
                     );
                   })}
@@ -436,7 +436,7 @@ TOP_TIP: [one specific actionable tip for ${country.name}]`;
                     const country = COUNTRIES.find(c=>c.code===code);
                     const done = results[code];
                     return (
-                      <div key={code} style={{ padding:"4px 12px", borderRadius:20, fontSize:11, background:done?"#05966922":"#7C3AED22", color:done?"#059669":"#A78BFA", border:`1px solid ${done?"#05966944":"#7C3AED44"}` }}>
+                      <div key={code} style={{ padding:"4px 12px", borderRadius:20, fontSize:11, background:done?"#05966922":"#443DCB22", color:done?"#059669":"#6B62E8", border:`1px solid ${done?"#05966944":"#443DCB44"}` }}>
                         {country?.flag} {country?.name} {done?"✅":"⏳"}
                       </div>
                     );
@@ -458,7 +458,7 @@ TOP_TIP: [one specific actionable tip for ${country.name}]`;
                       </div>
                     );
                   })}
-                  <button onClick={exportAllPDF} style={{ marginLeft:"auto", padding:"6px 14px", borderRadius:8, border:"none", background:"#7C3AED", color:"#fff", fontSize:11, cursor:"pointer", fontWeight:600 }}>
+                  <button onClick={exportAllPDF} style={{ marginLeft:"auto", padding:"6px 14px", borderRadius:8, border:"none", background:"#443DCB", color:"#fff", fontSize:11, cursor:"pointer", fontWeight:600 }}>
                     📥 Export All PDF
                   </button>
                 </div>
@@ -523,10 +523,10 @@ TOP_TIP: [one specific actionable tip for ${country.name}]`;
                       const selected = selectedCountries[0]===c.code;
                       return (
                         <div key={c.code} onClick={()=>setSelectedCountries([c.code])}
-                          style={{ display:"flex", alignItems:"center", gap:8, padding:"7px 10px", borderRadius:8, border:`1px solid ${selected?"#7C3AED44":bdr}`, background:selected?"#7C3AED11":bg3, cursor:"pointer" }}>
+                          style={{ display:"flex", alignItems:"center", gap:8, padding:"7px 10px", borderRadius:8, border:`1px solid ${selected?"#443DCB44":bdr}`, background:selected?"#443DCB11":bg3, cursor:"pointer" }}>
                           <span style={{ fontSize:16 }}>{c.flag}</span>
-                          <span style={{ fontSize:12, color:selected?"#A78BFA":txt, fontWeight:selected?600:400 }}>{c.name}</span>
-                          {selected && <span style={{ marginLeft:"auto", color:"#7C3AED", fontSize:12 }}>✓</span>}
+                          <span style={{ fontSize:12, color:selected?"#6B62E8":txt, fontWeight:selected?600:400 }}>{c.name}</span>
+                          {selected && <span style={{ marginLeft:"auto", color:"#443DCB", fontSize:12 }}>✓</span>}
                         </div>
                       );
                     })}
@@ -534,7 +534,7 @@ TOP_TIP: [one specific actionable tip for ${country.name}]`;
                 </div>
               </div>
               <button onClick={runBulkAnalysis} disabled={bulkLoading||!bulkKeywords.trim()||selectedCountries.length===0}
-                style={{ width:"100%", marginTop:14, padding:"11px", borderRadius:10, border:"none", background:bulkLoading||!bulkKeywords.trim()?"#333":"#7C3AED", color:bulkLoading||!bulkKeywords.trim()?txt3:"#fff", fontWeight:700, fontSize:14, cursor:bulkLoading||!bulkKeywords.trim()?"not-allowed":"pointer" }}>
+                style={{ width:"100%", marginTop:14, padding:"11px", borderRadius:10, border:"none", background:bulkLoading||!bulkKeywords.trim()?"#333":"#443DCB", color:bulkLoading||!bulkKeywords.trim()?txt3:"#fff", fontWeight:700, fontSize:14, cursor:bulkLoading||!bulkKeywords.trim()?"not-allowed":"pointer" }}>
                 {bulkLoading ? `Analyzing ${bulkResults.length+1}...` : "▶ Bulk Analyze"}
               </button>
             </div>
@@ -559,7 +559,7 @@ TOP_TIP: [one specific actionable tip for ${country.name}]`;
                         <tr key={i} style={{ borderBottom:`1px solid ${bdr}22` }}>
                           <td style={{ padding:"10px 12px", fontSize:12, color:txt, fontWeight:500 }}>{r.keyword}</td>
                           <td style={{ padding:"10px 12px", fontSize:12 }}><span>{r.flag} {r.country}</span></td>
-                          <td style={{ padding:"10px 12px", fontSize:12, color:"#7C3AED", fontWeight:600 }}>{r.volume}</td>
+                          <td style={{ padding:"10px 12px", fontSize:12, color:"#443DCB", fontWeight:600 }}>{r.volume}</td>
                           <td style={{ padding:"10px 12px", fontSize:12 }}>
                             <div style={{ display:"flex", alignItems:"center", gap:6 }}>
                               <div style={{ width:40, height:4, borderRadius:2, background:bg3, overflow:"hidden" }}>

@@ -25,7 +25,7 @@ function TagSelect({ label, options, selected, onChange, placeholder, dark }) {
       <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginBottom:8 }}>
         {options.map(o => (
           <button key={o} type="button" onClick={() => toggle(o)}
-            style={{ padding:"5px 12px", borderRadius:16, fontSize:12, fontWeight:600, cursor:"pointer", border:`1px solid ${selected.includes(o) ? "#7C3AED" : bdr}`, background: selected.includes(o) ? "#7C3AED22" : "transparent", color: selected.includes(o) ? "#7C3AED" : txt2, transition:"all 0.1s" }}>
+            style={{ padding:"5px 12px", borderRadius:16, fontSize:12, fontWeight:600, cursor:"pointer", border:`1px solid ${selected.includes(o) ? "#443DCB" : bdr}`, background: selected.includes(o) ? "#443DCB22" : "transparent", color: selected.includes(o) ? "#443DCB" : txt2, transition:"all 0.1s" }}>
             {o}
           </button>
         ))}
@@ -35,12 +35,12 @@ function TagSelect({ label, options, selected, onChange, placeholder, dark }) {
           onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addCustom(); } if (e.key === ",") { e.preventDefault(); addCustom(); } }}
           placeholder={placeholder} style={{ flex:1, padding:"8px 12px", borderRadius:8, border:`1px solid ${bdr}`, background:bg3, color:txt, fontSize:13, outline:"none", fontFamily:"inherit" }} />
         <button type="button" onClick={addCustom}
-          style={{ padding:"8px 14px", borderRadius:8, border:`1px solid #7C3AED`, background:"transparent", color:"#7C3AED", fontSize:13, cursor:"pointer", fontWeight:600 }}>+ Add</button>
+          style={{ padding:"8px 14px", borderRadius:8, border:`1px solid #443DCB`, background:"transparent", color:"#443DCB", fontSize:13, cursor:"pointer", fontWeight:600 }}>+ Add</button>
       </div>
       {selected.length > 0 && (
         <div style={{ display:"flex", flexWrap:"wrap", gap:4, marginTop:6 }}>
           {selected.map(v => (
-            <span key={v} style={{ padding:"4px 10px", borderRadius:12, background:"#7C3AED22", color:"#7C3AED", fontSize:12, fontWeight:600, display:"flex", alignItems:"center", gap:4 }}>
+            <span key={v} style={{ padding:"4px 10px", borderRadius:12, background:"#443DCB22", color:"#443DCB", fontSize:12, fontWeight:600, display:"flex", alignItems:"center", gap:4 }}>
               {v}
               <span onClick={() => toggle(v)} style={{ cursor:"pointer", opacity:0.7 }}>×</span>
             </span>
@@ -96,7 +96,7 @@ function CityInput({ label, value, onChange, dark, countryCities }) {
           placeholder="Search or type a city..."
           style={{ flex:1, padding:"8px 12px", borderRadius:8, border:`1px solid ${bdr}`, background:bg3, color:txt, fontSize:13, outline:"none", fontFamily:"inherit" }} />
         <button type="button" onClick={() => { if (input.trim()) add(input); }}
-          style={{ padding:"8px 14px", borderRadius:8, border:`1px solid #7C3AED`, background:"transparent", color:"#7C3AED", fontSize:13, cursor:"pointer", fontWeight:600 }}>+ Add</button>
+          style={{ padding:"8px 14px", borderRadius:8, border:`1px solid #443DCB`, background:"transparent", color:"#443DCB", fontSize:13, cursor:"pointer", fontWeight:600 }}>+ Add</button>
 
         {showDrop && input && filtered.length > 0 && (
           <div style={{ position:"absolute", top:"100%", left:0, right:60, background:bg2, border:`1px solid ${bdr}`, borderRadius:8, zIndex:100, maxHeight:160, overflowY:"auto", boxShadow:"0 4px 12px rgba(0,0,0,0.15)" }}>
@@ -306,9 +306,9 @@ export default function ClientManager({ dark }) {
     inp:   { width:"100%", padding:"10px 12px", borderRadius:8, border:`1px solid ${bdr}`, background:bg3, color:txt, fontSize:14, outline:"none", fontFamily:"inherit", boxSizing:"border-box" },
     sel:   { width:"100%", padding:"10px 12px", borderRadius:8, border:`1px solid ${bdr}`, background:bg3, color:txt, fontSize:14, outline:"none", fontFamily:"inherit", boxSizing:"border-box", cursor:"pointer" },
     label: { fontSize:13, color:txt2, fontWeight:600, marginBottom:5, display:"block" },
-    btn:   (c="#7C3AED") => ({ padding:"10px 22px", borderRadius:8, border:"none", background:c, color:"#fff", fontWeight:600, fontSize:14, cursor:"pointer" }),
+    btn:   (c="#443DCB") => ({ padding:"10px 22px", borderRadius:8, border:"none", background:c, color:"#fff", fontWeight:600, fontSize:14, cursor:"pointer" }),
     grid:  { display:"grid", gridTemplateColumns:"repeat(2,1fr)", gap:18 },
-    sec:   { fontSize:12, fontWeight:700, color:"#7C3AED", textTransform:"uppercase", letterSpacing:1, marginBottom:12, marginTop:8, paddingBottom:6, borderBottom:`1px solid ${bdr}`, gridColumn:"span 2" },
+    sec:   { fontSize:12, fontWeight:700, color:"#443DCB", textTransform:"uppercase", letterSpacing:1, marginBottom:12, marginTop:8, paddingBottom:6, borderBottom:`1px solid ${bdr}`, gridColumn:"span 2" },
   };
 
   if (selected) {

@@ -165,7 +165,7 @@ RANKING_TIPS: [3 specific tips to rank for this keyword, separated by |]`;
 
   const trunc = (s, n) => s && s.length > n ? s.slice(0, n) + "..." : s || "";
   const diffColor = d => d <= 30 ? "#059669" : d <= 60 ? "#D97706" : "#DC2626";
-  const intentColor = i => ({ informational:"#0891B2", transactional:"#059669", commercial:"#D97706", navigational:"#7C3AED" }[i?.toLowerCase()] || "#888");
+  const intentColor = i => ({ informational:"#0891B2", transactional:"#059669", commercial:"#D97706", navigational:"#443DCB" }[i?.toLowerCase()] || "#888");
 
   const tabStyle = (a) => ({
     padding: "5px 12px", borderRadius: 20, fontSize: 11, cursor: "pointer",
@@ -319,7 +319,7 @@ RANKING_TIPS: [3 specific tips to rank for this keyword, separated by |]`;
                 <div style={{ background: gBg, border: `1px solid ${gBdr}`, borderRadius: 10, padding: "12px 16px", marginBottom: 12 }}>
                   <div style={{ fontSize: 11, color: gGray, marginBottom: 10 }}>🖼️ Images for <em>{serpData.keyword}</em></div>
                   <div style={{ display: "flex", gap: 8 }}>
-                    {["#7C3AED","#4285F4","#EA4335","#34A853","#FBBC05"].map((c, i) => (
+                    {["#443DCB","#4285F4","#EA4335","#34A853","#FBBC05"].map((c, i) => (
                       <div key={i} style={{ flex: 1, height: 80, borderRadius: 6, background: c + "33", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>🖼️</div>
                     ))}
                   </div>
@@ -358,16 +358,16 @@ RANKING_TIPS: [3 specific tips to rank for this keyword, separated by |]`;
                   const results = [...serpData.results];
                   results.splice(myPosition - 1, 0, myListing);
                   return results.slice(0, 6).map((r, i) => (
-                    <div key={i} style={{ paddingBottom: 14, marginBottom: 14, borderBottom: i < 5 ? `1px solid ${gBdr}` : "none", background: r.isMine ? (dark ? "#7C3AED11" : "#f5f0ff") : "transparent", borderRadius: r.isMine ? 8 : 0, padding: r.isMine ? "10px 12px" : "0 0 14px", marginLeft: r.isMine ? -4 : 0, position: "relative" }}>
+                    <div key={i} style={{ paddingBottom: 14, marginBottom: 14, borderBottom: i < 5 ? `1px solid ${gBdr}` : "none", background: r.isMine ? (dark ? "#443DCB11" : "#f5f0ff") : "transparent", borderRadius: r.isMine ? 8 : 0, padding: r.isMine ? "10px 12px" : "0 0 14px", marginLeft: r.isMine ? -4 : 0, position: "relative" }}>
                       {r.isMine && (
-                        <div style={{ position: "absolute", top: 6, right: 8, fontSize: 9, padding: "2px 6px", borderRadius: 10, background: "#7C3AED", color: "#fff", fontWeight: 600 }}>YOUR SITE</div>
+                        <div style={{ position: "absolute", top: 6, right: 8, fontSize: 9, padding: "2px 6px", borderRadius: 10, background: "#443DCB", color: "#fff", fontWeight: 600 }}>YOUR SITE</div>
                       )}
                       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
-                        <div style={{ width: 16, height: 16, borderRadius: "50%", background: r.isMine ? "#7C3AED33" : "#4285F422", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9 }}>
+                        <div style={{ width: 16, height: 16, borderRadius: "50%", background: r.isMine ? "#443DCB33" : "#4285F422", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9 }}>
                           {r.isMine ? "⭐" : "🌐"}
                         </div>
                         <div>
-                          <div style={{ fontSize: 12, color: r.isMine ? "#A78BFA" : gGreen }}>{r.url}</div>
+                          <div style={{ fontSize: 12, color: r.isMine ? "#6B62E8" : gGreen }}>{r.url}</div>
                         </div>
                         <span style={{ fontSize: 10, color: txt3, marginLeft: "auto" }}>#{i + 1}</span>
                       </div>
@@ -464,7 +464,7 @@ RANKING_TIPS: [3 specific tips to rank for this keyword, separated by |]`;
                 <div style={{ fontSize: 12, fontWeight: 600, color: txt, marginBottom: 12 }}>📊 SERP Analysis</div>
                 {[
                   { label: "Keyword Difficulty", value: `${serpData.difficulty}/100`, color: diffColor(serpData.difficulty) },
-                  { label: "Monthly Searches",   value: serpData.searches,            color: "#7C3AED" },
+                  { label: "Monthly Searches",   value: serpData.searches,            color: "#443DCB" },
                   { label: "Search Intent",      value: serpData.intent,              color: intentColor(serpData.intent) },
                   { label: "Your Position",      value: `#${myPosition}`,             color: myPosition <= 3 ? "#059669" : myPosition <= 7 ? "#D97706" : "#DC2626" },
                 ].map(s => (
@@ -525,7 +525,7 @@ RANKING_TIPS: [3 specific tips to rank for this keyword, separated by |]`;
                   <div key={r.pos} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
                     <span style={{ fontSize: 11, color: r.pos === myPosition ? "#4285F4" : txt3, width: 20, fontWeight: r.pos === myPosition ? 700 : 400 }}>#{r.pos}</span>
                     <div style={{ flex: 1, height: 6, borderRadius: 3, background: bg3, overflow: "hidden" }}>
-                      <div style={{ height: "100%", width: r.ctr, background: r.pos === myPosition ? "#4285F4" : bg3.replace ? "#7C3AED66" : "#7C3AED44", borderRadius: 3 }} />
+                      <div style={{ height: "100%", width: r.ctr, background: r.pos === myPosition ? "#4285F4" : bg3.replace ? "#443DCB66" : "#443DCB44", borderRadius: 3 }} />
                     </div>
                     <span style={{ fontSize: 11, color: r.pos === myPosition ? "#4285F4" : txt2, fontWeight: r.pos === myPosition ? 700 : 400, width: 36, textAlign: "right" }}>{r.ctr}</span>
                   </div>

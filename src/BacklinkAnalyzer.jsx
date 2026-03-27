@@ -1,7 +1,7 @@
 import { useState } from "react";
 
 const LINK_TYPES = [
-  { id:"guest",    icon:"✍️", label:"Guest Posts",       color:"#7C3AED" },
+  { id:"guest",    icon:"✍️", label:"Guest Posts",       color:"#443DCB" },
   { id:"resource", icon:"📚", label:"Resource Pages",    color:"#0891B2" },
   { id:"broken",   icon:"🔗", label:"Broken Link Build", color:"#D97706" },
   { id:"pr",       icon:"📰", label:"Digital PR",        color:"#059669" },
@@ -176,7 +176,7 @@ TOXIC_WARNING: [specific toxic link types to avoid in this niche]`;
   const impactColor = i => i?.toLowerCase().includes("high") ? "#DC2626" : i?.toLowerCase().includes("med") ? "#D97706" : "#059669";
   const diffColor   = d => d === "Easy" ? "#059669" : d === "Medium" ? "#D97706" : "#DC2626";
 
-  const tabStyle = (a, color = "#7C3AED") => ({
+  const tabStyle = (a, color = "#443DCB") => ({
     padding: "6px 14px", borderRadius: 20, fontSize: 12, cursor: "pointer",
     fontWeight: a ? 600 : 400, background: a ? color + "22" : "transparent",
     color: a ? color : txt2, border: `1px solid ${a ? color + "44" : bdr}`, whiteSpace: "nowrap",
@@ -310,8 +310,8 @@ TOXIC_WARNING: [specific toxic link types to avoid in this niche]`;
                   <div style={{ background: bg2, border: `1px solid ${bdr}`, borderRadius: 12, padding: 20 }}>
                     <div style={{ fontSize: 13, fontWeight: 600, color: txt, marginBottom: 12 }}>⚔️ vs Competitor</div>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}>
-                      <div style={{ background: "#7C3AED11", borderRadius: 8, padding: 12, textAlign: "center" }}>
-                        <div style={{ fontSize: 20, fontWeight: 800, color: "#7C3AED" }}>{results.da}</div>
+                      <div style={{ background: "#443DCB11", borderRadius: 8, padding: 12, textAlign: "center" }}>
+                        <div style={{ fontSize: 20, fontWeight: 800, color: "#443DCB" }}>{results.da}</div>
                         <div style={{ fontSize: 11, color: txt2 }}>Your DA</div>
                       </div>
                       <div style={{ background: "#DC262611", borderRadius: 8, padding: 12, textAlign: "center" }}>
@@ -377,13 +377,13 @@ TOXIC_WARNING: [specific toxic link types to avoid in this niche]`;
                       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
                         <div style={{ fontSize: 13, color: txt, fontWeight: 500 }}>{type}</div>
                         <div style={{ display: "flex", gap: 8 }}>
-                          {pct && <span style={{ fontSize: 12, color: "#7C3AED", fontWeight: 700 }}>{pct}</span>}
+                          {pct && <span style={{ fontSize: 12, color: "#443DCB", fontWeight: 700 }}>{pct}</span>}
                           {assessment && <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 10, background: assessment === "Good" || assessment === "Natural" ? "#05966922" : "#DC262622", color: assessment === "Good" || assessment === "Natural" ? "#059669" : "#DC2626" }}>{assessment}</span>}
                         </div>
                       </div>
                       {pct && (
                         <div style={{ height: 4, borderRadius: 2, background: bg3, overflow: "hidden" }}>
-                          <div style={{ height: "100%", width: pct, background: "#7C3AED", borderRadius: 2 }} />
+                          <div style={{ height: "100%", width: pct, background: "#443DCB", borderRadius: 2 }} />
                         </div>
                       )}
                     </div>
@@ -423,7 +423,7 @@ TOXIC_WARNING: [specific toxic link types to avoid in this niche]`;
                 {[
                   { label: "Week 1", text: results.week1, color: "#059669" },
                   { label: "Week 2", text: results.week2, color: "#0891B2" },
-                  { label: "Month 2", text: results.month2, color: "#7C3AED" },
+                  { label: "Month 2", text: results.month2, color: "#443DCB" },
                   { label: "Month 3", text: results.month3, color: "#D97706" },
                 ].map((step, i) => (
                   <div key={i} style={{ display: "flex", gap: 14, marginBottom: 16 }}>

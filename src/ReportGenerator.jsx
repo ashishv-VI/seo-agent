@@ -98,7 +98,7 @@ Make it professional, data-driven, and client-friendly. Use specific numbers and
   <style>
     * { margin:0; padding:0; box-sizing:border-box; }
     body { font-family: 'Segoe UI', Arial, sans-serif; color: #1a1a18; background: #fff; padding: 0; }
-    .cover { background: linear-gradient(135deg, #7C3AED, #4F46E5); color: #fff; padding: 60px 50px; min-height: 280px; display: flex; flex-direction: column; justify-content: center; }
+    .cover { background: linear-gradient(135deg, #443DCB, #4F46E5); color: #fff; padding: 60px 50px; min-height: 280px; display: flex; flex-direction: column; justify-content: center; }
     .cover h1 { font-size: 32px; font-weight: 700; margin-bottom: 8px; }
     .cover p { font-size: 16px; opacity: 0.85; margin-bottom: 30px; }
     .cover-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 20px; }
@@ -107,11 +107,11 @@ Make it professional, data-driven, and client-friendly. Use specific numbers and
     .cover-meta-value { font-size: 14px; font-weight: 600; }
     .body { padding: 40px 50px; max-width: 800px; margin: 0 auto; }
     .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin: 30px 0; }
-    .stat-card { border: 1px solid #e0e0d8; border-radius: 10px; padding: 16px; text-align: center; border-top: 3px solid #7C3AED; }
-    .stat-num { font-size: 28px; font-weight: 700; color: #7C3AED; }
+    .stat-card { border: 1px solid #e0e0d8; border-radius: 10px; padding: 16px; text-align: center; border-top: 3px solid #443DCB; }
+    .stat-num { font-size: 28px; font-weight: 700; color: #443DCB; }
     .stat-lbl { font-size: 11px; color: #888; margin-top: 4px; }
     .section { margin: 28px 0; }
-    .section-title { font-size: 16px; font-weight: 700; color: #7C3AED; border-bottom: 2px solid #EEEDFE; padding-bottom: 8px; margin-bottom: 14px; }
+    .section-title { font-size: 16px; font-weight: 700; color: #443DCB; border-bottom: 2px solid #EEEDFE; padding-bottom: 8px; margin-bottom: 14px; }
     .report-body { font-size: 13px; line-height: 1.9; color: #333; white-space: pre-wrap; }
     .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #e0e0d8; text-align: center; font-size: 11px; color: #888; }
     @media print {
@@ -197,7 +197,7 @@ Make it professional, data-driven, and client-friendly. Use specific numbers and
         <div style={{ display:"flex", gap:8, marginBottom:24, alignItems:"center" }}>
           {["Client Info","Review","Report"].map((s, i) => (
             <div key={i} style={{ display:"flex", alignItems:"center", gap:8 }}>
-              <div style={{ width:28, height:28, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:700, background: step>i?"#7C3AED":step===i+1?"#7C3AED22":bg3, color: step>i?"#fff":step===i+1?"#A78BFA":txt3, border:`1px solid ${step>=i+1?"#7C3AED44":bdr}` }}>
+              <div style={{ width:28, height:28, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:700, background: step>i?"#443DCB":step===i+1?"#443DCB22":bg3, color: step>i?"#fff":step===i+1?"#6B62E8":txt3, border:`1px solid ${step>=i+1?"#443DCB44":bdr}` }}>
                 {step>i?"✓":i+1}
               </div>
               <span style={{ fontSize:12, color:step===i+1?txt:txt3, fontWeight:step===i+1?600:400 }}>{s}</span>
@@ -227,13 +227,13 @@ Make it professional, data-driven, and client-friendly. Use specific numbers and
                 <div style={{ fontSize:12, color:txt2, marginBottom:8 }}>Report will include data from:</div>
                 <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
                   {toolsUsed.length > 0 ? toolsUsed.map(t => (
-                    <span key={t} style={{ fontSize:11, padding:"2px 8px", borderRadius:6, background:"#7C3AED22", color:"#A78BFA" }}>{t}</span>
+                    <span key={t} style={{ fontSize:11, padding:"2px 8px", borderRadius:6, background:"#443DCB22", color:"#6B62E8" }}>{t}</span>
                   )) : (
                     <span style={{ fontSize:12, color:txt3 }}>No analyses yet — run some tools first for richer reports</span>
                   )}
                 </div>
               </div>
-              <button onClick={()=>setStep(2)} style={btn("#7C3AED", false)}>Next: Review →</button>
+              <button onClick={()=>setStep(2)} style={btn("#443DCB", false)}>Next: Review →</button>
             </div>
           </div>
         )}
@@ -259,7 +259,7 @@ Make it professional, data-driven, and client-friendly. Use specific numbers and
             </div>
             <div style={{ display:"flex", gap:10 }}>
               <button onClick={()=>setStep(1)} style={{ ...btn(bdr, false), color:txt2 }}>← Back</button>
-              <button onClick={generateReport} disabled={loading} style={{ ...btn("#7C3AED", loading), flex:1 }}>
+              <button onClick={generateReport} disabled={loading} style={{ ...btn("#443DCB", loading), flex:1 }}>
                 {loading ? "⏳ Generating Report..." : "🚀 Generate Report"}
               </button>
             </div>
@@ -273,7 +273,7 @@ Make it professional, data-driven, and client-friendly. Use specific numbers and
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16, flexWrap:"wrap", gap:8 }}>
                 <div style={{ fontSize:14, fontWeight:600, color:txt }}>📄 Generated Report</div>
                 <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-                  <button onClick={exportPDF} disabled={pdfLoading} style={{ padding:"6px 14px", borderRadius:8, border:"1px solid #7C3AED44", background:"#7C3AED", color:"#fff", fontSize:12, cursor:"pointer", fontWeight:600 }}>
+                  <button onClick={exportPDF} disabled={pdfLoading} style={{ padding:"6px 14px", borderRadius:8, border:"1px solid #443DCB44", background:"#443DCB", color:"#fff", fontSize:12, cursor:"pointer", fontWeight:600 }}>
                     {pdfLoading ? "⏳ Opening..." : "📥 Export PDF"}
                   </button>
                   <button onClick={downloadTxt} style={{ padding:"6px 14px", borderRadius:8, border:"1px solid #0F766E44", background:"#0F766E11", color:"#0F766E", fontSize:12, cursor:"pointer" }}>⬇️ Download TXT</button>
@@ -282,7 +282,7 @@ Make it professional, data-driven, and client-friendly. Use specific numbers and
               </div>
 
               {/* PDF Preview Card */}
-              <div style={{ background:"#7C3AED", borderRadius:10, padding:"20px 24px", marginBottom:16, color:"#fff" }}>
+              <div style={{ background:"#443DCB", borderRadius:10, padding:"20px 24px", marginBottom:16, color:"#fff" }}>
                 <div style={{ fontSize:16, fontWeight:700, marginBottom:4 }}>SEO Performance Report</div>
                 <div style={{ fontSize:12, opacity:0.8, marginBottom:16 }}>Comprehensive SEO Analysis & Recommendations</div>
                 <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
@@ -307,8 +307,8 @@ Make it professional, data-driven, and client-friendly. Use specific numbers and
                   { num: toolsUsed.length, label:"Tools Used" },
                   { num: report.split(" ").length, label:"Words in Report" },
                 ].map(s => (
-                  <div key={s.label} style={{ background:bg3, border:`1px solid ${bdr}`, borderRadius:8, padding:"12px 16px", textAlign:"center", borderTop:"3px solid #7C3AED" }}>
-                    <div style={{ fontSize:22, fontWeight:700, color:"#7C3AED" }}>{s.num}</div>
+                  <div key={s.label} style={{ background:bg3, border:`1px solid ${bdr}`, borderRadius:8, padding:"12px 16px", textAlign:"center", borderTop:"3px solid #443DCB" }}>
+                    <div style={{ fontSize:22, fontWeight:700, color:"#443DCB" }}>{s.num}</div>
                     <div style={{ fontSize:11, color:txt2, marginTop:2 }}>{s.label}</div>
                   </div>
                 ))}

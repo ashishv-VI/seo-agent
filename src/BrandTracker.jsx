@@ -3,7 +3,7 @@ import { useState } from "react";
 const AI_PLATFORMS = [
   { id:"chatgpt",    name:"ChatGPT",    icon:"🤖", color:"#10A37F", desc:"OpenAI's AI assistant" },
   { id:"gemini",     name:"Gemini",     icon:"✨", color:"#4285F4", desc:"Google's AI assistant" },
-  { id:"perplexity", name:"Perplexity", icon:"🔮", color:"#7C3AED", desc:"AI search engine" },
+  { id:"perplexity", name:"Perplexity", icon:"🔮", color:"#443DCB", desc:"AI search engine" },
   { id:"claude",     name:"Claude",     icon:"🧠", color:"#D97706", desc:"Anthropic's AI assistant" },
   { id:"copilot",    name:"Copilot",    icon:"💼", color:"#0078D4", desc:"Microsoft's AI assistant" },
 ];
@@ -161,7 +161,7 @@ COMPETITOR_ADVANTAGE: [Why competitors might rank higher in AI responses]`);
   const sentColor   = s => s === "positive" ? "#059669" : s === "negative" ? "#DC2626" : "#D97706";
   const posLabel    = p => ({ first:"#1 Mention", top3:"Top 3", top5:"Top 5", mentioned:"Mentioned", not_mentioned:"Not Mentioned" }[p] || p);
   const posColor    = p => ({ first:"#059669", top3:"#059669", top5:"#D97706", mentioned:"#D97706", not_mentioned:"#DC2626" }[p] || "#888");
-  const tabStyle    = (a) => ({ padding:"7px 16px", borderRadius:20, fontSize:12, cursor:"pointer", fontWeight:a?600:400, background:a?"#7C3AED22":"transparent", color:a?"#A78BFA":txt2, border:`1px solid ${a?"#7C3AED44":bdr}` });
+  const tabStyle    = (a) => ({ padding:"7px 16px", borderRadius:20, fontSize:12, cursor:"pointer", fontWeight:a?600:400, background:a?"#443DCB22":"transparent", color:a?"#6B62E8":txt2, border:`1px solid ${a?"#443DCB44":bdr}` });
 
   return (
     <div style={{ flex:1, overflowY:"auto", padding:24, background:bg }}>
@@ -192,7 +192,7 @@ COMPETITOR_ADVANTAGE: [Why competitors might rank higher in AI responses]`);
               style={{ width:"100%", padding:"10px 14px", borderRadius:10, border:`1px solid ${bdr}`, background:bg3, color:txt, fontSize:13, outline:"none", boxSizing:"border-box" }} />
           </div>
           <button onClick={runAnalysis} disabled={loading||!brand.trim()||!keyword.trim()}
-            style={{ width:"100%", padding:"11px", borderRadius:10, border:"none", background:loading||!brand.trim()||!keyword.trim()?"#333":"#7C3AED", color:loading||!brand.trim()||!keyword.trim()?txt3:"#fff", fontWeight:700, fontSize:14, cursor:loading||!brand.trim()||!keyword.trim()?"not-allowed":"pointer" }}>
+            style={{ width:"100%", padding:"11px", borderRadius:10, border:"none", background:loading||!brand.trim()||!keyword.trim()?"#333":"#443DCB", color:loading||!brand.trim()||!keyword.trim()?txt3:"#fff", fontWeight:700, fontSize:14, cursor:loading||!brand.trim()||!keyword.trim()?"not-allowed":"pointer" }}>
             {loading ? "🔍 Analyzing across 5 AI platforms..." : "🚀 Analyze AI Brand Visibility"}
           </button>
           {loading && (
@@ -214,7 +214,7 @@ COMPETITOR_ADVANTAGE: [Why competitors might rank higher in AI responses]`);
                 { label:"AI Visibility Score", val:`${results.overallScore}/100`, color:scoreColor(results.overallScore), sub:scoreLabel(results.overallScore) },
                 { label:"Platforms Mentioned", val:`${results.mentionedCount}/5`,  color:results.mentionedCount>=4?"#059669":results.mentionedCount>=2?"#D97706":"#DC2626", sub:"AI platforms" },
                 { label:"Share of Voice",      val:`${results.shareOfVoice}%`,     color:scoreColor(results.shareOfVoice), sub:"vs competitors" },
-                { label:"Brand",               val:results.brand,                  color:"#7C3AED", sub:results.keyword },
+                { label:"Brand",               val:results.brand,                  color:"#443DCB", sub:results.keyword },
               ].map(s => (
                 <div key={s.label} style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:12, padding:16, textAlign:"center", borderTop:`3px solid ${s.color}` }}>
                   <div style={{ fontSize:20, fontWeight:700, color:s.color, marginBottom:4 }}>{s.val}</div>
@@ -267,7 +267,7 @@ COMPETITOR_ADVANTAGE: [Why competitors might rank higher in AI responses]`);
                   <div style={{ fontSize:13, fontWeight:600, color:txt, marginBottom:14 }}>🎯 Quick Action Plan</div>
                   {results.actionPlan.split(/\d+\.\s*/).filter(Boolean).slice(0,5).map((action, i) => (
                     <div key={i} style={{ display:"flex", gap:10, marginBottom:10, padding:"8px 10px", background:bg3, borderRadius:8 }}>
-                      <div style={{ width:20, height:20, borderRadius:"50%", background:"#7C3AED22", color:"#A78BFA", fontSize:11, fontWeight:700, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>{i+1}</div>
+                      <div style={{ width:20, height:20, borderRadius:"50%", background:"#443DCB22", color:"#6B62E8", fontSize:11, fontWeight:700, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>{i+1}</div>
                       <div style={{ fontSize:12, color:txt, lineHeight:1.5 }}>{action.trim()}</div>
                     </div>
                   ))}
@@ -299,8 +299,8 @@ COMPETITOR_ADVANTAGE: [Why competitors might rank higher in AI responses]`);
                         </div>
                       )}
                       {r.recommendation && (
-                        <div style={{ background:"#7C3AED11", border:"1px solid #7C3AED33", borderRadius:8, padding:12 }}>
-                          <div style={{ fontSize:11, color:"#A78BFA", marginBottom:4 }}>💡 Recommendation:</div>
+                        <div style={{ background:"#443DCB11", border:"1px solid #443DCB33", borderRadius:8, padding:12 }}>
+                          <div style={{ fontSize:11, color:"#6B62E8", marginBottom:4 }}>💡 Recommendation:</div>
                           <div style={{ fontSize:12, color:txt, lineHeight:1.5 }}>{r.recommendation}</div>
                         </div>
                       )}
@@ -323,7 +323,7 @@ COMPETITOR_ADVANTAGE: [Why competitors might rank higher in AI responses]`);
                   <div style={{ fontSize:13, fontWeight:600, color:txt, marginBottom:14 }}>🔍 Top AI Queries to Target</div>
                   {results.topQueries.map((q, i) => (
                     <div key={i} style={{ display:"flex", gap:10, padding:"10px 12px", background:bg3, borderRadius:8, marginBottom:8, alignItems:"flex-start" }}>
-                      <span style={{ fontSize:11, background:"#7C3AED22", color:"#A78BFA", padding:"2px 6px", borderRadius:4, flexShrink:0, fontWeight:600 }}>Q{i+1}</span>
+                      <span style={{ fontSize:11, background:"#443DCB22", color:"#6B62E8", padding:"2px 6px", borderRadius:4, flexShrink:0, fontWeight:600 }}>Q{i+1}</span>
                       <span style={{ fontSize:12, color:txt, lineHeight:1.5 }}>{q}</span>
                     </div>
                   ))}
@@ -352,7 +352,7 @@ COMPETITOR_ADVANTAGE: [Why competitors might rank higher in AI responses]`);
                   <div style={{ fontSize:13, fontWeight:600, color:txt, marginBottom:14 }}>🗺️ 30-Day GEO Action Plan</div>
                   {results.actionPlan.split(/\d+\.\s*/).filter(Boolean).map((action, i) => (
                     <div key={i} style={{ display:"flex", gap:12, marginBottom:12, padding:"12px 14px", background:bg3, borderRadius:8, alignItems:"flex-start" }}>
-                      <div style={{ width:24, height:24, borderRadius:"50%", background:"#7C3AED", color:"#fff", fontSize:12, fontWeight:700, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>{i+1}</div>
+                      <div style={{ width:24, height:24, borderRadius:"50%", background:"#443DCB", color:"#fff", fontSize:12, fontWeight:700, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>{i+1}</div>
                       <div style={{ fontSize:13, color:txt, lineHeight:1.6 }}>{action.trim()}</div>
                     </div>
                   ))}

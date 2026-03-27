@@ -3,7 +3,7 @@ import { useState } from "react";
 const AEO_PLATFORMS = [
   { id:"google",     name:"Google AI Overview", icon:"🔵", color:"#4285F4", desc:"Google's AI-generated answers" },
   { id:"chatgpt",    name:"ChatGPT Search",     icon:"🤖", color:"#10A37F", desc:"OpenAI's search experience" },
-  { id:"perplexity", name:"Perplexity AI",      icon:"🔮", color:"#7C3AED", desc:"AI-powered search engine" },
+  { id:"perplexity", name:"Perplexity AI",      icon:"🔮", color:"#443DCB", desc:"AI-powered search engine" },
   { id:"bing",       name:"Bing Copilot",       icon:"🪟", color:"#0078D4", desc:"Microsoft's AI search" },
   { id:"gemini",     name:"Google Gemini",      icon:"✨", color:"#DB4437", desc:"Google's conversational AI" },
 ];
@@ -205,7 +205,7 @@ Ranked list of 7 improvements with estimated AEO score improvement`;
   function exportPDF(content2, title2) {
     const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${title2}</title>
 <style>body{font-family:Arial,sans-serif;max-width:800px;margin:40px auto;color:#333;line-height:1.7;}
-h1{color:#7C3AED;}pre{white-space:pre-wrap;font-size:13px;}
+h1{color:#443DCB;}pre{white-space:pre-wrap;font-size:13px;}
 .footer{margin-top:30px;text-align:center;font-size:11px;color:#888;border-top:1px solid #eee;padding-top:16px;}
 </style></head><body>
 <h1>🎯 ${title2}</h1>
@@ -220,7 +220,7 @@ h1{color:#7C3AED;}pre{white-space:pre-wrap;font-size:13px;}
 
   const scoreColor = s => s>=80?"#059669":s>=60?"#D97706":"#DC2626";
   const scoreLabel = s => s>=80?"Excellent":s>=60?"Good":s>=40?"Needs Work":"Poor";
-  const tabStyle   = (a, color="#7C3AED") => ({ padding:"7px 16px", borderRadius:20, fontSize:12, cursor:"pointer", fontWeight:a?600:400, background:a?color+"22":"transparent", color:a?color:txt2, border:`1px solid ${a?color+"44":bdr}`, whiteSpace:"nowrap" });
+  const tabStyle   = (a, color="#443DCB") => ({ padding:"7px 16px", borderRadius:20, fontSize:12, cursor:"pointer", fontWeight:a?600:400, background:a?color+"22":"transparent", color:a?color:txt2, border:`1px solid ${a?color+"44":bdr}`, whiteSpace:"nowrap" });
 
   return (
     <div style={{ flex:1, overflowY:"auto", padding:24, background:bg }}>
@@ -229,7 +229,7 @@ h1{color:#7C3AED;}pre{white-space:pre-wrap;font-size:13px;}
         <div style={{ fontSize:13, color:txt2, marginBottom:20 }}>Optimize content to be cited by Google AI Overview, ChatGPT, Perplexity & Bing Copilot</div>
 
         {/* What is AEO Banner */}
-        <div style={{ background:"#7C3AED11", border:"1px solid #7C3AED33", borderRadius:10, padding:"14px 18px", marginBottom:20 }}>
+        <div style={{ background:"#443DCB11", border:"1px solid #443DCB33", borderRadius:10, padding:"14px 18px", marginBottom:20 }}>
           <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12 }}>
             {[
               { icon:"🔵", label:"Google AI Overview", desc:"Appears above search results" },
@@ -239,7 +239,7 @@ h1{color:#7C3AED;}pre{white-space:pre-wrap;font-size:13px;}
             ].map(p => (
               <div key={p.label} style={{ textAlign:"center" }}>
                 <div style={{ fontSize:24, marginBottom:4 }}>{p.icon}</div>
-                <div style={{ fontSize:11, fontWeight:600, color:"#A78BFA" }}>{p.label}</div>
+                <div style={{ fontSize:11, fontWeight:600, color:"#6B62E8" }}>{p.label}</div>
                 <div style={{ fontSize:10, color:txt2 }}>{p.desc}</div>
               </div>
             ))}
@@ -272,10 +272,10 @@ h1{color:#7C3AED;}pre{white-space:pre-wrap;font-size:13px;}
                 <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8 }}>
                   {CONTENT_TYPES.map(ct => (
                     <div key={ct.id} onClick={()=>setContentType(ct.id)}
-                      style={{ padding:"10px 12px", borderRadius:8, border:`1px solid ${contentType===ct.id?"#7C3AED44":bdr}`, background:contentType===ct.id?"#7C3AED11":bg3, cursor:"pointer", display:"flex", alignItems:"center", gap:8 }}>
+                      style={{ padding:"10px 12px", borderRadius:8, border:`1px solid ${contentType===ct.id?"#443DCB44":bdr}`, background:contentType===ct.id?"#443DCB11":bg3, cursor:"pointer", display:"flex", alignItems:"center", gap:8 }}>
                       <span style={{ fontSize:16 }}>{ct.icon}</span>
                       <div>
-                        <div style={{ fontSize:11, fontWeight:contentType===ct.id?600:400, color:contentType===ct.id?"#A78BFA":txt }}>{ct.label}</div>
+                        <div style={{ fontSize:11, fontWeight:contentType===ct.id?600:400, color:contentType===ct.id?"#6B62E8":txt }}>{ct.label}</div>
                         <div style={{ fontSize:9, color:txt2 }}>{ct.desc}</div>
                       </div>
                     </div>
@@ -311,7 +311,7 @@ h1{color:#7C3AED;}pre{white-space:pre-wrap;font-size:13px;}
               </div>
 
               <button onClick={runAEOOptimizer} disabled={loading||!topic.trim()}
-                style={{ width:"100%", padding:"11px", borderRadius:10, border:"none", background:loading||!topic.trim()?"#333":"#7C3AED", color:loading||!topic.trim()?txt3:"#fff", fontWeight:700, fontSize:14, cursor:loading||!topic.trim()?"not-allowed":"pointer" }}>
+                style={{ width:"100%", padding:"11px", borderRadius:10, border:"none", background:loading||!topic.trim()?"#333":"#443DCB", color:loading||!topic.trim()?txt3:"#fff", fontWeight:700, fontSize:14, cursor:loading||!topic.trim()?"not-allowed":"pointer" }}>
                 {loading ? "🎯 Optimizing for AI Answers..." : "🎯 Run AEO Optimization"}
               </button>
             </div>
@@ -330,8 +330,8 @@ h1{color:#7C3AED;}pre{white-space:pre-wrap;font-size:13px;}
                     <div style={{ fontSize:28, fontWeight:800, color:results.citation==="High"?"#059669":results.citation==="Medium"?"#D97706":"#DC2626" }}>{results.citation}</div>
                     <div style={{ fontSize:11, color:txt2, marginTop:2 }}>Citation Probability</div>
                   </div>
-                  <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:12, padding:16, textAlign:"center", borderTop:"3px solid #7C3AED" }}>
-                    <div style={{ fontSize:28, fontWeight:800, color:"#A78BFA" }}>{selectedPlatforms.length}</div>
+                  <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:12, padding:16, textAlign:"center", borderTop:"3px solid #443DCB" }}>
+                    <div style={{ fontSize:28, fontWeight:800, color:"#6B62E8" }}>{selectedPlatforms.length}</div>
                     <div style={{ fontSize:11, color:txt2, marginTop:2 }}>Platforms Analyzed</div>
                   </div>
                 </div>
@@ -344,7 +344,7 @@ h1{color:#7C3AED;}pre{white-space:pre-wrap;font-size:13px;}
                       <button onClick={()=>copyText(results.raw,"optimizer")} style={{ padding:"5px 12px", borderRadius:8, border:`1px solid ${bdr}`, background:"transparent", color:copied==="optimizer"?"#059669":txt2, fontSize:11, cursor:"pointer" }}>
                         {copied==="optimizer"?"✅ Copied":"📋 Copy"}
                       </button>
-                      <button onClick={()=>exportPDF(results.raw,"AEO Optimization Report")} style={{ padding:"5px 12px", borderRadius:8, border:"none", background:"#7C3AED", color:"#fff", fontSize:11, cursor:"pointer", fontWeight:600 }}>📥 PDF</button>
+                      <button onClick={()=>exportPDF(results.raw,"AEO Optimization Report")} style={{ padding:"5px 12px", borderRadius:8, border:"none", background:"#443DCB", color:"#fff", fontSize:11, cursor:"pointer", fontWeight:600 }}>📥 PDF</button>
                     </div>
                   </div>
                   <div style={{ padding:"16px 20px" }}>
@@ -479,7 +479,7 @@ h1{color:#7C3AED;}pre{white-space:pre-wrap;font-size:13px;}
           <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
             {[
               {
-                title:"What is AEO?", icon:"🎯", color:"#7C3AED",
+                title:"What is AEO?", icon:"🎯", color:"#443DCB",
                 content:"Answer Engine Optimization (AEO) is the practice of optimizing content to be selected and cited by AI-powered answer engines like Google AI Overview, ChatGPT, Perplexity, and Bing Copilot. Unlike traditional SEO which targets search rankings, AEO targets being the source that AI systems cite when answering user questions."
               },
               {
