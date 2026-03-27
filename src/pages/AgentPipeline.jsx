@@ -46,10 +46,26 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
 
   function exportPDF() {
     setPrintMode(true);
-    const restore = () => { setPrintMode(false); window.removeEventListener("afterprint", restore); };
-    window.addEventListener("afterprint", restore);
-    // Give React 400ms to render the print view, then open dialog
-    setTimeout(() => window.print(), 400);
+    setTimeout(() => {
+      const printContent = document.querySelector(".print-report");
+      if (!printContent) { setPrintMode(false); return; }
+      const newWin = window.open("", "_blank", "width=900,height=700");
+      newWin.document.write(`<!DOCTYPE html><html><head><title>SEO Report</title>
+        <style>
+          * { box-sizing: border-box; margin: 0; padding: 0; }
+          body { font-family: 'Segoe UI', Arial, sans-serif; background: #fff; color: #1a1a18; }
+          @page { margin: 10mm 8mm; size: A4; }
+          @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+        </style>
+      </head><body>${printContent.innerHTML}</body></html>`);
+      newWin.document.close();
+      newWin.focus();
+      setTimeout(() => {
+        newWin.print();
+        newWin.close();
+        setPrintMode(false);
+      }, 800);
+    }, 600);
   }
 
   async function load(silent = false) {
