@@ -270,6 +270,8 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
         {isComplete("A7") && <div style={s.tab(activeTab==="technical")} onClick={()=>setActiveTab("technical")}>⚡ CWV</div>}
         {isComplete("A8") && <div style={s.tab(activeTab==="geo")} onClick={()=>setActiveTab("geo")}>🌍 GEO</div>}
         {isComplete("A9") && <div style={s.tab(activeTab==="report")} onClick={()=>setActiveTab("report")}>📊 Report</div>}
+        {isComplete("A2") && <div style={s.tab(activeTab==="score")} onClick={()=>setActiveTab("score")}>🏆 Score</div>}
+        {isComplete("A2") && <div style={s.tab(activeTab==="tasks")} onClick={()=>setActiveTab("tasks")}>📋 Tasks</div>}
       </div>
 
       {/* Pipeline Tab */}
@@ -449,6 +451,16 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
       {/* Report Tab */}
       {activeTab==="report" && state.A9_report && (
         <FullReportView report={state.A9_report} dark={dark} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2} />
+      )}
+
+      {/* Score Tab */}
+      {activeTab==="score" && (
+        <ScoreBreakdownView clientId={clientId} state={state} dark={dark} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2} getToken={getToken} API={API} />
+      )}
+
+      {/* Tasks Tab */}
+      {activeTab==="tasks" && (
+        <TaskQueueView clientId={clientId} dark={dark} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2} getToken={getToken} API={API} />
       )}
 
       <AIChatBot dark={dark} clientId={clientId} getToken={getToken} API={API} />
@@ -1679,6 +1691,296 @@ function FullReportView({ report, bg2, bg3, bdr, txt, txt2 }) {
           {r.offPageSummary}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Score Breakdown View ─────────────────────────────
+function ScoreBreakdownView({ clientId, state, dark, bg2, bg3, bdr, txt, txt2, getToken, API }) {
+  const [score,    setScore]    = useState(null);
+  const [forecast, setForecast] = useState(null);
+  const [loading,  setLoading]  = useState(true);
+  const [drill,    setDrill]    = useState(null);
+
+  useEffect(() => {
+    async function fetchScore() {
+      try {
+        const token = await getToken();
+        const [sRes, fRes] = await Promise.all([
+          fetch(`${API}/api/agents/${clientId}/score`,    { headers: { Authorization: `Bearer ${token}` } }),
+          fetch(`${API}/api/agents/${clientId}/forecast`, { headers: { Authorization: `Bearer ${token}` } }),
+        ]);
+        const sData = await sRes.json();
+        const fData = await fRes.json();
+        setScore(sData.score);
+        setForecast(fData.forecast);
+      } catch { /* noop */ }
+      setLoading(false);
+    }
+    fetchScore();
+  }, [clientId]);
+
+  if (loading) return <div style={{ padding:40, textAlign:"center", color:txt2, fontSize:13 }}>Loading score...</div>;
+
+  const scoreData = score || { overall: 0, breakdown: {} };
+  const { overall, breakdown } = scoreData;
+  const dims = breakdown ? Object.values(breakdown) : [];
+
+  const scoreColor = overall >= 75 ? "#059669" : overall >= 50 ? "#D97706" : "#DC2626";
+  const scoreLabel = overall >= 75 ? "Good" : overall >= 50 ? "Needs Work" : "Critical";
+
+  return (
+    <div style={{ padding: 24 }}>
+      {/* Overall Score */}
+      <div style={{ display: "flex", alignItems: "center", gap: 24, background: bg2, border: `1px solid ${bdr}`, borderRadius: 16, padding: 24, marginBottom: 20 }}>
+        <div style={{ flexShrink: 0, width: 100, height: 100, borderRadius: "50%", border: `6px solid ${scoreColor}`, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: `${scoreColor}10` }}>
+          <div style={{ fontSize: 28, fontWeight: 800, color: scoreColor }}>{overall}</div>
+          <div style={{ fontSize: 10, color: scoreColor, fontWeight: 600 }}>/100</div>
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 20, fontWeight: 700, color: txt, marginBottom: 4 }}>
+            Overall SEO Score — <span style={{ color: scoreColor }}>{scoreLabel}</span>
+          </div>
+          <div style={{ fontSize: 13, color: txt2, marginBottom: 12 }}>
+            Technical (30%) · Content (40%) · Authority (20%) · GEO (10%)
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {dims.map(d => (
+              <div key={d.label} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <div style={{ width: 8, height: 8, borderRadius: "50%", background: d.color }} />
+                <span style={{ fontSize: 11, color: txt2 }}>{d.label}</span>
+                <span style={{ fontSize: 11, fontWeight: 700, color: d.color }}>{d.score}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* 4 Dimension Cards */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 14, marginBottom: 20 }}>
+        {dims.map(d => {
+          const isOpen = drill === d.label;
+          return (
+            <div key={d.label} onClick={() => setDrill(isOpen ? null : d.label)}
+              style={{ background: bg2, border: `1px solid ${isOpen ? d.color : bdr}`, borderRadius: 14, padding: 18, cursor: "pointer" }}
+            >
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: txt }}>{d.label}</div>
+                <div style={{ fontSize: 20, fontWeight: 800, color: d.color }}>{d.score}</div>
+              </div>
+              <div style={{ fontSize: 10, color: txt2, marginBottom: 8 }}>Weight: {Math.round(d.weight * 100)}%</div>
+              <div style={{ height: 8, borderRadius: 4, background: bg3, overflow: "hidden", marginBottom: isOpen ? 16 : 0 }}>
+                <div style={{ height: "100%", width: `${d.score}%`, background: d.color, borderRadius: 4, transition: "width 0.8s" }} />
+              </div>
+              {isOpen && d.factors?.length > 0 && (
+                <div style={{ borderTop: `1px solid ${bdr}`, paddingTop: 14 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: d.color, textTransform: "uppercase", marginBottom: 10 }}>Factor Breakdown</div>
+                  {d.factors.map(f => {
+                    const fc = f.score >= 75 ? "#059669" : f.score >= 50 ? "#D97706" : "#DC2626";
+                    return (
+                      <div key={f.name} style={{ marginBottom: 8 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
+                          <span style={{ fontSize: 11, color: txt }}>{f.name}</span>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: fc }}>{f.score}</span>
+                        </div>
+                        <div style={{ height: 4, borderRadius: 2, background: bg3 }}>
+                          <div style={{ height: "100%", width: `${f.score}%`, background: fc, borderRadius: 2 }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              <div style={{ fontSize: 10, color: txt2, marginTop: 8 }}>{isOpen ? "▲ collapse" : "▼ factor breakdown"}</div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Growth Forecast */}
+      {forecast && (
+        <div style={{ background: bg2, border: `1px solid #05966933`, borderRadius: 14, padding: 20, borderLeft: "4px solid #059669" }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: txt, marginBottom: 12 }}>
+            📈 Growth Forecast — fix top {forecast.tasksConsidered} issues
+          </div>
+          <div style={{ display: "flex", gap: 20, flexWrap: "wrap", marginBottom: 14 }}>
+            {[
+              { val: forecast.trafficGrowth, label: "Traffic growth",   color: "#059669" },
+              { val: forecast.scoreGain,     label: "Score improvement",color: "#443DCB" },
+              { val: forecast.timeframe,     label: "Timeframe",         color: "#D97706" },
+              { val: forecast.confidence,    label: "Confidence",
+                color: forecast.confidence==="High"?"#059669":forecast.confidence==="Medium"?"#D97706":"#DC2626" },
+            ].map(s => (
+              <div key={s.label} style={{ textAlign: "center", minWidth: 80 }}>
+                <div style={{ fontSize: 20, fontWeight: 800, color: s.color }}>{s.val}</div>
+                <div style={{ fontSize: 10, color: txt2 }}>{s.label}</div>
+              </div>
+            ))}
+          </div>
+          {forecast.breakdown?.map((t, i) => (
+            <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0", borderBottom: `1px solid ${bdr}` }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: "#443DCB", minWidth: 18 }}>#{i+1}</span>
+              <span style={{ fontSize: 12, color: txt, flex: 1 }}>{t.task}</span>
+              <span style={{ fontSize: 10, color: "#059669", background: "#05966911", padding: "2px 8px", borderRadius: 8 }}>{t.gain}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Task Queue View ──────────────────────────────────
+function TaskQueueView({ clientId, dark, bg2, bg3, bdr, txt, txt2, getToken, API }) {
+  const [tasks,    setTasks]    = useState([]);
+  const [loading,  setLoading]  = useState(true);
+  const [filter,   setFilter]   = useState("all");
+  const [updating, setUpdating] = useState(null);
+  const [expanded, setExpanded] = useState(null);
+  const [toast,    setToast]    = useState("");
+
+  const AGENT_COLOR = {
+    OnPageAgent:   { color:"#443DCB", bg:"#443DCB15", label:"On-Page"   },
+    TechnicalAgent:{ color:"#0891B2", bg:"#0891B215", label:"Technical" },
+    ContentAgent:  { color:"#D97706", bg:"#D9770615", label:"Content"   },
+    LinkingAgent:  { color:"#059669", bg:"#05966915", label:"Linking"   },
+    LocalAgent:    { color:"#7C3AED", bg:"#7C3AED15", label:"Local"     },
+  };
+
+  useEffect(() => {
+    async function fetchTasks() {
+      try {
+        const token = await getToken();
+        const res  = await fetch(`${API}/api/agents/${clientId}/tasks`, { headers: { Authorization: `Bearer ${token}` } });
+        const data = await res.json();
+        setTasks(data.tasks || []);
+      } catch { /* noop */ }
+      setLoading(false);
+    }
+    fetchTasks();
+  }, [clientId]);
+
+  async function markComplete(taskId) {
+    setUpdating(taskId);
+    try {
+      const token = await getToken();
+      await fetch(`${API}/api/agents/${clientId}/tasks/${taskId}`, {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body:   JSON.stringify({ status: "complete", completedBy: "user" }),
+      });
+      setTasks(t => t.map(x => x.id === taskId ? { ...x, status: "complete" } : x));
+      setToast("Task marked complete");
+      setTimeout(() => setToast(""), 3000);
+    } catch { /* noop */ }
+    setUpdating(null);
+  }
+
+  const filtered  = tasks.filter(t => filter==="all" ? true : filter==="pending" ? t.status==="pending" : t.status==="complete");
+  const pending   = tasks.filter(t => t.status==="pending").length;
+  const completed = tasks.filter(t => t.status==="complete").length;
+
+  if (loading) return <div style={{ padding:40, textAlign:"center", color:txt2, fontSize:13 }}>Loading tasks...</div>;
+
+  return (
+    <div style={{ padding: 24 }}>
+      {toast && (
+        <div style={{ position:"fixed", bottom:24, right:24, background:"#059669", color:"#fff", padding:"10px 18px", borderRadius:10, fontSize:13, fontWeight:600, zIndex:9999 }}>
+          ✅ {toast}
+        </div>
+      )}
+
+      {/* Stats + filter */}
+      <div style={{ display:"flex", gap:12, marginBottom:20, flexWrap:"wrap", alignItems:"center" }}>
+        {[{label:"Total",val:tasks.length,color:"#443DCB"},{label:"Pending",val:pending,color:"#DC2626"},{label:"Done",val:completed,color:"#059669"}].map(s => (
+          <div key={s.label} style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:12, padding:"12px 20px", textAlign:"center", minWidth:90 }}>
+            <div style={{ fontSize:22, fontWeight:800, color:s.color }}>{s.val}</div>
+            <div style={{ fontSize:11, color:txt2 }}>{s.label}</div>
+          </div>
+        ))}
+        <div style={{ display:"flex", gap:6, marginLeft:"auto" }}>
+          {["all","pending","complete"].map(f => (
+            <button key={f} onClick={() => setFilter(f)} style={{
+              padding:"7px 14px", borderRadius:8, fontSize:11, fontWeight:600, cursor:"pointer",
+              background: filter===f ? "#443DCB" : "transparent",
+              color:      filter===f ? "#fff"    : txt2,
+              border:     `1px solid ${filter===f ? "#443DCB" : bdr}`,
+            }}>
+              {f.charAt(0).toUpperCase()+f.slice(1)}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {filtered.length===0 && (
+        <div style={{ textAlign:"center", padding:60, color:txt2, fontSize:13 }}>
+          {filter==="complete" ? "No completed tasks yet" : "No tasks — run the pipeline to generate tasks"}
+        </div>
+      )}
+
+      {filtered.map((task, i) => {
+        const ac        = AGENT_COLOR[task.assignedAgent] || { color:"#6B7280", bg:"#6B728015", label:task.assignedAgent };
+        const impColor  = {High:"#DC2626",Medium:"#D97706",Low:"#6B7280"}[task.impact] || "#6B7280";
+        const effColor  = {easy:"#059669",medium:"#D97706",hard:"#DC2626"}[task.effort] || "#D97706";
+        const isOpen    = expanded===task.id;
+        const isDone    = task.status==="complete";
+
+        return (
+          <div key={task.id} style={{
+            background:bg2, border:`1px solid ${bdr}`, borderLeft:`4px solid ${isDone?"#059669":impColor}`,
+            borderRadius:12, marginBottom:10, overflow:"hidden", opacity:isDone?0.7:1,
+          }}>
+            <div onClick={()=>setExpanded(isOpen?null:task.id)}
+              style={{ padding:"14px 16px", cursor:"pointer", display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:12 }}
+            >
+              <div style={{ flex:1 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap", marginBottom:7 }}>
+                  <span style={{ fontSize:9, padding:"2px 8px", borderRadius:8, background:ac.bg, color:ac.color, fontWeight:700 }}>{ac.label}</span>
+                  <span style={{ fontSize:9, padding:"2px 8px", borderRadius:8, background:`${impColor}18`, color:impColor, fontWeight:700 }}>{task.impact} Impact</span>
+                  <span style={{ fontSize:9, padding:"2px 8px", borderRadius:8, background:`${effColor}18`, color:effColor, fontWeight:700 }}>{task.effort} effort</span>
+                  {isDone && <span style={{ fontSize:9, padding:"2px 8px", borderRadius:8, background:"#05966918", color:"#059669", fontWeight:700 }}>✅ Done</span>}
+                  <span style={{ fontSize:9, color:txt2, marginLeft:"auto" }}>#{i+1} · Score {task.priorityScore}</span>
+                </div>
+                <div style={{ fontSize:13, fontWeight:600, color:isDone?txt2:txt, textDecoration:isDone?"line-through":"none", lineHeight:1.4 }}>
+                  {task.title}
+                </div>
+              </div>
+              <div style={{ display:"flex", alignItems:"center", gap:8, flexShrink:0 }}>
+                <span style={{ fontSize:10, color:txt2 }}>{isOpen?"▲":"▼"}</span>
+                {!isDone && (
+                  <button onClick={e=>{e.stopPropagation();markComplete(task.id);}} disabled={updating===task.id}
+                    style={{ padding:"6px 12px", borderRadius:8, border:"none", background:"#059669", color:"#fff", fontSize:11, fontWeight:700, cursor:"pointer", opacity:updating===task.id?0.5:1 }}>
+                    {updating===task.id?"...":"✅ Done"}
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {isOpen && (
+              <div style={{ padding:"0 16px 16px", borderTop:`1px solid ${bdr}` }}>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginTop:14 }}>
+                  <div style={{ background:bg3, borderRadius:10, padding:"12px 14px" }}>
+                    <div style={{ fontSize:10, fontWeight:700, color:"#443DCB", textTransform:"uppercase", marginBottom:8 }}>📈 Expected Impact</div>
+                    <div style={{ display:"flex", gap:12 }}>
+                      <div><div style={{ fontSize:16, fontWeight:800, color:"#059669" }}>+{task.expectedScoreGain||3}</div><div style={{ fontSize:10, color:txt2 }}>score pts</div></div>
+                      <div><div style={{ fontSize:12, fontWeight:700, color:"#443DCB" }}>{task.expectedRankGain||"1-3 pos"}</div><div style={{ fontSize:10, color:txt2 }}>rank gain</div></div>
+                    </div>
+                  </div>
+                  <div style={{ background:bg3, borderRadius:10, padding:"12px 14px" }}>
+                    <div style={{ fontSize:10, fontWeight:700, color:"#059669", textTransform:"uppercase", marginBottom:8 }}>🔧 How to Fix</div>
+                    <div style={{ fontSize:12, color:txt, lineHeight:1.5 }}>{task.fixSuggestion||"See action plan for details"}</div>
+                  </div>
+                </div>
+                {task.autoFixable && (
+                  <div style={{ marginTop:10, padding:"8px 12px", background:"#443DCB11", borderRadius:8, fontSize:11, color:"#443DCB", fontWeight:600 }}>
+                    ⚡ Auto-fixable — this issue can be resolved with a one-click fix
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

@@ -207,9 +207,9 @@ export default function AlertCenter({ dark, clientId }) {
                       )}
                     </div>
 
-                    {/* What happened */}
+                    {/* What happened — business language if available */}
                     <div style={{ fontSize: 13, fontWeight: 600, color: txt, lineHeight: 1.5 }}>
-                      {alert.message}
+                      {alert.businessMessage || alert.message}
                     </div>
                   </div>
 
@@ -256,10 +256,11 @@ export default function AlertCenter({ dark, clientId }) {
                       </div>
                     </div>
 
-                    {/* Agent fix note if available */}
-                    {alert.fix && alert.fix !== ctx.how[0] && (
-                      <div style={{ marginTop: 10, padding: "8px 12px", background: "#05966911", borderRadius: 8, fontSize: 11, color: "#059669" }}>
-                        <span style={{ fontWeight: 600 }}>Agent note: </span>{alert.fix}
+                    {/* Business action / fix note */}
+                    {(alert.businessAction || alert.fix) && (
+                      <div style={{ marginTop: 10, padding: "10px 14px", background: "#05966911", borderRadius: 8, fontSize: 12, color: "#059669", display: "flex", alignItems: "flex-start", gap: 8 }}>
+                        <span>→</span>
+                        <span><span style={{ fontWeight: 700 }}>Action: </span>{alert.businessAction || alert.fix}</span>
                       </div>
                     )}
 

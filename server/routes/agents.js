@@ -11,6 +11,10 @@ const { runA6 }              = require("../agents/A6_onpage");
 const { runA7 }              = require("../agents/A7_technical");
 const { runA8 }              = require("../agents/A8_geo");
 const { generateReport, checkAlerts } = require("../agents/A9_monitoring");
+const { getTasks, getTopTasks, updateTask, clearTasks } = require("../utils/taskQueue");
+const { calculateScore, getLatestScore, getScoreHistory, generateForecast } = require("../utils/scoreCalculator");
+const { getState } = require("../shared-state/stateManager");
+const { translateAlert, SEVERITY_LABELS } = require("../utils/alertTranslator");
 
 // ── Helper: check client ownership ────────────────
 async function getClientDoc(clientId, uid) {
@@ -317,6 +321,200 @@ router.get("/:clientId/rank-history", verifyToken, async (req, res) => {
       .get();
     const history = snap.docs.map(d => d.data());
     return res.json({ history });
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
+// ────────────────────────────────────────────────────
+// TASK QUEUE ENDPOINTS
+// ────────────────────────────────────────────────────
+
+// GET all tasks sorted by priority
+router.get("/:clientId/tasks", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const tasks = await getTasks(req.params.clientId);
+    return res.json({ tasks, total: tasks.length });
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
+// GET top 5 pending tasks
+router.get("/:clientId/tasks/today", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const tasks = await getTopTasks(req.params.clientId, 5);
+    return res.json({ tasks });
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
+// PUT update task status
+router.put("/:clientId/tasks/:taskId", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const { status, completedBy, notes } = req.body;
+    const updates = { status };
+    if (status === "complete") {
+      updates.completedAt = FieldValue.serverTimestamp();
+      updates.completedBy = completedBy || req.uid;
+    }
+    if (notes) updates.notes = notes;
+    await updateTask(req.params.clientId, req.params.taskId, updates);
+    return res.json({ message: "Task updated" });
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
+// POST mark task as executed (quick-win auto-fix record)
+router.post("/:clientId/tasks/:taskId/execute", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const { outcome } = req.body;
+    await updateTask(req.params.clientId, req.params.taskId, {
+      status:      "complete",
+      completedAt: FieldValue.serverTimestamp(),
+      completedBy: req.uid,
+      outcome:     outcome || "Manually resolved",
+    });
+    return res.json({ message: "Task marked as executed" });
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
+// ────────────────────────────────────────────────────
+// SCORE ENDPOINTS
+// ────────────────────────────────────────────────────
+
+// GET current 4-dimension score breakdown
+router.get("/:clientId/score", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const clientId = req.params.clientId;
+
+    // Try latest stored snapshot first
+    const stored = await getLatestScore(clientId);
+    if (stored) return res.json({ score: stored, source: "cached" });
+
+    // Fallback: calculate live from agent states
+    const [audit, keywords, geo, onpage, technical] = await Promise.all([
+      getState(clientId, "A2_audit"),
+      getState(clientId, "A3_keywords"),
+      getState(clientId, "A8_geo"),
+      getState(clientId, "A6_onpage"),
+      getState(clientId, "A7_technical"),
+    ]);
+    const score = calculateScore(audit, keywords, geo, onpage, technical);
+    return res.json({ score, source: "live" });
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
+// GET score history for chart (last 12)
+router.get("/:clientId/score/history", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const history = await getScoreHistory(req.params.clientId, 12);
+    return res.json({ history });
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
+// GET growth forecast
+router.get("/:clientId/forecast", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const clientId = req.params.clientId;
+    const [tasks, stored] = await Promise.all([
+      getTopTasks(clientId, 5),
+      getLatestScore(clientId),
+    ]);
+    const currentScore = stored?.overall || 0;
+    const forecast = generateForecast(tasks, currentScore);
+    return res.json({ forecast, currentScore });
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
+// ────────────────────────────────────────────────────
+// UNIFIED DASHBOARD ENDPOINT
+// ────────────────────────────────────────────────────
+
+router.get("/:clientId/dashboard", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const clientId = req.params.clientId;
+
+    const [tasks, scoreHistory, brief, audit, report, rawAlerts] = await Promise.all([
+      getTopTasks(clientId, 5),
+      getScoreHistory(clientId, 12),
+      getState(clientId, "A1_brief"),
+      getState(clientId, "A2_audit"),
+      getState(clientId, "A9_report"),
+      db.collection("alerts").where("clientId","==",clientId).where("resolved","==",false).orderBy("createdAt","desc").limit(20).get(),
+    ]);
+
+    // Translate alerts to business language
+    const alerts = rawAlerts.docs.map(d => {
+      const a = d.data();
+      const translated = translateAlert(a.message, a.type);
+      return {
+        id: d.id,
+        ...a,
+        ...translated,
+        severityLabel: SEVERITY_LABELS[translated.severity] || SEVERITY_LABELS.info,
+      };
+    });
+
+    const latestScore = scoreHistory.length ? scoreHistory[scoreHistory.length - 1] : null;
+    const forecast    = generateForecast(tasks, latestScore?.overall || 0);
+
+    return res.json({
+      brief:        brief ? { businessName: brief.businessName, websiteUrl: brief.websiteUrl, goals: brief.goals } : null,
+      score:        latestScore,
+      scoreHistory,
+      forecast,
+      topTasks:     tasks,
+      alerts,
+      auditSummary: audit ? { healthScore: audit.healthScore, p1: (audit.issues?.p1||[]).length, p2: (audit.issues?.p2||[]).length, p3: (audit.issues?.p3||[]).length } : null,
+      reportReady:  !!report,
+    });
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
+// ── GET translated alerts for client ──────────────
+router.get("/:clientId/alerts", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const snap = await db.collection("alerts")
+      .where("clientId", "==", req.params.clientId)
+      .where("resolved", "==", false)
+      .orderBy("createdAt", "desc")
+      .limit(30)
+      .get();
+
+    const alerts = snap.docs.map(d => {
+      const a = d.data();
+      const translated = translateAlert(a.message, a.type);
+      return {
+        id: d.id,
+        ...a,
+        ...translated,
+        severityLabel: SEVERITY_LABELS[translated.severity] || SEVERITY_LABELS.info,
+      };
+    });
+
+    return res.json({ alerts });
   } catch (e) {
     return res.status(e.code || 500).json({ error: e.message });
   }

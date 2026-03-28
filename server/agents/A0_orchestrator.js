@@ -136,6 +136,12 @@ async function handleFailure(clientId, agentId, error) {
 // Uses lazy requires to avoid circular dependency issues.
 // Called fire-and-forget from the /run-pipeline route — does NOT block the HTTP response.
 async function runFullPipeline(clientId, keys) {
+  // Clear previous task queue so we start fresh
+  try {
+    const { clearTasks } = require("../utils/taskQueue");
+    await clearTasks(clientId);
+  } catch { /* non-blocking */ }
+
   // Lazy-load agent runners to avoid circular dependency
   const { runA2 } = require("./A2_audit");
   const { runA3 } = require("./A3_keywords");

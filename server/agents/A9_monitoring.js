@@ -1,6 +1,8 @@
-const { saveState, getState } = require("../shared-state/stateManager");
-const { callLLM, parseJSON }  = require("../utils/llm");
-const { db, FieldValue }      = require("../config/firebase");
+const { saveState, getState }                          = require("../shared-state/stateManager");
+const { callLLM, parseJSON }                           = require("../utils/llm");
+const { db, FieldValue }                               = require("../config/firebase");
+const { calculateScore, saveScoreHistory, generateForecast } = require("../utils/scoreCalculator");
+const { getTopTasks }                                  = require("../utils/taskQueue");
 
 /**
  * A9 — Reporting & Monitoring Agent
@@ -127,10 +129,30 @@ Write an 8-step SEO report. Return ONLY valid JSON:
     await db.collection("rank_history").doc(`${clientId}_${snapshot.date}`).set(snapshot);
   }
 
+  // ── Calculate 4-dimension SEO score and save snapshot ──
+  let scoreData = null;
+  let forecast  = null;
+  try {
+    scoreData = calculateScore(audit, keywords, geo, onpage, technical);
+    const topTasks = await getTopTasks(clientId, 5);
+    forecast  = generateForecast(topTasks, scoreData.overall);
+    await saveScoreHistory(clientId, {
+      ...scoreData,
+      gscClicks:      gscSummary?.totalClicks || null,
+      gscImpressions: gscSummary?.totalImpress || null,
+      gscAvgPos:      gscSummary?.avgPos || null,
+      healthScore:    audit?.healthScore || null,
+    });
+  } catch (e) {
+    console.error("[A9] Score calculation error:", e.message);
+  }
+
   const result = {
     status:       "complete",
     reportData,
     gscSummary,
+    scoreBreakdown: scoreData,
+    forecast,
     approvalId:   ref.id,
     rankSnapshotSaved: competitor?.rankingMatrix?.length > 0,
     humanGateNote:"Report draft saved — human must review, add relationship context, and trigger send.",

@@ -1,4 +1,5 @@
 const { saveState, getState } = require("../shared-state/stateManager");
+const { emitTasks, clearTasks } = require("../utils/taskQueue");
 
 /**
  * A2 — Technical & On-Page Audit Agent
@@ -583,6 +584,13 @@ function parseOnPage(html, pageUrl) {
     titleTruncated: title && title.length > 60,
     descTruncated:  desc && desc.length > 155,
   };
+
+  // Emit tasks to task queue (non-blocking — won't break audit if this fails)
+  await Promise.allSettled([
+    emitTasks(clientId, issues.p1, "p1", "A2"),
+    emitTasks(clientId, issues.p2, "p2", "A2"),
+    emitTasks(clientId, issues.p3, "p3", "A2"),
+  ]);
 
   return { checks, issues };
 }
