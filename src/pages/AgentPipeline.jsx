@@ -297,42 +297,14 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
       </div>
 
       {/* Pipeline Tab */}
-      {/* Automation Mode Bar */}
+      {/* Automation Mode Panel */}
       {isComplete("A2") && (
-        <div style={{ display:"flex", alignItems:"center", gap:10, background:bg2, border:`1px solid ${bdr}`, borderRadius:12, padding:"10px 16px", marginBottom:16 }}>
-          <span style={{ fontSize:12, fontWeight:700, color:txt, marginRight:4 }}>Automation Mode:</span>
-          {[
-            { id:"manual", icon:"🤚", label:"Manual", desc:"You approve everything" },
-            { id:"semi",   icon:"⚡", label:"Semi-Auto", desc:"AI generates, you approve" },
-            { id:"full",   icon:"🤖", label:"Full-Auto", desc:"AI fixes safe issues automatically" },
-          ].map(m => (
-            <button key={m.id} onClick={async () => {
-              setSavingMode(true);
-              const token = await getToken();
-              await fetch(`${API}/api/agents/${clientId}/automation-mode`, {
-                method: "PUT",
-                headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-                body: JSON.stringify({ mode: m.id }),
-              }).catch(() => {});
-              setAutomationMode(m.id);
-              setSavingMode(false);
-            }} title={m.desc} style={{
-              padding:"6px 12px", borderRadius:8, fontSize:11, fontWeight:600, cursor:"pointer",
-              background: automationMode===m.id ? (m.id==="full"?"#059669":m.id==="semi"?"#D97706":"#443DCB") : "transparent",
-              color:      automationMode===m.id ? "#fff" : txt2,
-              border:     `1px solid ${automationMode===m.id ? (m.id==="full"?"#059669":m.id==="semi"?"#D97706":"#443DCB") : bdr}`,
-              opacity:    savingMode ? 0.5 : 1,
-            }}>
-              {m.icon} {m.label}
-            </button>
-          ))}
-          {automationMode === "semi" && (
-            <span style={{ fontSize:11, color:"#D97706", marginLeft:4 }}>AI generates fixes — you approve in Approvals tab</span>
-          )}
-          {automationMode === "full" && (
-            <span style={{ fontSize:11, color:"#059669", marginLeft:4 }}>AI auto-fixes safe issues (title, meta, alt text)</span>
-          )}
-        </div>
+        <AutomationModePanel
+          automationMode={automationMode} setAutomationMode={setAutomationMode}
+          savingMode={savingMode} setSavingMode={setSavingMode}
+          clientId={clientId} getToken={getToken} API={API}
+          state={state} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2}
+        />
       )}
 
       {activeTab==="pipeline" && (
@@ -557,6 +529,124 @@ function getStateSuffix(id) {
   return { A1:"brief", A2:"audit", A3:"keywords", A4:"competitor", A5:"content", A6:"onpage", A7:"technical", A8:"geo", A9:"report" }[id] || id;
 }
 
+// ── Automation Mode Panel ────────────────────────────
+function AutomationModePanel({ automationMode, setAutomationMode, savingMode, setSavingMode, clientId, getToken, API, state, bg2, bg3, bdr, txt, txt2 }) {
+  const [runningFixes, setRunningFixes] = useState(false);
+  const [fixResult,    setFixResult]    = useState(null);
+
+  const MODES = [
+    {
+      id: "manual", icon: "🤚", label: "Manual",
+      color: "#443DCB",
+      title: "You control everything",
+      what: "AI detects issues and creates a prioritised task list. You decide when and how to fix each one.",
+      actions: ["Review tasks in Tasks tab", "Click 'Fix Now' to copy the fix", "Click 'AI Fix' to generate exact code", "Mark as Done when implemented"],
+    },
+    {
+      id: "semi", icon: "⚡", label: "Semi-Auto",
+      color: "#D97706",
+      title: "AI generates fixes, you approve",
+      what: "After each pipeline run, AI automatically generates ready-to-implement fixes for all auto-fixable issues and queues them for your approval.",
+      actions: ["AI writes fixes for title tags, meta descriptions, alt text, canonical URLs", "Fixes appear in Approvals tab", "You review and approve/reject each one", "Approved fixes are ready to copy-paste into your CMS"],
+    },
+    {
+      id: "full", icon: "🤖", label: "Full-Auto",
+      color: "#059669",
+      title: "AI generates all fixes automatically",
+      what: "AI generates fixes for every auto-fixable issue immediately after pipeline completes. All fixes go straight to Approvals — you only need to implement them.",
+      actions: ["AI generates fixes for ALL auto-fixable issues", "No manual trigger needed", "Review batch in Approvals tab", "Implement fixes in your CMS"],
+    },
+  ];
+
+  const autoFixCount = [
+    ...(state.A2_audit?.issues?.p1 || []),
+    ...(state.A2_audit?.issues?.p2 || []),
+    ...(state.A2_audit?.issues?.p3 || []),
+  ].filter(i => ["missing_title","missing_meta_desc","long_meta_desc","missing_canonical","no_viewport","missing_alt","missing_alt_text","missing_sitemap","missing_schema"].includes(i.type)).length;
+
+  const currentMode = MODES.find(m => m.id === automationMode) || MODES[0];
+
+  async function switchMode(modeId) {
+    setSavingMode(true);
+    const token = await getToken();
+    await fetch(`${API}/api/agents/${clientId}/automation-mode`, {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ mode: modeId }),
+    }).catch(() => {});
+    setAutomationMode(modeId);
+    setSavingMode(false);
+  }
+
+  async function runAIFixes() {
+    setRunningFixes(true);
+    setFixResult(null);
+    try {
+      const token = await getToken();
+      const res = await fetch(`${API}/api/agents/${clientId}/tasks/bulk`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "generate-fixes" }),
+      });
+      const data = await res.json();
+      setFixResult(data.generated > 0
+        ? `AI generated ${data.generated} fixes — check Approvals tab to review`
+        : data.message || "No auto-fixable tasks found");
+    } catch { setFixResult("Failed to generate fixes"); }
+    setRunningFixes(false);
+  }
+
+  return (
+    <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:14, marginBottom:16, overflow:"hidden" }}>
+      {/* Mode selector row */}
+      <div style={{ display:"flex", alignItems:"center", gap:8, padding:"12px 16px", borderBottom:`1px solid ${bdr}` }}>
+        <span style={{ fontSize:12, fontWeight:700, color:txt, marginRight:4 }}>Automation Mode:</span>
+        {MODES.map(m => (
+          <button key={m.id} onClick={() => switchMode(m.id)} disabled={savingMode} style={{
+            padding:"6px 14px", borderRadius:8, fontSize:11, fontWeight:700, cursor:savingMode?"not-allowed":"pointer",
+            background: automationMode===m.id ? m.color : "transparent",
+            color:      automationMode===m.id ? "#fff"   : txt2,
+            border:     `1px solid ${automationMode===m.id ? m.color : bdr}`,
+            opacity:    savingMode ? 0.6 : 1,
+          }}>
+            {m.icon} {m.label}
+          </button>
+        ))}
+        <span style={{ marginLeft:"auto", fontSize:11, color:txt2 }}>{savingMode ? "Saving..." : `${autoFixCount} auto-fixable issues detected`}</span>
+      </div>
+
+      {/* Mode explanation */}
+      <div style={{ padding:"14px 16px", display:"flex", gap:20, alignItems:"flex-start" }}>
+        <div style={{ flex:1 }}>
+          <div style={{ fontSize:13, fontWeight:700, color:currentMode.color, marginBottom:4 }}>{currentMode.icon} {currentMode.title}</div>
+          <div style={{ fontSize:12, color:txt2, lineHeight:1.6, marginBottom:10 }}>{currentMode.what}</div>
+          <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+            {currentMode.actions.map((a, i) => (
+              <div key={i} style={{ fontSize:11, padding:"4px 10px", borderRadius:8, background:bg3, color:txt2, border:`1px solid ${bdr}` }}>
+                {i+1}. {a}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Action button */}
+        {automationMode !== "manual" && (
+          <div style={{ flexShrink:0, display:"flex", flexDirection:"column", alignItems:"flex-end", gap:8 }}>
+            <button onClick={runAIFixes} disabled={runningFixes} style={{
+              padding:"8px 16px", borderRadius:8, background:currentMode.color, color:"#fff",
+              border:"none", fontSize:12, fontWeight:700, cursor:runningFixes?"not-allowed":"pointer", opacity:runningFixes?0.7:1, whiteSpace:"nowrap",
+            }}>
+              {runningFixes ? "Generating..." : `⚡ Run AI Fixes Now`}
+            </button>
+            {fixResult && <div style={{ fontSize:11, color:currentMode.color, fontWeight:600, textAlign:"right", maxWidth:200 }}>{fixResult}</div>}
+            <div style={{ fontSize:10, color:txt2, textAlign:"right" }}>Fixes go to Approvals tab for review</div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── SEO Execution Engine ────────────────────────────
 function ActionPlanView({ state, bg2, bg3, bdr, txt, txt2, txt3, clientId, getToken, API, exportPDF }) {
   const [done,       setDone]       = useState(new Set());
@@ -648,6 +738,15 @@ function ActionPlanView({ state, bg2, bg3, bdr, txt, txt2, txt3, clientId, getTo
   const doneCount  = done.size;
   const total      = allTasks.length;
   const topTasks   = allTasks.slice(0, 5);
+
+  // Score explanation: what's dragging the score down
+  const p1Count = (audit.issues?.p1 || []).length;
+  const p2Count = (audit.issues?.p2 || []).length;
+  const scoreDeductions = [
+    ...(audit.issues?.p1 || []).slice(0,3).map(i => ({ issue: i.detail?.slice(0,60), pts: -20, color:"#DC2626" })),
+    ...(audit.issues?.p2 || []).slice(0,3).map(i => ({ issue: i.detail?.slice(0,60), pts: -8, color:"#D97706" })),
+  ].filter(d => d.issue);
+  const potentialGain = Math.min(p1Count*20 + p2Count*8, 100 - hs);
 
   const CATEGORIES = [
     { id:"critical",   icon:"🔴", label:"Critical Issues",  color:"#DC2626" },
@@ -748,22 +847,51 @@ function ActionPlanView({ state, bg2, bg3, bdr, txt, txt2, txt3, clientId, getTo
         )}
       </div>
 
-      {/* ── Dashboard ──────────────────────────────────── */}
-      <div style={{ display:"grid", gridTemplateColumns:hs>0?"auto 1fr":"1fr", gap:12, marginBottom:16 }}>
-        {hs > 0 && (
-          <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:12, padding:"16px 20px", display:"flex", flexDirection:"column", alignItems:"center" }}>
-            <div style={{ position:"relative", width:80, height:80 }}>
-              <svg width="80" height="80" viewBox="0 0 80 80">
-                <circle cx="40" cy="40" r="32" fill="none" stroke={bg3} strokeWidth="7"/>
-                <circle cx="40" cy="40" r="32" fill="none" stroke={scoreColor} strokeWidth="7"
-                  strokeDasharray={`${(hs/100)*201} 201`} strokeLinecap="round" transform="rotate(-90 40 40)"/>
-              </svg>
-              <div style={{ position:"absolute", inset:0, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center" }}>
-                <div style={{ fontSize:20, fontWeight:800, color:scoreColor, lineHeight:1 }}>{hs}</div>
-                <div style={{ fontSize:8, color:txt2 }}>/100</div>
+      {/* ── Score + Why Explanation ─────────────────────── */}
+      {hs > 0 && scoreDeductions.length > 0 && (
+        <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:12, padding:"14px 18px", marginBottom:16 }}>
+          <div style={{ display:"flex", alignItems:"flex-start", gap:20 }}>
+            {/* Score ring */}
+            <div style={{ textAlign:"center", flexShrink:0 }}>
+              <div style={{ position:"relative", width:72, height:72 }}>
+                <svg width="72" height="72" viewBox="0 0 80 80">
+                  <circle cx="40" cy="40" r="32" fill="none" stroke={bg3} strokeWidth="7"/>
+                  <circle cx="40" cy="40" r="32" fill="none" stroke={scoreColor} strokeWidth="7"
+                    strokeDasharray={`${(hs/100)*201} 201`} strokeLinecap="round" transform="rotate(-90 40 40)"/>
+                </svg>
+                <div style={{ position:"absolute", inset:0, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center" }}>
+                  <div style={{ fontSize:18, fontWeight:800, color:scoreColor, lineHeight:1 }}>{hs}</div>
+                  <div style={{ fontSize:8, color:txt2 }}>/100</div>
+                </div>
+              </div>
+              <div style={{ fontSize:9, color:txt2, marginTop:4 }}>Current Score</div>
+              {potentialGain > 0 && <div style={{ fontSize:10, fontWeight:700, color:"#059669", marginTop:2 }}>+{potentialGain} possible</div>}
+            </div>
+
+            {/* Why this score */}
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:12, fontWeight:700, color:txt, marginBottom:8 }}>Why {hs}/100? — What's dragging your score down:</div>
+              {scoreDeductions.map((d, i) => (
+                <div key={i} style={{ display:"flex", alignItems:"center", gap:8, padding:"5px 0", borderBottom:`1px solid ${bdr}` }}>
+                  <span style={{ fontSize:12, fontWeight:800, color:d.color, minWidth:28 }}>{d.pts}</span>
+                  <span style={{ fontSize:11, color:txt2, flex:1 }}>{d.issue}</span>
+                  <span style={{ fontSize:9, padding:"2px 6px", borderRadius:6, background:`${d.color}15`, color:d.color, fontWeight:600 }}>Fix → +{Math.abs(d.pts)} pts</span>
+                </div>
+              ))}
+              <div style={{ marginTop:8, fontSize:11, color:"#059669", fontWeight:600 }}>
+                Fix top {Math.min(scoreDeductions.length, 3)} issues → Score goes from {hs} to {Math.min(hs + potentialGain, 100)}/100
               </div>
             </div>
-            <div style={{ fontSize:10, color:txt2, marginTop:8, fontWeight:600 }}>SEO Score</div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Dashboard ──────────────────────────────────── */}
+      <div style={{ display:"grid", gridTemplateColumns:"1fr", gap:12, marginBottom:16 }}>
+        {hs === 0 && (
+          <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:12, padding:"16px 20px", display:"flex", flexDirection:"column", alignItems:"center" }}>
+            <div style={{ fontSize:32, marginBottom:8 }}>🚀</div>
+            <div style={{ fontSize:13, fontWeight:600, color:txt }}>Run the full pipeline to see your score</div>
           </div>
         )}
         <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
@@ -1206,6 +1334,36 @@ function FullKeywordsView({ kw, bg2, bg3, bdr, txt, txt2 }) {
 
   return (
     <div style={{ padding:4 }}>
+      {/* Current Rankings — from SE Ranking / SerpAPI */}
+      {(kw.currentRankings || []).length > 0 && (
+        <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:12, padding:"14px 18px", marginBottom:16 }}>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 }}>
+            <div style={{ fontSize:13, fontWeight:700, color:txt }}>Your Current Rankings</div>
+            <span style={{ fontSize:10, color:txt2, background:bg3, padding:"3px 8px", borderRadius:6 }}>Live from SE Ranking</span>
+          </div>
+          {(kw.currentRankings || []).slice(0, 15).map((r, i) => {
+            const pos = r.position || r.rank;
+            const posColor = pos <= 3 ? "#059669" : pos <= 10 ? "#D97706" : "#DC2626";
+            const posLabel = pos <= 3 ? "Top 3" : pos <= 10 ? "Page 1" : "Page 2+";
+            return (
+              <div key={i} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 0", borderBottom:`1px solid ${bdr}` }}>
+                <div style={{ minWidth:36, height:36, borderRadius:8, background:`${posColor}18`, display:"flex", alignItems:"center", justifyContent:"center", flexDirection:"column" }}>
+                  <span style={{ fontSize:13, fontWeight:800, color:posColor }}>#{pos}</span>
+                </div>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:12, fontWeight:600, color:txt }}>{r.keyword}</div>
+                  {r.url && <div style={{ fontSize:10, color:txt2 }}>{r.url.replace(/^https?:\/\/[^/]+/, "")}</div>}
+                </div>
+                <div style={{ textAlign:"right" }}>
+                  {r.volume != null && <div style={{ fontSize:11, color:"#059669", fontWeight:700 }}>{r.volume.toLocaleString()}/mo</div>}
+                  <span style={{ fontSize:9, padding:"2px 6px", borderRadius:6, background:`${posColor}18`, color:posColor, fontWeight:600 }}>{posLabel}</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {/* Stats */}
       <div style={{ display:"flex", gap:10, marginBottom:16, flexWrap:"wrap" }}>
         {[
@@ -1354,32 +1512,119 @@ function FullKeywordsView({ kw, bg2, bg3, bdr, txt, txt2 }) {
 }
 
 function FullCompetitorView({ comp, bg2, bg3, bdr, txt, txt2 }) {
-  const opp = { not_ranking:"#DC2626", top_3:"#059669", page_1:"#D97706", below_fold:"#6B7280" };
+  const [tab, setTab] = useState("gaps"); // gaps | keywords | competitors
+  const opp = { not_ranking:"#DC2626", top_3:"#059669", page_1:"#D97706", below_fold:"#6B7280", ranking_well:"#059669" };
+
+  const quickWins   = comp.analysis?.quickWins   || [];
+  const contentGaps = comp.analysis?.contentGaps || [];
+  const competitors = comp.analysis?.topCompetitors || [];
+  const rankMatrix  = comp.rankingMatrix || [];
+  const notRanking  = rankMatrix.filter(r => r.opportunity === "not_ranking");
+  const ranking     = rankMatrix.filter(r => r.opportunity !== "not_ranking");
+
   return (
     <div>
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:10, marginBottom:16 }}>
-        {[{ l:"Not Ranking",v:comp.summary?.notRanking,c:"#DC2626" },{ l:"Top 3",v:comp.summary?.rankingTop3,c:"#059669" },{ l:"Content Gaps",v:comp.summary?.contentGapsFound,c:"#443DCB" }].map(i=>(
-          <div key={i.l} style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, padding:"12px 10px", textAlign:"center", borderTop:`2px solid ${i.c}` }}>
-            <div style={{ fontSize:20, fontWeight:700, color:i.c }}>{i.v}</div>
-            <div style={{ fontSize:10, color:txt2 }}>{i.l}</div>
+      {/* Context banner — explains what this data means */}
+      <div style={{ background:"#443DCB0d", border:"1px solid #443DCB22", borderRadius:10, padding:"12px 16px", marginBottom:16 }}>
+        <div style={{ fontSize:12, fontWeight:700, color:"#443DCB", marginBottom:4 }}>What this analysis means</div>
+        <div style={{ fontSize:12, color:txt2, lineHeight:1.6 }}>
+          AI compared your website against top competitors for your target keywords. Keywords you don't rank for are opportunities — your competitors are getting that traffic instead.
+          {!comp.analysis?.serpDataUsed && <span style={{ color:"#D97706" }}> Add a SerpAPI key in Settings for real live competitor positions.</span>}
+        </div>
+      </div>
+
+      {/* Summary stats */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:10, marginBottom:16 }}>
+        {[
+          { l:"Not Ranking",    v: comp.summary?.notRanking     || notRanking.length, c:"#DC2626", desc:"keywords where you're invisible" },
+          { l:"In Top 3",       v: comp.summary?.rankingTop3    || ranking.filter(r=>r.opportunity==="top_3").length, c:"#059669", desc:"keywords you dominate" },
+          { l:"Content Gaps",   v: comp.summary?.contentGapsFound || contentGaps.length, c:"#D97706", desc:"topics competitors cover, you don't" },
+          { l:"Quick Wins",     v: quickWins.length,             c:"#443DCB", desc:"easy keywords to target now" },
+        ].map(i=>(
+          <div key={i.l} style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, padding:"12px 14px", textAlign:"center", borderTop:`3px solid ${i.c}` }}>
+            <div style={{ fontSize:24, fontWeight:800, color:i.c }}>{i.v}</div>
+            <div style={{ fontSize:11, color:txt, fontWeight:600 }}>{i.l}</div>
+            <div style={{ fontSize:10, color:txt2, marginTop:2 }}>{i.desc}</div>
           </div>
         ))}
       </div>
+
+      {/* Strategic summary */}
       {comp.analysis?.strategicSummary && (
-        <div style={{ background:bg3, borderRadius:8, padding:12, marginBottom:16, fontSize:12, color:txt2 }}>{comp.analysis.strategicSummary}</div>
+        <div style={{ background:bg3, borderRadius:10, padding:"12px 16px", marginBottom:16, borderLeft:"4px solid #443DCB", fontSize:12, color:txt2, lineHeight:1.7 }}>
+          <span style={{ fontWeight:700, color:"#443DCB" }}>AI Analysis: </span>{comp.analysis.strategicSummary}
+        </div>
       )}
-      {(comp.analysis?.quickWins||[]).map((w,i)=>(
-        <div key={i} style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:8, padding:"10px 12px", marginBottom:8 }}>
-          <div style={{ fontSize:12, color:txt, fontWeight:600 }}>{w.action}</div>
-          <div style={{ fontSize:11, color:txt2 }}>{w.keyword} → {w.expectedOutcome}</div>
+
+      {/* Tabs */}
+      <div style={{ display:"flex", gap:8, marginBottom:14 }}>
+        {[
+          { id:"gaps",        label:`Quick Wins (${quickWins.length})` },
+          { id:"content",     label:`Content Gaps (${contentGaps.length})` },
+          { id:"keywords",    label:`Keyword Status (${rankMatrix.length})` },
+        ].map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)} style={{ padding:"6px 14px", borderRadius:8, fontSize:12, fontWeight:600, cursor:"pointer", border:`1px solid ${tab===t.id?"#443DCB":bdr}`, background:tab===t.id?"#443DCB":"transparent", color:tab===t.id?"#fff":txt2 }}>{t.label}</button>
+        ))}
+      </div>
+
+      {/* Quick Wins tab */}
+      {tab === "gaps" && (
+        <div>
+          {quickWins.length === 0 && <div style={{ padding:24, textAlign:"center", color:txt2, fontSize:12 }}>No quick wins detected — add SerpAPI key for live competitor data</div>}
+          {quickWins.map((w, i) => (
+            <div key={i} style={{ background:bg2, border:`1px solid ${bdr}`, borderLeft:"4px solid #059669", borderRadius:10, padding:"12px 16px", marginBottom:10 }}>
+              <div style={{ display:"flex", gap:8, marginBottom:6 }}>
+                <span style={{ fontSize:10, padding:"2px 8px", borderRadius:8, background:"#05966918", color:"#059669", fontWeight:700 }}>Quick Win #{i+1}</span>
+              </div>
+              <div style={{ fontSize:13, fontWeight:700, color:txt, marginBottom:4 }}>{w.action}</div>
+              <div style={{ fontSize:12, color:txt2, marginBottom:6 }}>Target keyword: <strong style={{ color:"#443DCB" }}>{w.keyword}</strong></div>
+              {w.expectedOutcome && <div style={{ fontSize:11, color:"#059669" }}>Expected: {w.expectedOutcome}</div>}
+            </div>
+          ))}
         </div>
-      ))}
-      {(comp.rankingMatrix||[]).slice(0,8).map((r,i)=>(
-        <div key={i} style={{ background:bg3, borderRadius:8, padding:"8px 12px", marginBottom:6, display:"flex", justifyContent:"space-between" }}>
-          <span style={{ fontSize:12, color:txt }}>{r.keyword}</span>
-          <span style={{ fontSize:11, color:opp[r.opportunity]||txt2 }}>{r.opportunity?.replace("_"," ")}</span>
+      )}
+
+      {/* Content Gaps tab */}
+      {tab === "content" && (
+        <div>
+          {contentGaps.length === 0 && <div style={{ padding:24, textAlign:"center", color:txt2, fontSize:12 }}>No content gaps found</div>}
+          {contentGaps.map((g, i) => (
+            <div key={i} style={{ background:bg2, border:`1px solid ${bdr}`, borderLeft:"4px solid #D97706", borderRadius:10, padding:"12px 16px", marginBottom:10 }}>
+              <div style={{ fontSize:13, fontWeight:700, color:txt, marginBottom:4 }}>{g.topic}</div>
+              <div style={{ fontSize:12, color:txt2, marginBottom:4 }}>{g.description || "Your competitors rank for this topic. You have no page for it."}</div>
+              {g.recommendedAction && <div style={{ fontSize:11, color:"#D97706", fontWeight:600 }}>→ {g.recommendedAction}</div>}
+            </div>
+          ))}
+          {contentGaps.length === 0 && comp.analysis?.strategicSummary && (
+            <div style={{ padding:16, background:bg2, border:`1px solid ${bdr}`, borderRadius:10, fontSize:12, color:txt2 }}>
+              Based on the strategic analysis, create content around your key service areas and target location keywords to fill gaps.
+            </div>
+          )}
         </div>
-      ))}
+      )}
+
+      {/* Keyword Status tab */}
+      {tab === "keywords" && (
+        <div>
+          {rankMatrix.length === 0 && <div style={{ padding:24, textAlign:"center", color:txt2, fontSize:12 }}>No keyword ranking data. Add SerpAPI key in Settings for live positions.</div>}
+          <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, overflow:"hidden" }}>
+            <div style={{ display:"grid", gridTemplateColumns:"2fr 120px 120px", padding:"8px 14px", background:bg3, borderBottom:`1px solid ${bdr}`, fontSize:10, fontWeight:700, color:txt2 }}>
+              <span>KEYWORD</span><span style={{ textAlign:"center" }}>YOUR POSITION</span><span style={{ textAlign:"center" }}>STATUS</span>
+            </div>
+            {rankMatrix.slice(0,20).map((r, i) => (
+              <div key={i} style={{ display:"grid", gridTemplateColumns:"2fr 120px 120px", padding:"10px 14px", borderBottom:`1px solid ${bdr}`, alignItems:"center", background: i%2===0?bg2:bg3 }}>
+                <span style={{ fontSize:12, color:txt, fontWeight:500 }}>{r.keyword}</span>
+                <span style={{ textAlign:"center", fontSize:12, fontWeight:700, color: r.clientRank ? "#443DCB" : "#DC2626" }}>{r.clientRank ? `#${r.clientRank}` : "Not ranking"}</span>
+                <span style={{ textAlign:"center" }}>
+                  <span style={{ fontSize:10, padding:"2px 8px", borderRadius:8, background:`${opp[r.opportunity]||"#6B7280"}18`, color:opp[r.opportunity]||"#6B7280", fontWeight:600 }}>
+                    {(r.opportunity||"unknown").replace(/_/g," ")}
+                  </span>
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1541,33 +1786,118 @@ function FullOnPageView({ op, bg2, bg3, bdr, txt, txt2 }) {
 }
 
 function FullTechnicalView({ tech, bg2, bg3, bdr, txt, txt2 }) {
-  const strategies = [["mobile","📱 Mobile"], ["desktop","🖥️ Desktop"]];
+  const hasMobile  = !!(tech.cwvData?.mobile);
+  const hasDesktop = !!(tech.cwvData?.desktop);
+  const hasAnyData = hasMobile || hasDesktop;
+
+  const CWV_INFO = {
+    lcp: { name:"LCP (Largest Contentful Paint)", good:"< 2.5s", desc:"How fast the main content loads" },
+    fid: { name:"FID / INP (Interactivity)", good:"< 100ms", desc:"How fast the page responds to clicks" },
+    cls: { name:"CLS (Layout Shift)", good:"< 0.1", desc:"Does content jump around while loading" },
+    fcp: { name:"FCP (First Contentful Paint)", good:"< 1.8s", desc:"When the first content appears" },
+    tbt: { name:"TBT (Total Blocking Time)", good:"< 200ms", desc:"How long JS blocks the browser" },
+  };
+
   return (
     <div>
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:16 }}>
-        {strategies.map(([strat, label]) => {
-          const d = tech.cwvData?.[strat];
-          if (!d) return <div key={strat} style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, padding:16 }}><div style={{ fontSize:12, color:txt2 }}>{label}: No data (add Google API key)</div></div>;
-          return (
-            <div key={strat} style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, padding:16 }}>
-              <div style={{ fontSize:13, fontWeight:700, color:txt, marginBottom:10 }}>{label}</div>
-              <div style={{ fontSize:28, fontWeight:800, color:d.scores?.performance>=80?"#059669":d.scores?.performance>=50?"#D97706":"#DC2626", marginBottom:8 }}>{d.scores?.performance || "N/A"}</div>
-              {d.metrics && Object.entries(d.metrics).map(([k,v])=>(
-                <div key={k} style={{ display:"flex", justifyContent:"space-between", fontSize:11, marginBottom:4 }}>
-                  <span style={{ color:txt2, textTransform:"uppercase" }}>{k}</span>
-                  <span style={{ color:txt, fontWeight:600 }}>{v}</span>
-                </div>
-              ))}
-            </div>
-          );
-        })}
-      </div>
-      {(tech.techRecs?.priorityFixes||[]).map((f,i)=>(
-        <div key={i} style={{ background:bg3, borderRadius:8, padding:"10px 12px", marginBottom:8 }}>
-          <div style={{ fontSize:12, color:txt, fontWeight:600 }}>{f.issue} <span style={{ fontSize:10, color:f.impact==="high"?"#DC2626":"#D97706" }}>({f.impact})</span></div>
-          <div style={{ fontSize:11, color:txt2 }}>{f.fix}</div>
+      {/* Google API key setup card */}
+      {!hasAnyData && (
+        <div style={{ background:"#D9770611", border:"1px solid #D9770633", borderRadius:12, padding:"16px 20px", marginBottom:16 }}>
+          <div style={{ fontSize:13, fontWeight:700, color:"#D97706", marginBottom:8 }}>📡 Connect Google PageSpeed API for real Core Web Vitals data</div>
+          <div style={{ fontSize:12, color:txt2, lineHeight:1.7, marginBottom:12 }}>
+            Without a Google API key, CWV metrics (LCP, CLS, FCP, TBT) cannot be fetched. The technical recommendations below are still based on the actual page crawl.
+          </div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:12 }}>
+            {Object.values(CWV_INFO).map(m => (
+              <div key={m.name} style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:8, padding:"10px 12px" }}>
+                <div style={{ fontSize:11, fontWeight:700, color:txt }}>{m.name}</div>
+                <div style={{ fontSize:10, color:txt2, marginTop:2 }}>{m.desc}</div>
+                <div style={{ fontSize:10, color:"#059669", marginTop:2, fontWeight:600 }}>Good: {m.good}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:8, padding:"10px 14px" }}>
+            <div style={{ fontSize:11, fontWeight:700, color:txt, marginBottom:6 }}>How to connect:</div>
+            <ol style={{ margin:0, paddingLeft:18, fontSize:11, color:txt2, lineHeight:1.8 }}>
+              <li>Go to <strong>Settings → API Keys</strong> in the sidebar</li>
+              <li>Add your Google API key (free at console.cloud.google.com)</li>
+              <li>Enable PageSpeed Insights API in Google Cloud Console</li>
+              <li>Re-run the pipeline — CWV data will appear here</li>
+            </ol>
+          </div>
         </div>
-      ))}
+      )}
+
+      {/* PageSpeed scores when available */}
+      {hasAnyData && (
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:16 }}>
+          {[["mobile","📱 Mobile"], ["desktop","🖥️ Desktop"]].map(([strat, label]) => {
+            const d = tech.cwvData?.[strat];
+            if (!d) return (
+              <div key={strat} style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, padding:16, opacity:0.6 }}>
+                <div style={{ fontSize:12, color:txt2 }}>{label}: No data</div>
+              </div>
+            );
+            const perf = d.scores?.performance;
+            const pc = perf >= 80 ? "#059669" : perf >= 50 ? "#D97706" : "#DC2626";
+            return (
+              <div key={strat} style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, padding:16 }}>
+                <div style={{ fontSize:13, fontWeight:700, color:txt, marginBottom:10 }}>{label}</div>
+                <div style={{ fontSize:36, fontWeight:800, color:pc, marginBottom:8 }}>{perf || "N/A"}<span style={{ fontSize:14, color:txt2 }}>/100</span></div>
+                <div style={{ marginBottom:10 }}>
+                  <div style={{ height:8, borderRadius:4, background:bdr, overflow:"hidden" }}>
+                    <div style={{ height:"100%", width:`${perf||0}%`, background:pc, borderRadius:4 }}/>
+                  </div>
+                </div>
+                {d.metrics && Object.entries(d.metrics).map(([k,v]) => (
+                  <div key={k} style={{ display:"flex", justifyContent:"space-between", fontSize:11, marginBottom:5, padding:"4px 0", borderBottom:`1px solid ${bdr}` }}>
+                    <span style={{ color:txt2 }}>{CWV_INFO[k]?.name || k.toUpperCase()}</span>
+                    <span style={{ color:txt, fontWeight:700 }}>{v}</span>
+                  </div>
+                ))}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Technical issues found by crawl (always shown) */}
+      {(tech.techRecs?.priorityFixes||[]).length > 0 && (
+        <div>
+          <div style={{ fontSize:12, fontWeight:700, color:txt, marginBottom:10 }}>Issues Found (from page crawl)</div>
+          {(tech.techRecs?.priorityFixes||[]).map((f, i) => {
+            const ic = f.impact === "high" ? "#DC2626" : f.impact === "medium" ? "#D97706" : "#6B7280";
+            return (
+              <div key={i} style={{ background:bg2, border:`1px solid ${bdr}`, borderLeft:`4px solid ${ic}`, borderRadius:10, padding:"12px 16px", marginBottom:8 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
+                  <span style={{ fontSize:12, fontWeight:700, color:txt }}>{f.issue}</span>
+                  <span style={{ fontSize:9, padding:"2px 7px", borderRadius:8, background:`${ic}18`, color:ic, fontWeight:700 }}>{f.impact} priority</span>
+                </div>
+                <div style={{ fontSize:12, color:txt2, lineHeight:1.5 }}>{f.fix}</div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Speed summary */}
+      {tech.summary && (
+        <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, padding:"12px 16px", marginTop:12 }}>
+          <div style={{ fontSize:12, fontWeight:700, color:txt, marginBottom:8 }}>Performance Summary</div>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:10 }}>
+            {[
+              { l:"Mobile Score", v: tech.summary.mobileScore != null ? `${tech.summary.mobileScore}/100` : "—", c: tech.summary.mobileScore >= 80 ? "#059669" : tech.summary.mobileScore >= 50 ? "#D97706" : "#DC2626" },
+              { l:"Desktop Score", v: tech.summary.desktopScore != null ? `${tech.summary.desktopScore}/100` : "—", c: tech.summary.desktopScore >= 80 ? "#059669" : "#D97706" },
+              { l:"Critical Issues", v: tech.summary.criticalIssues || 0, c:"#DC2626" },
+            ].map(s => (
+              <div key={s.l} style={{ textAlign:"center" }}>
+                <div style={{ fontSize:18, fontWeight:800, color:s.c }}>{s.v}</div>
+                <div style={{ fontSize:10, color:txt2 }}>{s.l}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1754,10 +2084,26 @@ function FullReportView({ report, bg2, bg3, bdr, txt, txt2 }) {
 
   return (
     <div>
+      {/* What this report is */}
+      <div style={{ background:"#443DCB0d", border:"1px solid #443DCB22", borderRadius:10, padding:"12px 16px", marginBottom:14 }}>
+        <div style={{ fontSize:12, fontWeight:700, color:"#443DCB", marginBottom:4 }}>What is this report?</div>
+        <div style={{ fontSize:11, color:txt2, lineHeight:1.7 }}>
+          This is an AI-generated SEO performance summary based on your technical audit, keyword data, competitor analysis, and GEO signals.
+          {!gsc && <span style={{ color:"#D97706" }}> <strong>KPI values are AI estimates</strong> — connect Google Search Console for real clicks, impressions, and position data.</span>}
+          {gsc && <span style={{ color:"#059669" }}> Real GSC data is included below.</span>}
+        </div>
+        {!gsc && (
+          <div style={{ marginTop:10, padding:"8px 12px", background:bg2, border:`1px solid ${bdr}`, borderRadius:8, display:"flex", alignItems:"center", gap:10 }}>
+            <span style={{ fontSize:14 }}>📊</span>
+            <span style={{ fontSize:11, color:txt2 }}>Connect Google Search Console in Settings → API Keys to get real traffic data in this report</span>
+          </div>
+        )}
+      </div>
+
       {/* Approval Status Banner */}
       <div style={{ padding:"10px 14px", borderRadius:8, background:"#D9770611", border:"1px solid #D9770633", marginBottom:14, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-        <div style={{ fontSize:12, color:"#D97706" }}>⏳ Report awaiting human review before sending to client</div>
-        <div style={{ fontSize:10, color:txt2 }}>Approval ID: {report.approvalId}</div>
+        <div style={{ fontSize:12, color:"#D97706" }}>⏳ Draft report — review before sending to client. Add your own observations and context.</div>
+        <div style={{ fontSize:10, color:txt2 }}>ID: {report.approvalId}</div>
       </div>
 
       {/* GSC Performance Card */}
@@ -1800,7 +2146,11 @@ function FullReportView({ report, bg2, bg3, bdr, txt, txt2 }) {
       {/* KPI Scorecard */}
       {r.kpiScorecard?.length > 0 && (
         <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, padding:16, marginBottom:12 }}>
-          <div style={{ fontSize:11, fontWeight:700, color:txt2, textTransform:"uppercase", letterSpacing:1, marginBottom:10 }}>🎯 KPI Scorecard</div>
+          <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
+            <div style={{ fontSize:11, fontWeight:700, color:txt2, textTransform:"uppercase", letterSpacing:1 }}>🎯 KPI Scorecard</div>
+            {!gsc && <span style={{ fontSize:9, padding:"2px 8px", borderRadius:8, background:"#D9770618", color:"#D97706", fontWeight:700 }}>AI ESTIMATED — not real GSC data</span>}
+            {gsc && <span style={{ fontSize:9, padding:"2px 8px", borderRadius:8, background:"#05966918", color:"#059669", fontWeight:700 }}>REAL GSC DATA</span>}
+          </div>
           <div style={{ overflowX:"auto" }}>
             <table style={{ width:"100%", borderCollapse:"collapse", fontSize:11 }}>
               <thead>
@@ -2666,14 +3016,28 @@ function DashboardView({ clientId, state, dark, bg2, bg3, bdr, txt, txt2, getTok
 
   if (loading) return <div style={{ padding:40, textAlign:"center", color:txt2, fontSize:13 }}>Loading dashboard...</div>;
 
-  const score   = dash?.score;
+  // Use API response, fall back to state prop so dashboard always shows data
+  const stateAudit = state?.A2_audit;
+  const stateReport = state?.A9_report;
+
+  const score   = dash?.score || stateReport?.scoreBreakdown || null;
   const tasks   = dash?.topTasks   || [];
   const alerts  = dash?.alerts     || [];
-  const forecast= dash?.forecast;
-  const audit   = dash?.auditSummary;
+  const forecast= dash?.forecast   || stateReport?.forecast  || null;
 
-  const scoreColor = !score ? "#6B7280" : score.overall >= 75 ? "#059669" : score.overall >= 50 ? "#D97706" : "#DC2626";
-  const scoreLabel = !score ? "Not scored" : score.overall >= 75 ? "Good" : score.overall >= 50 ? "Needs Work" : "Critical";
+  // Audit summary: prefer API response, fall back to state
+  const audit = dash?.auditSummary || (stateAudit ? {
+    healthScore: stateAudit.healthScore,
+    p1: (stateAudit.issues?.p1 || []).length,
+    p2: (stateAudit.issues?.p2 || []).length,
+    p3: (stateAudit.issues?.p3 || []).length,
+    pagesCrawled: stateAudit.checks?.pagesCrawled || 1,
+  } : null);
+
+  // Use audit healthScore as score display when 4D score is missing
+  const displayScore = score?.overall ?? stateAudit?.healthScore ?? null;
+  const scoreColor = displayScore === null ? "#6B7280" : displayScore >= 75 ? "#059669" : displayScore >= 50 ? "#D97706" : "#DC2626";
+  const scoreLabel = displayScore === null ? "Not scored" : displayScore >= 75 ? "Good" : displayScore >= 50 ? "Needs Work" : "Critical";
 
   return (
     <div style={{ padding:24 }}>
@@ -2711,7 +3075,7 @@ function DashboardView({ clientId, state, dark, bg2, bg3, bdr, txt, txt2, getTok
         {/* Score card */}
         <div onClick={() => onTabSwitch("score")} style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:14, padding:20, cursor:"pointer", display:"flex", alignItems:"center", gap:16 }}>
           <div style={{ width:72, height:72, borderRadius:"50%", border:`5px solid ${scoreColor}`, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", background:`${scoreColor}10`, flexShrink:0 }}>
-            <div style={{ fontSize:20, fontWeight:800, color:scoreColor }}>{score?.overall || "—"}</div>
+            <div style={{ fontSize:20, fontWeight:800, color:scoreColor }}>{displayScore ?? "—"}</div>
             <div style={{ fontSize:9, color:scoreColor }}>/100</div>
           </div>
           <div>
