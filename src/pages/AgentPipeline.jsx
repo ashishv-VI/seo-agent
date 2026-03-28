@@ -51,37 +51,38 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
 
   function exportPDF() {
     setPrintMode(true);
-    // Wait for React to finish rendering the print view
+    // Wait for React to render the PrintReport overlay, then use browser's native print
     setTimeout(() => {
-      const printContent = document.querySelector(".print-report");
-      if (!printContent) { setPrintMode(false); return; }
-      const html = printContent.innerHTML;
-      const newWin = window.open("", "_blank", "width=1000,height=800");
-      if (!newWin) { alert("Pop-up blocked — please allow pop-ups for this site and try again."); setPrintMode(false); return; }
-      newWin.document.open();
-      newWin.document.write(
-        "<!DOCTYPE html><html><head><meta charset='utf-8'><title>SEO Report</title>" +
-        "<style>" +
-        "*, *::before, *::after { box-sizing: border-box; }" +
-        "body { margin: 0; padding: 0; font-family: 'Segoe UI', Arial, sans-serif; background: #fff; color: #424143; }" +
-        "@page { margin: 12mm 10mm; size: A4; }" +
-        "@media print {" +
-        "  body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }" +
-        "  .page-break { page-break-before: always; }" +
-        "  .no-break   { page-break-inside: avoid; }" +
-        "}" +
-        "</style>" +
-        "</head><body>" + html + "</body></html>"
-      );
-      newWin.document.close();
-      newWin.focus();
-      // Small delay so browser paints the content before print dialog opens
-      setTimeout(() => {
-        newWin.print();
-        newWin.close();
+      // Inject @media print styles that hide everything except the .print-report overlay
+      // This avoids popup-blocker issues entirely — no new window needed
+      const style = document.createElement("style");
+      style.id = "seo-pdf-print-style";
+      style.innerHTML = [
+        "@media print {",
+        "  @page { margin: 12mm 10mm; size: A4; }",
+        "  body > * { display: none !important; }",
+        "  .print-report { display: block !important; position: static !important;",
+        "    inset: auto !important; z-index: auto !important; overflow: visible !important; }",
+        "  body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }",
+        "  .page-break { page-break-before: always; }",
+        "  .no-break { page-break-inside: avoid; }",
+        "}",
+      ].join("\n");
+      document.head.appendChild(style);
+
+      window.print();
+
+      // Cleanup after print dialog closes (afterprint fires in all modern browsers)
+      const cleanup = () => {
+        const el = document.getElementById("seo-pdf-print-style");
+        if (el) el.remove();
         setPrintMode(false);
-      }, 1000);
-    }, 700);
+        window.removeEventListener("afterprint", cleanup);
+      };
+      window.addEventListener("afterprint", cleanup);
+      // Fallback: cleanup after 60s if afterprint never fires
+      setTimeout(cleanup, 60000);
+    }, 800);
   }
 
   async function load(silent = false) {

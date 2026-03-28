@@ -93,13 +93,14 @@ async function runA10(clientId, keys, gscToken = null) {
 
   // ── Compare vs last snapshot ──────────────────────
   const dateKey = new Date().toISOString().split("T")[0];
+  // Single where only — no composite index needed; sort client-side
   const prevSnap = await db.collection("rank_history")
     .where("clientId", "==", clientId)
-    .orderBy("date", "desc")
-    .limit(2)
+    .limit(20)
     .get();
+  const prevSorted = prevSnap.docs.map(d => d.data()).sort((a, b) => (b.date || "").localeCompare(a.date || ""));
 
-  const prevData = prevSnap.docs.length > 1 ? prevSnap.docs[1].data() : null;
+  const prevData = prevSorted.length > 1 ? prevSorted[1] : null;
   const prevMap  = {};
   if (prevData?.rankings) {
     prevData.rankings.forEach(r => { prevMap[r.keyword] = r.position; });

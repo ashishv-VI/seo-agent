@@ -694,7 +694,8 @@ router.get("/:clientId/pages", verifyToken, async (req, res) => {
       const p1Count = pageIssues.filter(i=>i.severity==="critical").length;
       const p2Count = pageIssues.filter(i=>i.severity==="warning").length;
       const pageScore = Math.max(0, 100 - (p1Count * 20) - (p2Count * 8));
-      const urlPath = page.url ? new URL(page.url).pathname : "/";
+      let urlPath = "/";
+      try { urlPath = page.url ? new URL(page.url).pathname : "/"; } catch { urlPath = page.url || "/"; }
       return {
         url:          page.url,
         path:         urlPath,
@@ -885,10 +886,13 @@ router.get("/:clientId/learning", verifyToken, async (req, res) => {
 // GET unread notifications for this user
 router.get("/notifications", verifyToken, async (req, res) => {
   try {
+    // Single where clause only — no composite index needed; filter client-side
     const snap = await db.collection("notifications")
-      .where("ownerId", "==", req.uid).where("read", "==", false).limit(20).get();
+      .where("ownerId", "==", req.uid).limit(40).get();
     const items = snap.docs.map(d => ({ id: d.id, ...d.data() }))
-      .sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
+      .filter(n => !n.read)
+      .sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""))
+      .slice(0, 20);
     return res.json({ notifications: items, unread: items.length });
   } catch (e) {
     return res.status(e.code || 500).json({ error: e.message });
