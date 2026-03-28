@@ -278,6 +278,7 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
         {isComplete("A2") && <div style={{...s.tab(activeTab==="dashboard"), background:activeTab==="dashboard"?"#443DCB":"transparent", color:activeTab==="dashboard"?"#fff":txt2, border:`1px solid ${activeTab==="dashboard"?"#443DCB":bdr}`}} onClick={()=>setActiveTab("dashboard")}>🎯 Dashboard</div>}
         {isComplete("A2") && <div style={s.tab(activeTab==="score")} onClick={()=>setActiveTab("score")}>🏆 Score</div>}
         {isComplete("A2") && <div style={s.tab(activeTab==="tasks")} onClick={()=>setActiveTab("tasks")}>📋 Tasks</div>}
+        {isComplete("A2") && <div style={s.tab(activeTab==="pages")} onClick={()=>setActiveTab("pages")}>📄 Pages</div>}
         {isComplete("A10") && <div style={s.tab(activeTab==="rankings")} onClick={()=>setActiveTab("rankings")}>📈 Rankings</div>}
       </div>
 
@@ -516,6 +517,11 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
       {/* Tasks Tab */}
       {activeTab==="tasks" && (
         <TaskQueueView clientId={clientId} dark={dark} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2} getToken={getToken} API={API} />
+      )}
+
+      {/* Pages Tab */}
+      {activeTab==="pages" && (
+        <PagesView clientId={clientId} dark={dark} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2} getToken={getToken} API={API} onTabSwitch={setActiveTab} />
       )}
 
       <AIChatBot dark={dark} clientId={clientId} getToken={getToken} API={API} />
@@ -2221,6 +2227,135 @@ function TaskQueueView({ clientId, dark, bg2, bg3, bdr, txt, txt2, getToken, API
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// ── Pages View (Per-page SEO audit) ─────────────────
+function PagesView({ clientId, dark, bg2, bg3, bdr, txt, txt2, getToken, API, onTabSwitch }) {
+  const [pages,   setPages]   = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [filter,  setFilter]  = useState("all"); // all | critical | good
+
+  useEffect(() => {
+    async function fetchPages() {
+      try {
+        const token = await getToken();
+        const res   = await fetch(`${API}/api/agents/${clientId}/pages`, { headers: { Authorization: `Bearer ${token}` } });
+        const data  = await res.json();
+        setPages(data.pages || []);
+      } catch { /* noop */ }
+      setLoading(false);
+    }
+    fetchPages();
+  }, [clientId]);
+
+  if (loading) return <div style={{ padding:40, textAlign:"center", color:txt2, fontSize:13 }}>Loading pages...</div>;
+
+  if (pages.length === 0) return (
+    <div style={{ padding:40, textAlign:"center", color:txt2 }}>
+      <div style={{ fontSize:32, marginBottom:10 }}>📄</div>
+      <div style={{ fontSize:14, fontWeight:600, color:txt }}>No page data available</div>
+      <div style={{ fontSize:12, marginTop:6 }}>Run the full pipeline (A2 Technical Audit) to see per-page SEO scores.</div>
+    </div>
+  );
+
+  const filtered = filter === "critical" ? pages.filter(p => p.score < 50)
+    : filter === "good" ? pages.filter(p => p.score >= 75)
+    : pages;
+
+  const avgScore = Math.round(pages.reduce((s, p) => s + p.score, 0) / pages.length);
+  const critical = pages.filter(p => p.score < 50).length;
+  const good     = pages.filter(p => p.score >= 75).length;
+
+  return (
+    <div style={{ padding:24 }}>
+      {/* Summary bar */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12, marginBottom:20 }}>
+        {[
+          { label:"Pages Analysed", val:pages.length,  color:"#443DCB" },
+          { label:"Avg Page Score",  val:`${avgScore}/100`, color: avgScore>=75?"#059669":avgScore>=50?"#D97706":"#DC2626" },
+          { label:"Critical Pages",  val:critical,      color:"#DC2626" },
+          { label:"Healthy Pages",   val:good,          color:"#059669" },
+        ].map(s => (
+          <div key={s.label} style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:12, padding:"14px 16px", textAlign:"center" }}>
+            <div style={{ fontSize:22, fontWeight:800, color:s.color }}>{s.val}</div>
+            <div style={{ fontSize:11, color:txt2, marginTop:3 }}>{s.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Filter tabs */}
+      <div style={{ display:"flex", gap:8, marginBottom:16 }}>
+        {[{id:"all",label:"All Pages"},{id:"critical",label:"Critical (<50)"},{id:"good",label:"Healthy (75+)"}].map(f => (
+          <button key={f.id} onClick={() => setFilter(f.id)} style={{ padding:"6px 14px", borderRadius:8, border:`1px solid ${filter===f.id?"#443DCB":bdr}`, background:filter===f.id?"#443DCB":"transparent", color:filter===f.id?"#fff":txt2, fontSize:12, fontWeight:600, cursor:"pointer" }}>
+            {f.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Pages table */}
+      <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:14, overflow:"hidden" }}>
+        <div style={{ display:"grid", gridTemplateColumns:"2fr 80px 80px 100px 1fr", gap:0, padding:"10px 16px", borderBottom:`1px solid ${bdr}`, fontSize:11, fontWeight:700, color:txt2 }}>
+          <span>Page</span>
+          <span style={{ textAlign:"center" }}>Score</span>
+          <span style={{ textAlign:"center" }}>Issues</span>
+          <span style={{ textAlign:"center" }}>Status</span>
+          <span>Top Keywords</span>
+        </div>
+
+        {filtered.length === 0 && (
+          <div style={{ padding:24, textAlign:"center", color:txt2, fontSize:12 }}>No pages match this filter.</div>
+        )}
+
+        {filtered.map((page, i) => {
+          const sc = page.score >= 75 ? "#059669" : page.score >= 50 ? "#D97706" : "#DC2626";
+          const statusLabel = page.score >= 75 ? "Healthy" : page.score >= 50 ? "Needs Work" : "Critical";
+          return (
+            <div key={i} style={{ display:"grid", gridTemplateColumns:"2fr 80px 80px 100px 1fr", gap:0, padding:"12px 16px", borderBottom:`1px solid ${bdr}`, alignItems:"center" }}>
+              {/* Page URL + title */}
+              <div>
+                <div style={{ fontSize:12, fontWeight:600, color:txt, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{page.title || page.path}</div>
+                <div style={{ fontSize:10, color:txt2, marginTop:2, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{page.path}</div>
+                {/* Missing signals */}
+                <div style={{ display:"flex", gap:4, marginTop:4, flexWrap:"wrap" }}>
+                  {!page.hasTitle && <span style={{ fontSize:9, padding:"1px 5px", borderRadius:4, background:"#FEF2F2", color:"#DC2626", fontWeight:600 }}>No Title</span>}
+                  {!page.hasMeta  && <span style={{ fontSize:9, padding:"1px 5px", borderRadius:4, background:"#FFF7ED", color:"#D97706", fontWeight:600 }}>No Meta</span>}
+                  {!page.hasH1   && <span style={{ fontSize:9, padding:"1px 5px", borderRadius:4, background:"#FFF7ED", color:"#D97706", fontWeight:600 }}>No H1</span>}
+                </div>
+              </div>
+
+              {/* Score ring */}
+              <div style={{ textAlign:"center" }}>
+                <div style={{ display:"inline-flex", width:42, height:42, borderRadius:"50%", border:`3px solid ${sc}`, alignItems:"center", justifyContent:"center", flexDirection:"column", background:`${sc}12` }}>
+                  <span style={{ fontSize:12, fontWeight:800, color:sc }}>{page.score}</span>
+                </div>
+              </div>
+
+              {/* Issue count */}
+              <div style={{ textAlign:"center", fontSize:13, fontWeight:700, color:page.issueCount>0?"#D97706":txt2 }}>
+                {page.issueCount}
+              </div>
+
+              {/* Status badge */}
+              <div style={{ textAlign:"center" }}>
+                <span style={{ fontSize:10, padding:"3px 8px", borderRadius:8, background:`${sc}18`, color:sc, fontWeight:700 }}>{statusLabel}</span>
+              </div>
+
+              {/* Keywords */}
+              <div style={{ fontSize:11, color:txt2 }}>
+                {page.targetKeywords?.length > 0
+                  ? page.targetKeywords.slice(0,3).map(k => k.keyword || k).join(", ")
+                  : <span style={{ color:txt2, fontStyle:"italic" }}>No keywords mapped</span>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={{ marginTop:12, fontSize:11, color:txt2, textAlign:"center" }}>
+        Page scores calculated from A2 audit issues. Run pipeline to refresh.
+      </div>
     </div>
   );
 }
