@@ -2227,21 +2227,45 @@ function TaskQueueView({ clientId, dark, bg2, bg3, bdr, txt, txt2, getToken, API
 
 // ── Dashboard View (Unified Overview) ───────────────
 function DashboardView({ clientId, state, dark, bg2, bg3, bdr, txt, txt2, getToken, API, onTabSwitch }) {
-  const [dash,    setDash]    = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [dash,          setDash]          = useState(null);
+  const [loading,       setLoading]       = useState(true);
+  const [recalculating, setRecalculating] = useState(false);
+  const [recalcMsg,     setRecalcMsg]     = useState(null);
 
-  useEffect(() => {
-    async function fetchDash() {
-      try {
-        const token = await getToken();
-        const res   = await fetch(`${API}/api/agents/${clientId}/dashboard`, { headers: { Authorization: `Bearer ${token}` } });
-        const data  = await res.json();
-        setDash(data);
-      } catch { /* noop */ }
-      setLoading(false);
+  async function fetchDash() {
+    try {
+      const token = await getToken();
+      const res   = await fetch(`${API}/api/agents/${clientId}/dashboard`, { headers: { Authorization: `Bearer ${token}` } });
+      const data  = await res.json();
+      setDash(data);
+    } catch { /* noop */ }
+    setLoading(false);
+  }
+
+  useEffect(() => { fetchDash(); }, [clientId]);
+
+  async function recalculate() {
+    setRecalculating(true);
+    setRecalcMsg(null);
+    try {
+      const token = await getToken();
+      const res   = await fetch(`${API}/api/agents/${clientId}/recalculate`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      });
+      const data = await res.json();
+      if (data.score) {
+        setRecalcMsg(`Score updated to ${data.score.overall}/100 · ${data.tasksEmitted} tasks generated`);
+        setLoading(true);
+        await fetchDash();
+      } else {
+        setRecalcMsg(data.error || "Recalculation failed");
+      }
+    } catch (e) {
+      setRecalcMsg("Error: " + e.message);
     }
-    fetchDash();
-  }, [clientId]);
+    setRecalculating(false);
+  }
 
   if (loading) return <div style={{ padding:40, textAlign:"center", color:txt2, fontSize:13 }}>Loading dashboard...</div>;
 
@@ -2256,6 +2280,34 @@ function DashboardView({ clientId, state, dark, bg2, bg3, bdr, txt, txt2, getTok
 
   return (
     <div style={{ padding:24 }}>
+
+      {/* Recalculate bar — shown when score is missing or as a refresh action */}
+      {(!score || tasks.length === 0) && (
+        <div style={{ background: dark ? "#1a1a2e" : "#EEF2FF", border:`1px solid #443DCB33`, borderRadius:10, padding:"12px 16px", marginBottom:16, display:"flex", alignItems:"center", justifyContent:"space-between", gap:12 }}>
+          <div>
+            <div style={{ fontSize:12, fontWeight:700, color:"#443DCB" }}>Pipeline complete but dashboard showing zeros?</div>
+            <div style={{ fontSize:11, color:txt2, marginTop:2 }}>Recalculate to sync score and tasks from audit data — no need to re-run pipeline.</div>
+          </div>
+          <button onClick={recalculate} disabled={recalculating} style={{ padding:"8px 16px", borderRadius:8, background:"#443DCB", color:"#fff", border:"none", fontSize:12, fontWeight:700, cursor:recalculating?"not-allowed":"pointer", opacity:recalculating?0.7:1, flexShrink:0, whiteSpace:"nowrap" }}>
+            {recalculating ? "Recalculating..." : "Recalculate Score & Tasks"}
+          </button>
+        </div>
+      )}
+
+      {/* Recalculate success message */}
+      {recalcMsg && (
+        <div style={{ background: recalcMsg.startsWith("Error") ? "#FEF2F2" : "#F0FDF4", border:`1px solid ${recalcMsg.startsWith("Error") ? "#FCA5A5" : "#86EFAC"}`, borderRadius:8, padding:"10px 14px", marginBottom:14, fontSize:12, color: recalcMsg.startsWith("Error") ? "#DC2626" : "#059669", fontWeight:600 }}>
+          {recalcMsg.startsWith("Error") ? "Error: " : "Done: "}{recalcMsg}
+        </div>
+      )}
+
+      {/* Manual refresh button (always visible, subtle) */}
+      <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:12 }}>
+        <button onClick={recalculate} disabled={recalculating} style={{ padding:"5px 12px", borderRadius:7, background:"transparent", border:`1px solid ${bdr}`, fontSize:11, color:txt2, cursor:recalculating?"not-allowed":"pointer", display:"flex", alignItems:"center", gap:5 }}>
+          <span style={{ fontSize:12 }}>↻</span> {recalculating ? "Recalculating..." : "Recalculate"}
+        </button>
+      </div>
+
       {/* Top row: Score + Audit summary + Forecast */}
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:14, marginBottom:20 }}>
 

@@ -162,22 +162,39 @@ async function emitTasks(clientId, issues, tier, sourceAgent) {
  * Get all tasks for a client, sorted by priority
  */
 async function getTasks(clientId) {
-  const snap = await db.collection("task_queue").doc(clientId).collection("tasks")
-    .orderBy("priorityScore", "desc")
-    .get();
-  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  try {
+    const snap = await db.collection("task_queue").doc(clientId).collection("tasks")
+      .orderBy("priorityScore", "desc")
+      .get();
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch {
+    // Fallback: no ordering (avoids index requirement)
+    const snap = await db.collection("task_queue").doc(clientId).collection("tasks").get();
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => (b.priorityScore || 0) - (a.priorityScore || 0));
+  }
 }
 
 /**
  * Get top N pending tasks
  */
 async function getTopTasks(clientId, limit = 5) {
-  const snap = await db.collection("task_queue").doc(clientId).collection("tasks")
-    .where("status", "==", "pending")
-    .orderBy("priorityScore", "desc")
-    .limit(limit)
-    .get();
-  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  try {
+    // Try with index first
+    const snap = await db.collection("task_queue").doc(clientId).collection("tasks")
+      .where("status", "==", "pending")
+      .orderBy("priorityScore", "desc")
+      .limit(limit)
+      .get();
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch {
+    // Fallback: fetch all, filter + sort client-side
+    const snap = await db.collection("task_queue").doc(clientId).collection("tasks").get();
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      .filter(t => t.status === "pending")
+      .sort((a, b) => (b.priorityScore || 0) - (a.priorityScore || 0))
+      .slice(0, limit);
+  }
 }
 
 /**

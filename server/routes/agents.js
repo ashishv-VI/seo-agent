@@ -12,7 +12,7 @@ const { runA7 }              = require("../agents/A7_technical");
 const { runA8 }              = require("../agents/A8_geo");
 const { generateReport, checkAlerts } = require("../agents/A9_monitoring");
 const { getTasks, getTopTasks, updateTask, clearTasks } = require("../utils/taskQueue");
-const { calculateScore, getLatestScore, getScoreHistory, generateForecast } = require("../utils/scoreCalculator");
+const { calculateScore, saveScoreHistory, getLatestScore, getScoreHistory, generateForecast } = require("../utils/scoreCalculator");
 const { getState } = require("../shared-state/stateManager");
 const { translateAlert, SEVERITY_LABELS } = require("../utils/alertTranslator");
 
@@ -314,12 +314,12 @@ Return ONLY valid JSON (no markdown):
 router.get("/:clientId/rank-history", verifyToken, async (req, res) => {
   try {
     await getClientDoc(req.params.clientId, req.uid);
+    // No composite index — single where, sort client-side
     const snap = await db.collection("rank_history")
       .where("clientId", "==", req.params.clientId)
-      .orderBy("date", "desc")
-      .limit(12)
+      .limit(30)
       .get();
-    const history = snap.docs.map(d => d.data());
+    const history = snap.docs.map(d => d.data()).sort((a,b)=>(b.date||"").localeCompare(a.date||"")).slice(0,12);
     return res.json({ history });
   } catch (e) {
     return res.status(e.code || 500).json({ error: e.message });
@@ -453,29 +453,46 @@ router.get("/:clientId/dashboard", verifyToken, async (req, res) => {
     await getClientDoc(req.params.clientId, req.uid);
     const clientId = req.params.clientId;
 
-    const [tasks, scoreHistory, brief, audit, report, rawAlerts] = await Promise.all([
-      getTopTasks(clientId, 5),
-      getScoreHistory(clientId, 12),
-      getState(clientId, "A1_brief"),
-      getState(clientId, "A2_audit"),
-      getState(clientId, "A9_report"),
-      db.collection("alerts").where("clientId","==",clientId).where("resolved","==",false).orderBy("createdAt","desc").limit(20).get(),
+    // Run all queries independently so one failure doesn't crash the whole dashboard
+    const [tasks, scoreHistory, brief, audit, report, alertsSnap, keywords] = await Promise.all([
+      getTopTasks(clientId, 5).catch(() => []),
+      getScoreHistory(clientId, 12).catch(() => []),
+      getState(clientId, "A1_brief").catch(() => null),
+      getState(clientId, "A2_audit").catch(() => null),
+      getState(clientId, "A9_report").catch(() => null),
+      // No composite index — fetch by clientId only, filter+sort client-side
+      db.collection("alerts").where("clientId","==",clientId).limit(50).get().catch(() => null),
+      getState(clientId, "A3_keywords").catch(() => null),
     ]);
 
-    // Translate alerts to business language
-    const alerts = rawAlerts.docs.map(d => {
-      const a = d.data();
-      const translated = translateAlert(a.message, a.type);
-      return {
-        id: d.id,
-        ...a,
-        ...translated,
-        severityLabel: SEVERITY_LABELS[translated.severity] || SEVERITY_LABELS.info,
-      };
-    });
+    // Filter resolved + sort by date client-side (no composite index needed)
+    const alerts = (alertsSnap?.docs || [])
+      .map(d => {
+        const a = d.data();
+        const translated = translateAlert(a.message, a.type);
+        return { id: d.id, ...a, ...translated, severityLabel: SEVERITY_LABELS[translated.severity] || SEVERITY_LABELS.info };
+      })
+      .filter(a => !a.resolved)
+      .sort((a, b) => ((b.createdAt?._seconds || b.createdAt?.seconds || 0) - (a.createdAt?._seconds || a.createdAt?.seconds || 0)))
+      .slice(0, 10);
 
-    const latestScore = scoreHistory.length ? scoreHistory[scoreHistory.length - 1] : null;
-    const forecast    = generateForecast(tasks, latestScore?.overall || 0);
+    // If no stored score, calculate live from state
+    let latestScore = scoreHistory.length ? scoreHistory[scoreHistory.length - 1] : null;
+    if (!latestScore && audit) {
+      try {
+        const [geo, onpage, technical] = await Promise.all([
+          getState(clientId, "A8_geo").catch(() => null),
+          getState(clientId, "A6_onpage").catch(() => null),
+          getState(clientId, "A7_technical").catch(() => null),
+        ]);
+        latestScore = calculateScore(audit, keywords, geo, onpage, technical);
+        // Save it so next time it's cached
+        await saveScoreHistory(clientId, { ...latestScore }).catch(() => {});
+        await db.collection("clients").doc(clientId).update({ seoScore: latestScore.overall }).catch(() => {});
+      } catch { /* noop */ }
+    }
+
+    const forecast = generateForecast(tasks, latestScore?.overall || 0);
 
     return res.json({
       brief:        brief ? { businessName: brief.businessName, websiteUrl: brief.websiteUrl, goals: brief.goals } : null,
@@ -484,8 +501,19 @@ router.get("/:clientId/dashboard", verifyToken, async (req, res) => {
       forecast,
       topTasks:     tasks,
       alerts,
-      auditSummary: audit ? { healthScore: audit.healthScore, p1: (audit.issues?.p1||[]).length, p2: (audit.issues?.p2||[]).length, p3: (audit.issues?.p3||[]).length } : null,
-      reportReady:  !!report,
+      auditSummary: audit ? {
+        healthScore: audit.healthScore,
+        p1: (audit.issues?.p1||[]).length,
+        p2: (audit.issues?.p2||[]).length,
+        p3: (audit.issues?.p3||[]).length,
+        pagesCrawled: audit.checks?.pagesCrawled || 1,
+      } : null,
+      keywordSummary: keywords ? {
+        total: keywords.totalKeywords || 0,
+        gaps:  (keywords.gaps||[]).length,
+        highPriority: (keywords.keywordMap||[]).filter(k=>k.priority==="high").length,
+      } : null,
+      reportReady: !!report,
     });
   } catch (e) {
     return res.status(e.code || 500).json({ error: e.message });
@@ -496,23 +524,24 @@ router.get("/:clientId/dashboard", verifyToken, async (req, res) => {
 router.get("/:clientId/alerts", verifyToken, async (req, res) => {
   try {
     await getClientDoc(req.params.clientId, req.uid);
+    // No composite index — single where clause, filter+sort client-side
     const snap = await db.collection("alerts")
       .where("clientId", "==", req.params.clientId)
-      .where("resolved", "==", false)
-      .orderBy("createdAt", "desc")
-      .limit(30)
+      .limit(60)
       .get();
 
-    const alerts = snap.docs.map(d => {
-      const a = d.data();
-      const translated = translateAlert(a.message, a.type);
-      return {
-        id: d.id,
-        ...a,
-        ...translated,
-        severityLabel: SEVERITY_LABELS[translated.severity] || SEVERITY_LABELS.info,
-      };
-    });
+    const alerts = snap.docs
+      .map(d => {
+        const a = d.data();
+        const translated = translateAlert(a.message, a.type);
+        return {
+          id: d.id,
+          ...a,
+          ...translated,
+          severityLabel: SEVERITY_LABELS[translated.severity] || SEVERITY_LABELS.info,
+        };
+      })
+      .sort((a, b) => ((b.createdAt?._seconds || b.createdAt?.seconds || 0) - (a.createdAt?._seconds || a.createdAt?.seconds || 0)));
 
     return res.json({ alerts });
   } catch (e) {
@@ -571,13 +600,117 @@ router.post("/:clientId/run-a12", verifyToken, async (req, res) => {
 router.get("/:clientId/rankings", verifyToken, async (req, res) => {
   try {
     await getClientDoc(req.params.clientId, req.uid);
+    // No composite index — single where, sort client-side
     const snap = await db.collection("rank_history")
       .where("clientId", "==", req.params.clientId)
-      .orderBy("date", "desc")
-      .limit(1)
+      .limit(30)
       .get();
     if (snap.empty) return res.json({ rankings: [], source: null });
-    return res.json(snap.docs[0].data());
+    const sorted = snap.docs.map(d => d.data()).sort((a, b) => (b.date||"").localeCompare(a.date||""));
+    return res.json(sorted[0]);
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
+// ── POST Recalculate score + re-emit tasks ─────────
+// Called when pipeline already ran but data isn't showing (Firestore race condition)
+router.post("/:clientId/recalculate", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const clientId = req.params.clientId;
+    const { emitTasks: emit, clearTasks } = require("../utils/taskQueue");
+
+    const [audit, keywords, geo, onpage, technical] = await Promise.all([
+      getState(clientId, "A2_audit"),
+      getState(clientId, "A3_keywords"),
+      getState(clientId, "A8_geo"),
+      getState(clientId, "A6_onpage"),
+      getState(clientId, "A7_technical"),
+    ]);
+
+    if (!audit) return res.status(400).json({ error: "Run the pipeline first — no audit data found" });
+
+    // Recalculate 4D score
+    const score    = calculateScore(audit, keywords, geo, onpage, technical);
+    const scoreId  = await saveScoreHistory(clientId, { ...score });
+
+    // Re-emit all tasks from audit issues
+    await clearTasks(clientId);
+    await Promise.allSettled([
+      emit(clientId, audit.issues?.p1 || [], "p1", "A2"),
+      emit(clientId, audit.issues?.p2 || [], "p2", "A2"),
+      emit(clientId, audit.issues?.p3 || [], "p3", "A2"),
+    ]);
+
+    // Save score to client doc for list view
+    await db.collection("clients").doc(clientId).update({ seoScore: score.overall }).catch(() => {});
+
+    const tasks    = await getTopTasks(clientId, 5);
+    const forecast = generateForecast(tasks, score.overall);
+
+    return res.json({ score, forecast, scoreId, tasksEmitted: (audit.issues?.p1?.length||0)+(audit.issues?.p2?.length||0)+(audit.issues?.p3?.length||0), message: "Score recalculated and tasks regenerated" });
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
+// ── GET Page-Level SEO breakdown from A2 audit ─────
+router.get("/:clientId/pages", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const clientId = req.params.clientId;
+
+    const [audit, keywords] = await Promise.all([
+      getState(clientId, "A2_audit"),
+      getState(clientId, "A3_keywords"),
+    ]);
+
+    if (!audit) return res.json({ pages: [] });
+
+    // Build per-page issue map from audit issues
+    const pageMap = {};
+    const allIssues = [
+      ...(audit.issues?.p1||[]).map(i => ({ ...i, severity:"critical" })),
+      ...(audit.issues?.p2||[]).map(i => ({ ...i, severity:"warning" })),
+      ...(audit.issues?.p3||[]).map(i => ({ ...i, severity:"info" })),
+    ];
+
+    // Use pages crawled from checks, fallback to homepage
+    const crawledPages = audit.checks?.pages || [{ url: audit.checks?.finalUrl || "", title: audit.checks?.serpPreview?.title || "", issues: [] }];
+
+    // Map keywords to pages
+    const kwMap = {};
+    (keywords?.keywordMap || []).forEach(k => {
+      if (k.suggestedPage) {
+        if (!kwMap[k.suggestedPage]) kwMap[k.suggestedPage] = [];
+        kwMap[k.suggestedPage].push(k);
+      }
+    });
+
+    // Score each page
+    const pages = crawledPages.slice(0, 20).map(page => {
+      const pageIssues = allIssues.filter(i => i.page === page.url || !i.page);
+      const p1Count = pageIssues.filter(i=>i.severity==="critical").length;
+      const p2Count = pageIssues.filter(i=>i.severity==="warning").length;
+      const pageScore = Math.max(0, 100 - (p1Count * 20) - (p2Count * 8));
+      const urlPath = page.url ? new URL(page.url).pathname : "/";
+      return {
+        url:          page.url,
+        path:         urlPath,
+        title:        page.title || "(No title)",
+        score:        pageScore,
+        issues:       pageIssues.slice(0, 5),
+        issueCount:   pageIssues.length,
+        targetKeywords: kwMap[urlPath] || [],
+        hasTitle:     !!page.title,
+        hasMeta:      !!page.meta,
+        hasH1:        !!page.h1,
+        statusCode:   page.statusCode || 200,
+      };
+    });
+
+    return res.json({ pages: pages.sort((a, b) => a.score - b.score) });
   } catch (e) {
     return res.status(e.code || 500).json({ error: e.message });
   }
