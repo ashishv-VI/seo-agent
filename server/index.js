@@ -70,6 +70,39 @@ app.use("/api/chat",   chatRoutes);
 app.use("/api/rank-tracker", rankTrackerRoutes);
 app.use("/api/admin",  adminRoutes);
 
+// ── Daily alert monitoring ─────────────────────────
+// Runs A9.checkAlerts for every active client — detects new technical issues,
+// performance drops, keyword visibility problems. Creates in-app notifications.
+setInterval(async () => {
+  try {
+    const snap = await db.collection("clients").where("pipelineStatus", "==", "complete").get();
+    for (const doc of snap.docs) {
+      const data = doc.data();
+      try {
+        const { getUserKeys } = require("./utils/getUserKeys");
+        const { checkAlerts } = require("./agents/A9_monitoring");
+        const keys = await getUserKeys(data.ownerId).catch(() => null);
+        if (!keys) continue;
+        const result = await checkAlerts(doc.id, keys);
+        if (result?.alertsCreated > 0) {
+          console.log(`[daily-monitor] ${result.alertsCreated} new alert(s) for ${data.name}`);
+          await db.collection("notifications").add({
+            clientId:  doc.id,
+            ownerId:   data.ownerId,
+            type:      "new_alerts",
+            count:     result.alertsCreated,
+            message:   `${result.alertsCreated} new SEO issue(s) detected for ${data.name}`,
+            read:      false,
+            createdAt: new Date().toISOString(),
+          }).catch(() => {});
+        }
+      } catch { /* skip client on error */ }
+    }
+  } catch (err) {
+    console.error("[daily-monitor] Error:", err.message);
+  }
+}, 24 * 60 * 60 * 1000); // every 24 hours
+
 // ── Monthly pipeline scheduler ────────────────────
 // Checks once per hour — runs pipeline for clients whose last run was 30+ days ago
 setInterval(async () => {

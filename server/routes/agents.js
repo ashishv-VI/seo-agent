@@ -12,7 +12,7 @@ const { runA7 }              = require("../agents/A7_technical");
 const { runA8 }              = require("../agents/A8_geo");
 const { generateReport, checkAlerts } = require("../agents/A9_monitoring");
 const { getTasks, getTopTasks, updateTask, clearTasks } = require("../utils/taskQueue");
-const { calculateScore, saveScoreHistory, getLatestScore, getScoreHistory, generateForecast } = require("../utils/scoreCalculator");
+const { calculateScore, saveScoreHistory, getLatestScore, getScoreHistory, generateForecast, calculateRevenue } = require("../utils/scoreCalculator");
 const { getState } = require("../shared-state/stateManager");
 const { translateAlert, SEVERITY_LABELS } = require("../utils/alertTranslator");
 
@@ -711,6 +711,307 @@ router.get("/:clientId/pages", verifyToken, async (req, res) => {
     });
 
     return res.json({ pages: pages.sort((a, b) => a.score - b.score) });
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
+// ────────────────────────────────────────────────────
+// REVENUE IMPACT
+// ────────────────────────────────────────────────────
+
+// GET keyword → traffic → revenue impact calculation
+router.get("/:clientId/revenue", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const clientId = req.params.clientId;
+    const [keywords, brief] = await Promise.all([
+      getState(clientId, "A3_keywords"),
+      getState(clientId, "A1_brief"),
+    ]);
+    const revenue = calculateRevenue(keywords, brief);
+    if (!revenue) return res.json({ revenue: null, message: "No keyword volume data — run pipeline with SE Ranking key" });
+    return res.json({ revenue });
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
+// ────────────────────────────────────────────────────
+// BULK ACTIONS
+// ────────────────────────────────────────────────────
+
+// POST bulk task action: complete-all | generate-fixes
+router.post("/:clientId/tasks/bulk", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const clientId = req.params.clientId;
+    const { action } = req.body;
+
+    if (action === "complete-all") {
+      const tasks   = await getTasks(clientId);
+      const pending = tasks.filter(t => t.status === "pending");
+      for (const t of pending) {
+        await updateTask(clientId, t.id, {
+          status: "complete",
+          completedAt: FieldValue.serverTimestamp(),
+          completedBy: req.uid,
+          outcome: "Bulk marked complete",
+        });
+      }
+      return res.json({ message: `Marked ${pending.length} tasks as complete`, count: pending.length });
+    }
+
+    if (action === "generate-fixes") {
+      const { runA12 } = require("../agents/A12_autoExec");
+      const keys = await getUserKeys(req.uid);
+      const result = await runA12(clientId, keys);
+      return res.json(result);
+    }
+
+    if (action === "clear-completed") {
+      const tasks     = await getTasks(clientId);
+      const completed = tasks.filter(t => t.status === "complete");
+      for (const t of completed) {
+        await db.collection("task_queue").doc(clientId).collection("tasks").doc(t.id).delete();
+      }
+      return res.json({ message: `Cleared ${completed.length} completed tasks`, count: completed.length });
+    }
+
+    return res.status(400).json({ error: "Unknown action. Use: complete-all | generate-fixes | clear-completed" });
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
+// ────────────────────────────────────────────────────
+// BEFORE/AFTER RANKING COMPARISON
+// ────────────────────────────────────────────────────
+
+// GET compare two most recent rank history snapshots
+router.get("/:clientId/rank-comparison", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const clientId = req.params.clientId;
+    const snap = await db.collection("rank_history")
+      .where("clientId", "==", clientId).limit(30).get();
+    if (snap.empty) return res.json({ comparison: null, message: "No ranking data yet — run pipeline" });
+
+    const sorted = snap.docs.map(d => d.data()).sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+    if (sorted.length < 2) return res.json({ comparison: null, message: "Need at least 2 ranking snapshots (run pipeline twice)" });
+
+    const latest   = sorted[0];
+    const previous = sorted[1];
+
+    const prevMap = {};
+    (previous.keywords || []).forEach(k => { prevMap[k.keyword] = k.position; });
+
+    const comparison = (latest.keywords || []).map(k => {
+      const prev   = prevMap[k.keyword] || null;
+      const curr   = k.position;
+      const change = (prev && curr) ? prev - curr : null; // positive = moved up (improved)
+      return {
+        keyword:  k.keyword,
+        current:  curr,
+        previous: prev,
+        change,
+        trend:    change === null ? "new" : change > 0 ? "up" : change < 0 ? "down" : "stable",
+        category: k.category,
+      };
+    }).sort((a, b) => (b.change || 0) - (a.change || 0));
+
+    const gained = comparison.filter(k => k.trend === "up").length;
+    const lost   = comparison.filter(k => k.trend === "down").length;
+
+    return res.json({
+      comparison,
+      latestDate:   latest.date,
+      previousDate: previous.date,
+      summary: { gained, lost, stable: comparison.length - gained - lost, total: comparison.length },
+      healthScoreChange: (latest.healthScore || 0) - (previous.healthScore || 0),
+    });
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
+// ────────────────────────────────────────────────────
+// LEARNING SYSTEM — track fix → outcome
+// ────────────────────────────────────────────────────
+
+// POST record a fix that was applied (for tracking outcome later)
+router.post("/:clientId/learning/record", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const { taskId, issueType, fixDescription, keywords } = req.body;
+    const ref = await db.collection("learning_log").add({
+      clientId:       req.params.clientId,
+      taskId:         taskId  || null,
+      issueType:      issueType || "unknown",
+      fixDescription: fixDescription || "",
+      keywords:       keywords || [],
+      fixedAt:        FieldValue.serverTimestamp(),
+      fixedBy:        req.uid,
+      rankingsBefore: null,
+      rankingsAfter:  null,
+      outcome:        null,
+      status:         "pending_validation",
+    });
+    return res.json({ id: ref.id, message: "Fix logged for outcome tracking" });
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
+// GET learning history for a client
+router.get("/:clientId/learning", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const snap = await db.collection("learning_log")
+      .where("clientId", "==", req.params.clientId).limit(30).get();
+    const logs = snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => (b.fixedAt?._seconds || 0) - (a.fixedAt?._seconds || 0));
+    return res.json({ logs });
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
+// ────────────────────────────────────────────────────
+// NOTIFICATIONS
+// ────────────────────────────────────────────────────
+
+// GET unread notifications for this user
+router.get("/notifications", verifyToken, async (req, res) => {
+  try {
+    const snap = await db.collection("notifications")
+      .where("ownerId", "==", req.uid).where("read", "==", false).limit(20).get();
+    const items = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
+    return res.json({ notifications: items, unread: items.length });
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
+// POST mark notification as read
+router.post("/notifications/:notifId/read", verifyToken, async (req, res) => {
+  try {
+    await db.collection("notifications").doc(req.params.notifId).update({ read: true });
+    return res.json({ message: "Marked as read" });
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
+// ────────────────────────────────────────────────────
+// INTENT MATCH ENGINE
+// ────────────────────────────────────────────────────
+
+// GET intent mismatch analysis: compares keyword intent vs page content signals
+router.get("/:clientId/intent-analysis", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const clientId = req.params.clientId;
+    const [keywords, audit] = await Promise.all([
+      getState(clientId, "A3_keywords"),
+      getState(clientId, "A2_audit"),
+    ]);
+    if (!keywords) return res.json({ mismatches: [] });
+
+    const pageSignals = {};
+    const allIssues = [
+      ...(audit?.issues?.p1 || []),
+      ...(audit?.issues?.p2 || []),
+      ...(audit?.issues?.p3 || []),
+    ];
+    allIssues.forEach(i => {
+      if (i.page) {
+        if (!pageSignals[i.page]) pageSignals[i.page] = [];
+        pageSignals[i.page].push(i.type);
+      }
+    });
+
+    // Detect intent mismatches: transactional keyword → page lacks CTA signals
+    const mismatches = [];
+    const kwMap = keywords.keywordMap || [];
+    const intentRules = {
+      transactional: ["missing_cta", "thin_content", "missing_schema"],
+      informational: ["missing_h1", "thin_content"],
+      navigational:  ["redirect_chain", "missing_canonical"],
+      commercial:    ["missing_meta_desc", "missing_schema"],
+    };
+
+    for (const kw of kwMap) {
+      if (!kw.suggestedPage || !kw.intent) continue;
+      const pageIssues = pageSignals[kw.suggestedPage] || [];
+      const conflictRules = intentRules[kw.intent] || [];
+      const conflicts = conflictRules.filter(r => pageIssues.includes(r));
+      if (conflicts.length > 0 || (kw.intent === "transactional" && (kw.priority === "high"))) {
+        const severity = kw.priority === "high" ? "critical" : "warning";
+        mismatches.push({
+          keyword:      kw.keyword,
+          intent:       kw.intent,
+          page:         kw.suggestedPage,
+          conflicts,
+          severity,
+          fix: kw.intent === "transactional"
+            ? `Add clear CTA, pricing, and conversion elements to ${kw.suggestedPage}`
+            : `Align content structure on ${kw.suggestedPage} to match ${kw.intent} user intent`,
+        });
+      }
+    }
+
+    return res.json({ mismatches, total: mismatches.length });
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
+// ────────────────────────────────────────────────────
+// CONTENT BRIEFS (from A5 data)
+// ────────────────────────────────────────────────────
+
+// GET structured content briefs
+router.get("/:clientId/content-briefs", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const clientId = req.params.clientId;
+    const [content, keywords, competitor] = await Promise.all([
+      getState(clientId, "A5_content"),
+      getState(clientId, "A3_keywords"),
+      getState(clientId, "A4_competitor"),
+    ]);
+
+    if (!content) return res.json({ briefs: [] });
+
+    // Extract content briefs from A5 data
+    const gaps    = keywords?.gaps || [];
+    const compGap = competitor?.analysis?.contentGaps || [];
+    const briefs  = [
+      ...(content?.contentBriefs || []),
+      ...gaps.slice(0, 3).map(g => ({
+        title:       g.keyword || g.topic,
+        type:        "new_page",
+        priority:    "high",
+        reason:      g.reason || "Content gap identified",
+        targetKws:   [g.keyword],
+        wordCount:   800,
+        sections:    ["Introduction", "Main content", "FAQ", "Conclusion"],
+      })),
+      ...compGap.slice(0, 3).map(g => ({
+        title:       g.topic,
+        type:        "competitor_gap",
+        priority:    "medium",
+        reason:      `Competitor ranking for "${g.topic}" — you're not`,
+        targetKws:   [],
+        wordCount:   1200,
+        sections:    ["Introduction", g.topic, "How it works", "Why choose us", "FAQ"],
+      })),
+    ];
+
+    return res.json({ briefs });
   } catch (e) {
     return res.status(e.code || 500).json({ error: e.message });
   }

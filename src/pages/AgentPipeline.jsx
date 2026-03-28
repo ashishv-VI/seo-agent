@@ -30,6 +30,7 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
   const [activeTab, setActiveTab] = useState("pipeline");
   const [expandedAgent, setExpandedAgent] = useState(null);
   const [alertCount,    setAlertCount]    = useState(0);
+  const [notifCount,    setNotifCount]    = useState(0);
   const [pipelineStatus, setPipelineStatus] = useState("idle"); // idle | running | complete | failed
   const [automationMode, setAutomationMode] = useState("manual"); // manual | semi | full
   const [savingMode,    setSavingMode]    = useState(false);
@@ -88,20 +89,23 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
     setError("");
     try {
       const token = await getToken();
-      const [clientRes, pipelineRes, alertsRes] = await Promise.all([
+      const [clientRes, pipelineRes, alertsRes, notifRes] = await Promise.all([
         fetch(`${API}/api/clients/${clientId}`, { headers: { Authorization: `Bearer ${token}` } }),
         fetch(`${API}/api/agents/${clientId}/pipeline`, { headers: { Authorization: `Bearer ${token}` } }),
         fetch(`${API}/api/agents/${clientId}/alerts`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${API}/api/agents/notifications`, { headers: { Authorization: `Bearer ${token}` } }).catch(() => null),
       ]);
       const clientData   = await clientRes.json();
       const pipelineData = await pipelineRes.json();
       const alertsData   = await alertsRes.json();
+      const notifData    = notifRes ? await notifRes.json().catch(() => ({})) : {};
       if (!clientRes.ok) throw new Error(clientData.error || "Failed to load client");
       setClient(clientData.client);
       setState(clientData.state || {});
       setPipeline(pipelineData.pipeline || {});
       setAutomationMode(clientData.client?.automationMode || "manual");
       setAlertCount((alertsData.alerts || []).filter(a => !a.resolved).length);
+      setNotifCount(notifData.unread || 0);
 
       const ps = pipelineData.pipelineStatus || clientData.client?.pipelineStatus || "idle";
       setPipelineStatus(ps);
@@ -239,6 +243,14 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
           <div style={{ fontSize:16, fontWeight:700, color:txt }}>{client?.name}</div>
           <div style={{ fontSize:11, color:txt2 }}>{client?.website}</div>
         </div>
+        {/* Notification bell */}
+        <div style={{ position:"relative", cursor:"pointer" }} onClick={() => setActiveTab("alerts")} title="View alerts">
+          <div style={{ padding:"8px 10px", borderRadius:10, border:`1px solid ${bdr}`, background:bg2, fontSize:16 }}>🔔</div>
+          {notifCount > 0 && (
+            <div style={{ position:"absolute", top:-4, right:-4, background:"#DC2626", color:"#fff", borderRadius:10, fontSize:9, fontWeight:800, padding:"1px 5px", minWidth:16, textAlign:"center" }}>{notifCount}</div>
+          )}
+        </div>
+
         {pipelineStatus === "running" ? (
           <div style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 16px", borderRadius:20, background:"#D9770611", border:"1px solid #D9770644" }}>
             <span style={{ fontSize:12, color:"#D97706", animation:"spin 1s linear infinite" }}>⏳</span>
@@ -279,7 +291,9 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
         {isComplete("A2") && <div style={s.tab(activeTab==="score")} onClick={()=>setActiveTab("score")}>🏆 Score</div>}
         {isComplete("A2") && <div style={s.tab(activeTab==="tasks")} onClick={()=>setActiveTab("tasks")}>📋 Tasks</div>}
         {isComplete("A2") && <div style={s.tab(activeTab==="pages")} onClick={()=>setActiveTab("pages")}>📄 Pages</div>}
+        {isComplete("A5") && <div style={s.tab(activeTab==="briefs")} onClick={()=>setActiveTab("briefs")}>📝 Briefs</div>}
         {isComplete("A10") && <div style={s.tab(activeTab==="rankings")} onClick={()=>setActiveTab("rankings")}>📈 Rankings</div>}
+        {isComplete("A10") && <div style={s.tab(activeTab==="comparison")} onClick={()=>setActiveTab("comparison")}>📊 Before/After</div>}
       </div>
 
       {/* Pipeline Tab */}
@@ -522,6 +536,16 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
       {/* Pages Tab */}
       {activeTab==="pages" && (
         <PagesView clientId={clientId} dark={dark} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2} getToken={getToken} API={API} onTabSwitch={setActiveTab} />
+      )}
+
+      {/* Content Briefs Tab */}
+      {activeTab==="briefs" && (
+        <ContentBriefsView clientId={clientId} dark={dark} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2} getToken={getToken} API={API} />
+      )}
+
+      {/* Before/After Rankings Comparison Tab */}
+      {activeTab==="comparison" && (
+        <RankComparisonView clientId={clientId} dark={dark} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2} getToken={getToken} API={API} />
       )}
 
       <AIChatBot dark={dark} clientId={clientId} getToken={getToken} API={API} />
@@ -2078,12 +2102,13 @@ function ScoreBreakdownView({ clientId, state, dark, bg2, bg3, bdr, txt, txt2, g
 
 // ── Task Queue View ──────────────────────────────────
 function TaskQueueView({ clientId, dark, bg2, bg3, bdr, txt, txt2, getToken, API }) {
-  const [tasks,    setTasks]    = useState([]);
-  const [loading,  setLoading]  = useState(true);
-  const [filter,   setFilter]   = useState("all");
-  const [updating, setUpdating] = useState(null);
-  const [expanded, setExpanded] = useState(null);
-  const [toast,    setToast]    = useState("");
+  const [tasks,     setTasks]     = useState([]);
+  const [loading,   setLoading]   = useState(true);
+  const [filter,    setFilter]    = useState("all");
+  const [updating,  setUpdating]  = useState(null);
+  const [expanded,  setExpanded]  = useState(null);
+  const [toast,     setToast]     = useState("");
+  const [bulkBusy,  setBulkBusy]  = useState(null); // "complete-all" | "generate-fixes" | "clear-completed"
 
   const AGENT_COLOR = {
     OnPageAgent:   { color:"#443DCB", bg:"#443DCB15", label:"On-Page"   },
@@ -2093,18 +2118,17 @@ function TaskQueueView({ clientId, dark, bg2, bg3, bdr, txt, txt2, getToken, API
     LocalAgent:    { color:"#7C3AED", bg:"#7C3AED15", label:"Local"     },
   };
 
-  useEffect(() => {
-    async function fetchTasks() {
-      try {
-        const token = await getToken();
-        const res  = await fetch(`${API}/api/agents/${clientId}/tasks`, { headers: { Authorization: `Bearer ${token}` } });
-        const data = await res.json();
-        setTasks(data.tasks || []);
-      } catch { /* noop */ }
-      setLoading(false);
-    }
-    fetchTasks();
-  }, [clientId]);
+  async function fetchTasks() {
+    try {
+      const token = await getToken();
+      const res  = await fetch(`${API}/api/agents/${clientId}/tasks`, { headers: { Authorization: `Bearer ${token}` } });
+      const data = await res.json();
+      setTasks(data.tasks || []);
+    } catch { /* noop */ }
+    setLoading(false);
+  }
+
+  useEffect(() => { fetchTasks(); }, [clientId]);
 
   async function markComplete(taskId) {
     setUpdating(taskId);
@@ -2122,9 +2146,27 @@ function TaskQueueView({ clientId, dark, bg2, bg3, bdr, txt, txt2, getToken, API
     setUpdating(null);
   }
 
+  async function bulkAction(action) {
+    setBulkBusy(action);
+    try {
+      const token = await getToken();
+      const res   = await fetch(`${API}/api/agents/${clientId}/tasks/bulk`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      const data = await res.json();
+      setToast(data.message || data.error || "Done");
+      setTimeout(() => setToast(""), 4000);
+      if (action !== "generate-fixes") { setLoading(true); fetchTasks(); }
+    } catch { setToast("Action failed"); setTimeout(() => setToast(""), 3000); }
+    setBulkBusy(null);
+  }
+
   const filtered  = tasks.filter(t => filter==="all" ? true : filter==="pending" ? t.status==="pending" : t.status==="complete");
   const pending   = tasks.filter(t => t.status==="pending").length;
   const completed = tasks.filter(t => t.status==="complete").length;
+  const autoFix   = tasks.filter(t => t.status==="pending" && t.autoFixable).length;
 
   if (loading) return <div style={{ padding:40, textAlign:"center", color:txt2, fontSize:13 }}>Loading tasks...</div>;
 
@@ -2132,13 +2174,30 @@ function TaskQueueView({ clientId, dark, bg2, bg3, bdr, txt, txt2, getToken, API
     <div style={{ padding: 24 }}>
       {toast && (
         <div style={{ position:"fixed", bottom:24, right:24, background:"#059669", color:"#fff", padding:"10px 18px", borderRadius:10, fontSize:13, fontWeight:600, zIndex:9999 }}>
-          ✅ {toast}
+          {toast}
         </div>
       )}
 
+      {/* Bulk Actions Bar */}
+      <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:12, padding:"12px 16px", marginBottom:16, display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
+        <span style={{ fontSize:12, fontWeight:700, color:txt, flex:1 }}>Bulk Actions</span>
+        <button onClick={() => bulkAction("generate-fixes")} disabled={!!bulkBusy || autoFix===0}
+          style={{ padding:"6px 14px", borderRadius:8, background:"#443DCB", color:"#fff", border:"none", fontSize:11, fontWeight:700, cursor: (bulkBusy || autoFix===0) ?"not-allowed":"pointer", opacity:(bulkBusy||autoFix===0)?0.6:1 }}>
+          {bulkBusy==="generate-fixes" ? "Generating..." : `⚡ AI Fix All (${autoFix} auto-fixable)`}
+        </button>
+        <button onClick={() => bulkAction("complete-all")} disabled={!!bulkBusy || pending===0}
+          style={{ padding:"6px 14px", borderRadius:8, background:"#059669", color:"#fff", border:"none", fontSize:11, fontWeight:700, cursor:(bulkBusy||pending===0)?"not-allowed":"pointer", opacity:(bulkBusy||pending===0)?0.6:1 }}>
+          {bulkBusy==="complete-all" ? "Marking..." : `✅ Mark All Done (${pending})`}
+        </button>
+        <button onClick={() => bulkAction("clear-completed")} disabled={!!bulkBusy || completed===0}
+          style={{ padding:"6px 14px", borderRadius:8, background:"transparent", border:`1px solid ${bdr}`, color:txt2, fontSize:11, fontWeight:600, cursor:(bulkBusy||completed===0)?"not-allowed":"pointer", opacity:(bulkBusy||completed===0)?0.6:1 }}>
+          {bulkBusy==="clear-completed" ? "Clearing..." : `🗑 Clear Done (${completed})`}
+        </button>
+      </div>
+
       {/* Stats + filter */}
       <div style={{ display:"flex", gap:12, marginBottom:20, flexWrap:"wrap", alignItems:"center" }}>
-        {[{label:"Total",val:tasks.length,color:"#443DCB"},{label:"Pending",val:pending,color:"#DC2626"},{label:"Done",val:completed,color:"#059669"}].map(s => (
+        {[{label:"Total",val:tasks.length,color:"#443DCB"},{label:"Pending",val:pending,color:"#DC2626"},{label:"Auto-Fixable",val:autoFix,color:"#D97706"},{label:"Done",val:completed,color:"#059669"}].map(s => (
           <div key={s.label} style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:12, padding:"12px 20px", textAlign:"center", minWidth:90 }}>
             <div style={{ fontSize:22, fontWeight:800, color:s.color }}>{s.val}</div>
             <div style={{ fontSize:11, color:txt2 }}>{s.label}</div>
@@ -2360,19 +2419,222 @@ function PagesView({ clientId, dark, bg2, bg3, bdr, txt, txt2, getToken, API, on
   );
 }
 
+// ── Content Briefs View ──────────────────────────────
+function ContentBriefsView({ clientId, dark, bg2, bg3, bdr, txt, txt2, getToken, API }) {
+  const [briefs,  setBriefs]  = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [open,    setOpen]    = useState(null);
+
+  useEffect(() => {
+    async function fetchBriefs() {
+      try {
+        const token = await getToken();
+        const res   = await fetch(`${API}/api/agents/${clientId}/content-briefs`, { headers: { Authorization: `Bearer ${token}` } });
+        const data  = await res.json();
+        setBriefs(data.briefs || []);
+      } catch { /* noop */ }
+      setLoading(false);
+    }
+    fetchBriefs();
+  }, [clientId]);
+
+  if (loading) return <div style={{ padding:40, textAlign:"center", color:txt2, fontSize:13 }}>Loading content briefs...</div>;
+
+  if (!briefs.length) return (
+    <div style={{ padding:40, textAlign:"center", color:txt2 }}>
+      <div style={{ fontSize:32, marginBottom:10 }}>📝</div>
+      <div style={{ fontSize:14, fontWeight:600, color:txt }}>No content briefs yet</div>
+      <div style={{ fontSize:12, marginTop:6 }}>Complete A5 Content Optimisation to generate content briefs.</div>
+    </div>
+  );
+
+  const typeColor = { new_page:"#443DCB", competitor_gap:"#D97706", optimisation:"#059669" };
+  const typeLabel = { new_page:"New Page", competitor_gap:"Competitor Gap", optimisation:"Optimise" };
+
+  return (
+    <div style={{ padding:24 }}>
+      <div style={{ display:"flex", gap:8, marginBottom:20 }}>
+        {[
+          { label:"Total Briefs",    val:briefs.length,                               color:"#443DCB" },
+          { label:"New Pages",       val:briefs.filter(b=>b.type==="new_page").length, color:"#D97706" },
+          { label:"Comp. Gaps",      val:briefs.filter(b=>b.type==="competitor_gap").length, color:"#DC2626" },
+        ].map(s => (
+          <div key={s.label} style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:12, padding:"12px 20px", textAlign:"center" }}>
+            <div style={{ fontSize:20, fontWeight:800, color:s.color }}>{s.val}</div>
+            <div style={{ fontSize:11, color:txt2 }}>{s.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {briefs.map((brief, i) => {
+        const tc = typeColor[brief.type] || "#6B7280";
+        const isOpen = open === i;
+        return (
+          <div key={i} style={{ background:bg2, border:`1px solid ${bdr}`, borderLeft:`4px solid ${tc}`, borderRadius:12, marginBottom:10, overflow:"hidden" }}>
+            <div onClick={() => setOpen(isOpen ? null : i)} style={{ padding:"14px 16px", cursor:"pointer", display:"flex", alignItems:"center", gap:10 }}>
+              <div style={{ flex:1 }}>
+                <div style={{ display:"flex", gap:6, marginBottom:6 }}>
+                  <span style={{ fontSize:9, padding:"2px 8px", borderRadius:8, background:`${tc}18`, color:tc, fontWeight:700 }}>{typeLabel[brief.type] || brief.type}</span>
+                  <span style={{ fontSize:9, padding:"2px 8px", borderRadius:8, background: brief.priority==="high"?"#DC262618":"#D9770618", color: brief.priority==="high"?"#DC2626":"#D97706", fontWeight:700 }}>{brief.priority} priority</span>
+                  {brief.wordCount && <span style={{ fontSize:9, color:txt2 }}>{brief.wordCount} words</span>}
+                </div>
+                <div style={{ fontSize:13, fontWeight:700, color:txt }}>{brief.title}</div>
+                <div style={{ fontSize:11, color:txt2, marginTop:3 }}>{brief.reason}</div>
+              </div>
+              <span style={{ color:txt2, fontSize:12 }}>{isOpen?"▲":"▼"}</span>
+            </div>
+
+            {isOpen && (
+              <div style={{ padding:"0 16px 16px", borderTop:`1px solid ${bdr}` }}>
+                {brief.targetKws?.length > 0 && (
+                  <div style={{ marginTop:12 }}>
+                    <div style={{ fontSize:10, fontWeight:700, color:txt2, textTransform:"uppercase", marginBottom:6 }}>Target Keywords</div>
+                    <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+                      {brief.targetKws.map((kw, j) => (
+                        <span key={j} style={{ fontSize:11, padding:"3px 10px", borderRadius:8, background:"#443DCB18", color:"#443DCB", fontWeight:600 }}>{kw}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {brief.sections?.length > 0 && (
+                  <div style={{ marginTop:12 }}>
+                    <div style={{ fontSize:10, fontWeight:700, color:txt2, textTransform:"uppercase", marginBottom:6 }}>Recommended Sections</div>
+                    <ol style={{ margin:0, paddingLeft:18 }}>
+                      {brief.sections.map((s, j) => (
+                        <li key={j} style={{ fontSize:12, color:txt, padding:"3px 0" }}>{s}</li>
+                      ))}
+                    </ol>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Before/After Rank Comparison View ───────────────
+function RankComparisonView({ clientId, dark, bg2, bg3, bdr, txt, txt2, getToken, API }) {
+  const [data,    setData]    = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [filter,  setFilter]  = useState("all"); // all | up | down | stable
+
+  useEffect(() => {
+    async function fetchComparison() {
+      try {
+        const token = await getToken();
+        const res   = await fetch(`${API}/api/agents/${clientId}/rank-comparison`, { headers: { Authorization: `Bearer ${token}` } });
+        const d     = await res.json();
+        setData(d);
+      } catch { /* noop */ }
+      setLoading(false);
+    }
+    fetchComparison();
+  }, [clientId]);
+
+  if (loading) return <div style={{ padding:40, textAlign:"center", color:txt2, fontSize:13 }}>Loading comparison...</div>;
+
+  if (!data?.comparison) return (
+    <div style={{ padding:40, textAlign:"center", color:txt2 }}>
+      <div style={{ fontSize:32, marginBottom:10 }}>📊</div>
+      <div style={{ fontSize:14, fontWeight:600, color:txt }}>No comparison data yet</div>
+      <div style={{ fontSize:12, marginTop:6 }}>{data?.message || "Need at least 2 pipeline runs to compare rankings."}</div>
+    </div>
+  );
+
+  const { comparison, summary, latestDate, previousDate, healthScoreChange } = data;
+  const filtered = filter === "all" ? comparison : comparison.filter(k => k.trend === filter);
+
+  return (
+    <div style={{ padding:24 }}>
+      {/* Date range + summary */}
+      <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:12, padding:"14px 18px", marginBottom:16 }}>
+        <div style={{ fontSize:11, color:txt2, marginBottom:10 }}>{previousDate} → {latestDate}</div>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12 }}>
+          {[
+            { label:"Improved",  val:summary.gained, color:"#059669", icon:"↑" },
+            { label:"Dropped",   val:summary.lost,   color:"#DC2626", icon:"↓" },
+            { label:"Stable",    val:summary.stable, color:"#6B7280", icon:"→" },
+            { label:"Health Score Change", val: `${healthScoreChange >= 0 ? "+" : ""}${healthScoreChange || 0}`, color: healthScoreChange >= 0 ? "#059669" : "#DC2626", icon:"" },
+          ].map(s => (
+            <div key={s.label} style={{ textAlign:"center" }}>
+              <div style={{ fontSize:22, fontWeight:800, color:s.color }}>{s.icon}{s.val}</div>
+              <div style={{ fontSize:11, color:txt2 }}>{s.label}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Filter */}
+      <div style={{ display:"flex", gap:8, marginBottom:16 }}>
+        {[
+          { id:"all",    label:"All Keywords", color:"#443DCB" },
+          { id:"up",     label:"Improved",     color:"#059669" },
+          { id:"down",   label:"Dropped",      color:"#DC2626" },
+          { id:"stable", label:"Stable",       color:"#6B7280" },
+        ].map(f => (
+          <button key={f.id} onClick={() => setFilter(f.id)} style={{ padding:"6px 14px", borderRadius:8, fontSize:12, fontWeight:600, cursor:"pointer", border:`1px solid ${filter===f.id ? f.color : bdr}`, background: filter===f.id ? f.color : "transparent", color: filter===f.id ? "#fff" : txt2 }}>
+            {f.label} {filter===f.id ? "" : `(${comparison.filter(k=>f.id==="all"||k.trend===f.id).length})`}
+          </button>
+        ))}
+      </div>
+
+      {/* Rankings table */}
+      <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:14, overflow:"hidden" }}>
+        <div style={{ display:"grid", gridTemplateColumns:"2fr 100px 100px 100px", padding:"10px 16px", borderBottom:`1px solid ${bdr}`, fontSize:11, fontWeight:700, color:txt2 }}>
+          <span>Keyword</span>
+          <span style={{ textAlign:"center" }}>Previous</span>
+          <span style={{ textAlign:"center" }}>Current</span>
+          <span style={{ textAlign:"center" }}>Change</span>
+        </div>
+        {filtered.length === 0 && <div style={{ padding:24, textAlign:"center", color:txt2, fontSize:12 }}>No keywords match this filter.</div>}
+        {filtered.map((kw, i) => {
+          const changeColor = kw.trend === "up" ? "#059669" : kw.trend === "down" ? "#DC2626" : "#6B7280";
+          const changeText  = kw.change === null ? "—"
+            : kw.change > 0  ? `↑${kw.change} pos`
+            : kw.change < 0  ? `↓${Math.abs(kw.change)} pos`
+            : "→ stable";
+          return (
+            <div key={i} style={{ display:"grid", gridTemplateColumns:"2fr 100px 100px 100px", padding:"12px 16px", borderBottom:`1px solid ${bdr}`, alignItems:"center" }}>
+              <div>
+                <div style={{ fontSize:12, fontWeight:600, color:txt }}>{kw.keyword}</div>
+                {kw.category && <div style={{ fontSize:10, color:txt2, marginTop:1 }}>{kw.category}</div>}
+              </div>
+              <div style={{ textAlign:"center", fontSize:13, color:txt2 }}>{kw.previous || "NR"}</div>
+              <div style={{ textAlign:"center", fontSize:13, fontWeight:700, color:txt }}>{kw.current || "NR"}</div>
+              <div style={{ textAlign:"center" }}>
+                <span style={{ fontSize:11, fontWeight:700, color:changeColor, padding:"3px 8px", borderRadius:8, background:`${changeColor}18` }}>{changeText}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ── Dashboard View (Unified Overview) ───────────────
 function DashboardView({ clientId, state, dark, bg2, bg3, bdr, txt, txt2, getToken, API, onTabSwitch }) {
   const [dash,          setDash]          = useState(null);
   const [loading,       setLoading]       = useState(true);
   const [recalculating, setRecalculating] = useState(false);
   const [recalcMsg,     setRecalcMsg]     = useState(null);
+  const [revenue,       setRevenue]       = useState(null);
 
   async function fetchDash() {
     try {
       const token = await getToken();
-      const res   = await fetch(`${API}/api/agents/${clientId}/dashboard`, { headers: { Authorization: `Bearer ${token}` } });
-      const data  = await res.json();
-      setDash(data);
+      const [dashRes, revRes] = await Promise.all([
+        fetch(`${API}/api/agents/${clientId}/dashboard`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${API}/api/agents/${clientId}/revenue`,   { headers: { Authorization: `Bearer ${token}` } }),
+      ]);
+      const dashData = await dashRes.json();
+      const revData  = await revRes.json();
+      setDash(dashData);
+      if (revData.revenue) setRevenue(revData.revenue);
     } catch { /* noop */ }
     setLoading(false);
   }
@@ -2562,6 +2824,51 @@ function DashboardView({ clientId, state, dark, bg2, bg3, bdr, txt, txt2, getTok
           <button onClick={() => onTabSwitch("score")} style={{ marginTop:14, padding:"8px 16px", borderRadius:8, border:`1px solid #443DCB`, background:"transparent", color:"#443DCB", fontSize:12, fontWeight:600, cursor:"pointer" }}>
             Full score breakdown & factor drill-down →
           </button>
+        </div>
+      )}
+
+      {/* Revenue Impact Section */}
+      {revenue && (
+        <div style={{ background:bg2, border:`1px solid #05966933`, borderRadius:14, padding:20, marginTop:14, borderLeft:"4px solid #059669" }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:16 }}>
+            <div>
+              <div style={{ fontSize:13, fontWeight:700, color:txt }}>Revenue Impact</div>
+              <div style={{ fontSize:11, color:txt2, marginTop:2 }}>Based on keyword rankings · {revenue.conversionRate}% conv · £{revenue.avgOrderValue} AOV</div>
+            </div>
+            <div style={{ textAlign:"right" }}>
+              <div style={{ fontSize:10, color:txt2 }}>Revenue gap</div>
+              <div style={{ fontSize:20, fontWeight:800, color:"#DC2626" }}>£{(revenue.revenueGap||0).toLocaleString()}/mo</div>
+              <div style={{ fontSize:10, color:txt2 }}>missed by not ranking higher</div>
+            </div>
+          </div>
+
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:12, marginBottom:16 }}>
+            {[
+              { label:"Current Monthly Visitors",   val: revenue.currentMonthlyVisitors?.toLocaleString()  || "—", color:"#443DCB" },
+              { label:"Current Monthly Revenue",    val: `£${(revenue.currentMonthlyRevenue||0).toLocaleString()}`,  color:"#059669" },
+              { label:"Potential Revenue (rank #1)",val: `£${(revenue.potentialMonthlyRevenue||0).toLocaleString()}`,color:"#D97706" },
+            ].map(s => (
+              <div key={s.label} style={{ background:bg3, borderRadius:10, padding:"12px 14px", textAlign:"center" }}>
+                <div style={{ fontSize:18, fontWeight:800, color:s.color }}>{s.val}</div>
+                <div style={{ fontSize:10, color:txt2, marginTop:3 }}>{s.label}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Top opportunities */}
+          {revenue.topOpportunities?.length > 0 && (
+            <div>
+              <div style={{ fontSize:11, fontWeight:700, color:txt2, textTransform:"uppercase", marginBottom:8 }}>Top Revenue Opportunities</div>
+              {revenue.topOpportunities.slice(0, 3).map((kw, i) => (
+                <div key={i} style={{ display:"flex", alignItems:"center", gap:10, padding:"7px 0", borderBottom:`1px solid ${bdr}` }}>
+                  <span style={{ fontSize:11, fontWeight:800, color:"#443DCB", minWidth:16 }}>#{i+1}</span>
+                  <span style={{ flex:1, fontSize:12, color:txt, fontWeight:600 }}>{kw.keyword}</span>
+                  <span style={{ fontSize:11, color:txt2 }}>pos {kw.position || "NR"}</span>
+                  <span style={{ fontSize:11, color:"#059669", fontWeight:700 }}>+£{(kw.potentialRevenue - kw.revenue).toLocaleString()}/mo</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -244,4 +244,59 @@ async function getScoreHistory(clientId, limit = 12) {
   } catch { return []; }
 }
 
-module.exports = { calculateScore, generateForecast, saveScoreHistory, getLatestScore, getScoreHistory };
+/**
+ * Calculate revenue impact from keyword rankings
+ * keyword → monthly searches → CTR by position → visitors → revenue
+ */
+function calculateRevenue(keywords, brief) {
+  const convRate = ((brief?.conversionRate) || 2) / 100; // %
+  const aov      = (brief?.avgOrderValue)   || 150;       // £/$ per sale
+
+  // Industry-standard CTR curve by position
+  const CTR_BY_POS = { 1:0.28, 2:0.15, 3:0.11, 4:0.08, 5:0.06, 6:0.04, 7:0.03, 8:0.03, 9:0.02, 10:0.02 };
+
+  const kwData = (keywords?.keywordMap || []).filter(k => (k.searchVolume || 0) > 0);
+  if (!kwData.length) return null;
+
+  let currentVisitors   = 0;
+  let potentialVisitors = 0;
+  let currentRevenue    = 0;
+  let potentialRevenue  = 0;
+
+  const breakdown = kwData.slice(0, 30).map(kw => {
+    const vol        = kw.searchVolume || 0;
+    const pos        = kw.currentPosition || null;
+    const curCTR     = pos ? (CTR_BY_POS[pos] || 0.01) : 0.001;
+    const potCTR     = CTR_BY_POS[1]; // potential if #1
+    const vis        = Math.round(vol * curCTR);
+    const potVis     = Math.round(vol * potCTR);
+    const rev        = Math.round(vis * convRate * aov);
+    const potRev     = Math.round(potVis * convRate * aov);
+
+    currentVisitors   += vis;
+    potentialVisitors += potVis;
+    currentRevenue    += rev;
+    potentialRevenue  += potRev;
+
+    return { keyword: kw.keyword, volume: vol, position: pos, visitors: vis, revenue: rev, potentialRevenue: potRev, potentialPosition: 1 };
+  });
+
+  const topOpportunities = breakdown
+    .sort((a, b) => (b.potentialRevenue - b.revenue) - (a.potentialRevenue - a.revenue))
+    .slice(0, 5);
+
+  return {
+    currentMonthlyVisitors:   currentVisitors,
+    currentMonthlyRevenue:    currentRevenue,
+    potentialMonthlyVisitors: potentialVisitors,
+    potentialMonthlyRevenue:  potentialRevenue,
+    revenueGap:               potentialRevenue - currentRevenue,
+    conversionRate:           convRate * 100,
+    avgOrderValue:            aov,
+    currency:                 brief?.currency || "GBP",
+    topOpportunities,
+    keywordsWithVolume:       kwData.length,
+  };
+}
+
+module.exports = { calculateScore, generateForecast, saveScoreHistory, getLatestScore, getScoreHistory, calculateRevenue };
