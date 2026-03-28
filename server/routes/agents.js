@@ -520,4 +520,67 @@ router.get("/:clientId/alerts", verifyToken, async (req, res) => {
   }
 });
 
+// ────────────────────────────────────────────────────
+// AUTOMATION MODE
+// ────────────────────────────────────────────────────
+
+router.put("/:clientId/automation-mode", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const { mode } = req.body; // "manual" | "semi" | "full"
+    if (!["manual","semi","full"].includes(mode)) return res.status(400).json({ error: "Invalid mode" });
+    await db.collection("clients").doc(req.params.clientId).update({ automationMode: mode });
+    return res.json({ message: `Automation mode set to ${mode}`, mode });
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
+// ── A10 Ranking Tracker ────────────────────────────
+router.post("/:clientId/run-a10", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const { runA10 } = require("../agents/A10_rankingTracker");
+    const { googleToken } = req.body;
+    const keys = await getUserKeys(req.uid);
+    await db.collection("clients").doc(req.params.clientId).update({ "agents.A10": "running" });
+    const result = await runA10(req.params.clientId, keys, googleToken || null);
+    await db.collection("clients").doc(req.params.clientId).update({ "agents.A10": result.success ? "complete" : "failed" });
+    return res.json(result);
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
+// ── A12 Auto-Exec ──────────────────────────────────
+router.post("/:clientId/run-a12", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const { runA12 } = require("../agents/A12_autoExec");
+    const keys = await getUserKeys(req.uid);
+    await db.collection("clients").doc(req.params.clientId).update({ "agents.A12": "running" });
+    const result = await runA12(req.params.clientId, keys);
+    await db.collection("clients").doc(req.params.clientId).update({ "agents.A12": result.success ? "complete" : "failed" });
+    return res.json(result);
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
+// ── GET Rankings for client ────────────────────────
+router.get("/:clientId/rankings", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const snap = await db.collection("rank_history")
+      .where("clientId", "==", req.params.clientId)
+      .orderBy("date", "desc")
+      .limit(1)
+      .get();
+    if (snap.empty) return res.json({ rankings: [], source: null });
+    return res.json(snap.docs[0].data());
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
 module.exports = router;

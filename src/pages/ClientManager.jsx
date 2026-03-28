@@ -463,14 +463,24 @@ export default function ClientManager({ dark }) {
                 </div>
                 <div style={{ fontSize:12, color:txt2, marginBottom:10 }}>{client.website}</div>
                 <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-                  {Object.entries(client.agents || {}).map(([agent, status]) => (
+                  {Object.entries(client.agents || {}).filter(([a]) => ["A2","A3","A9"].includes(a)).map(([agent, status]) => (
                     <span key={agent} style={s.badge(statusColor(status))}>
                       {agent}: {statusLabel(status)}
                     </span>
                   ))}
                 </div>
               </div>
-              <div style={{ display:"flex", gap:8, alignItems:"center", flexShrink:0, marginLeft:12 }}>
+              <div style={{ display:"flex", gap:12, alignItems:"center", flexShrink:0, marginLeft:12 }}>
+                {/* SEO Score ring */}
+                {client.seoScore != null && (
+                  <div style={{ width:48, height:48, borderRadius:"50%", border:`3px solid ${client.seoScore>=75?"#059669":client.seoScore>=50?"#D97706":"#DC2626"}`, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", background:`${client.seoScore>=75?"#059669":client.seoScore>=50?"#D97706":"#DC2626"}10`, flexShrink:0 }}>
+                    <div style={{ fontSize:13, fontWeight:800, color:client.seoScore>=75?"#059669":client.seoScore>=50?"#D97706":"#DC2626" }}>{client.seoScore}</div>
+                  </div>
+                )}
+                {/* Pipeline status badge */}
+                {client.pipelineStatus === "complete" && <span style={{ fontSize:11, color:"#059669", fontWeight:600 }}>✅ Complete</span>}
+                {client.pipelineStatus === "running"  && <span style={{ fontSize:11, color:"#D97706", fontWeight:600 }}>⏳ Running</span>}
+                {client.pipelineStatus === "failed"   && <span style={{ fontSize:11, color:"#DC2626", fontWeight:600 }}>❌ Failed</span>}
                 <span style={{ fontSize:12, color:txt3 }}>View Pipeline →</span>
                 <button onClick={(e) => deleteClient(client.id, e)}
                   style={{ padding:"5px 12px", borderRadius:6, border:"1px solid #DC262633", background:"transparent", color:"#DC2626", fontSize:12, cursor:"pointer" }}>

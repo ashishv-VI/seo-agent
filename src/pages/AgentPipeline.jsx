@@ -6,15 +6,17 @@ import PrintReport from "./PrintReport";
 import AIChatBot from "../components/AIChatBot";
 
 const ALL_AGENTS = [
-  { id:"A1", label:"Client Brief",       icon:"📋", phase:1 },
-  { id:"A2", label:"Technical Audit",    icon:"🏥", phase:1 },
-  { id:"A3", label:"Keyword Research",   icon:"🔍", phase:2 },
-  { id:"A4", label:"Competitor Intel",   icon:"🕵️", phase:2 },
-  { id:"A5", label:"Content",            icon:"✍️", phase:3 },
-  { id:"A6", label:"On-Page & Tags",     icon:"🏷️", phase:3 },
-  { id:"A7", label:"Technical/CWV",      icon:"⚡", phase:3 },
-  { id:"A8", label:"GEO & Off-Page",     icon:"🌍", phase:3 },
-  { id:"A9", label:"Reports",            icon:"📊", phase:4 },
+  { id:"A1",  label:"Client Brief",       icon:"📋", phase:1 },
+  { id:"A2",  label:"Technical Audit",    icon:"🏥", phase:1 },
+  { id:"A3",  label:"Keyword Research",   icon:"🔍", phase:2 },
+  { id:"A4",  label:"Competitor Intel",   icon:"🕵️", phase:2 },
+  { id:"A5",  label:"Content",            icon:"✍️", phase:3 },
+  { id:"A6",  label:"On-Page & Tags",     icon:"🏷️", phase:3 },
+  { id:"A7",  label:"Technical/CWV",      icon:"⚡", phase:3 },
+  { id:"A8",  label:"GEO & Off-Page",     icon:"🌍", phase:3 },
+  { id:"A9",  label:"Reports",            icon:"📊", phase:4 },
+  { id:"A10", label:"Rank Tracker",       icon:"📈", phase:4 },
+  { id:"A12", label:"Auto-Fix Engine",    icon:"⚡", phase:4 },
 ];
 
 export default function AgentPipeline({ dark, clientId, onBack }) {
@@ -29,6 +31,8 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
   const [expandedAgent, setExpandedAgent] = useState(null);
   const [alertCount,    setAlertCount]    = useState(0);
   const [pipelineStatus, setPipelineStatus] = useState("idle"); // idle | running | complete | failed
+  const [automationMode, setAutomationMode] = useState("manual"); // manual | semi | full
+  const [savingMode,    setSavingMode]    = useState(false);
   const pollRef     = useRef(null);
   const loadLatest  = useRef(null); // always points to the latest load fn for use in setInterval
 
@@ -96,6 +100,7 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
       setClient(clientData.client);
       setState(clientData.state || {});
       setPipeline(pipelineData.pipeline || {});
+      setAutomationMode(clientData.client?.automationMode || "manual");
       setAlertCount((alertsData.alerts || []).filter(a => !a.resolved).length);
 
       const ps = pipelineData.pipelineStatus || clientData.client?.pipelineStatus || "idle";
@@ -108,7 +113,7 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
       // Stop polling when done, auto-navigate to results
       if (ps === "complete" || ps === "failed") {
         if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
-        if (ps === "complete") setActiveTab("actionplan");
+        if (ps === "complete") setActiveTab("dashboard");
       }
     } catch (e) { setError(e.message || "Failed to load pipeline"); }
     if (!silent) setLoading(false);
@@ -270,11 +275,51 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
         {isComplete("A7") && <div style={s.tab(activeTab==="technical")} onClick={()=>setActiveTab("technical")}>⚡ CWV</div>}
         {isComplete("A8") && <div style={s.tab(activeTab==="geo")} onClick={()=>setActiveTab("geo")}>🌍 GEO</div>}
         {isComplete("A9") && <div style={s.tab(activeTab==="report")} onClick={()=>setActiveTab("report")}>📊 Report</div>}
+        {isComplete("A2") && <div style={{...s.tab(activeTab==="dashboard"), background:activeTab==="dashboard"?"#443DCB":"transparent", color:activeTab==="dashboard"?"#fff":txt2, border:`1px solid ${activeTab==="dashboard"?"#443DCB":bdr}`}} onClick={()=>setActiveTab("dashboard")}>🎯 Dashboard</div>}
         {isComplete("A2") && <div style={s.tab(activeTab==="score")} onClick={()=>setActiveTab("score")}>🏆 Score</div>}
         {isComplete("A2") && <div style={s.tab(activeTab==="tasks")} onClick={()=>setActiveTab("tasks")}>📋 Tasks</div>}
+        {isComplete("A10") && <div style={s.tab(activeTab==="rankings")} onClick={()=>setActiveTab("rankings")}>📈 Rankings</div>}
       </div>
 
       {/* Pipeline Tab */}
+      {/* Automation Mode Bar */}
+      {isComplete("A2") && (
+        <div style={{ display:"flex", alignItems:"center", gap:10, background:bg2, border:`1px solid ${bdr}`, borderRadius:12, padding:"10px 16px", marginBottom:16 }}>
+          <span style={{ fontSize:12, fontWeight:700, color:txt, marginRight:4 }}>Automation Mode:</span>
+          {[
+            { id:"manual", icon:"🤚", label:"Manual", desc:"You approve everything" },
+            { id:"semi",   icon:"⚡", label:"Semi-Auto", desc:"AI generates, you approve" },
+            { id:"full",   icon:"🤖", label:"Full-Auto", desc:"AI fixes safe issues automatically" },
+          ].map(m => (
+            <button key={m.id} onClick={async () => {
+              setSavingMode(true);
+              const token = await getToken();
+              await fetch(`${API}/api/agents/${clientId}/automation-mode`, {
+                method: "PUT",
+                headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+                body: JSON.stringify({ mode: m.id }),
+              }).catch(() => {});
+              setAutomationMode(m.id);
+              setSavingMode(false);
+            }} title={m.desc} style={{
+              padding:"6px 12px", borderRadius:8, fontSize:11, fontWeight:600, cursor:"pointer",
+              background: automationMode===m.id ? (m.id==="full"?"#059669":m.id==="semi"?"#D97706":"#443DCB") : "transparent",
+              color:      automationMode===m.id ? "#fff" : txt2,
+              border:     `1px solid ${automationMode===m.id ? (m.id==="full"?"#059669":m.id==="semi"?"#D97706":"#443DCB") : bdr}`,
+              opacity:    savingMode ? 0.5 : 1,
+            }}>
+              {m.icon} {m.label}
+            </button>
+          ))}
+          {automationMode === "semi" && (
+            <span style={{ fontSize:11, color:"#D97706", marginLeft:4 }}>AI generates fixes — you approve in Approvals tab</span>
+          )}
+          {automationMode === "full" && (
+            <span style={{ fontSize:11, color:"#059669", marginLeft:4 }}>AI auto-fixes safe issues (title, meta, alt text)</span>
+          )}
+        </div>
+      )}
+
       {activeTab==="pipeline" && (
         <>
           {/* Live Progress Banner */}
@@ -451,6 +496,16 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
       {/* Report Tab */}
       {activeTab==="report" && state.A9_report && (
         <FullReportView report={state.A9_report} dark={dark} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2} />
+      )}
+
+      {/* Dashboard Tab */}
+      {activeTab==="dashboard" && (
+        <DashboardView clientId={clientId} state={state} dark={dark} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2} getToken={getToken} API={API} onTabSwitch={setActiveTab} />
+      )}
+
+      {/* Rankings Tab */}
+      {activeTab==="rankings" && (
+        <RankingsView clientId={clientId} dark={dark} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2} getToken={getToken} API={API} googleToken={googleToken} />
       )}
 
       {/* Score Tab */}
@@ -1981,6 +2036,290 @@ function TaskQueueView({ clientId, dark, bg2, bg3, bdr, txt, txt2, getToken, API
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// ── Dashboard View (Unified Overview) ───────────────
+function DashboardView({ clientId, state, dark, bg2, bg3, bdr, txt, txt2, getToken, API, onTabSwitch }) {
+  const [dash,    setDash]    = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchDash() {
+      try {
+        const token = await getToken();
+        const res   = await fetch(`${API}/api/agents/${clientId}/dashboard`, { headers: { Authorization: `Bearer ${token}` } });
+        const data  = await res.json();
+        setDash(data);
+      } catch { /* noop */ }
+      setLoading(false);
+    }
+    fetchDash();
+  }, [clientId]);
+
+  if (loading) return <div style={{ padding:40, textAlign:"center", color:txt2, fontSize:13 }}>Loading dashboard...</div>;
+
+  const score   = dash?.score;
+  const tasks   = dash?.topTasks   || [];
+  const alerts  = dash?.alerts     || [];
+  const forecast= dash?.forecast;
+  const audit   = dash?.auditSummary;
+
+  const scoreColor = !score ? "#6B7280" : score.overall >= 75 ? "#059669" : score.overall >= 50 ? "#D97706" : "#DC2626";
+  const scoreLabel = !score ? "Not scored" : score.overall >= 75 ? "Good" : score.overall >= 50 ? "Needs Work" : "Critical";
+
+  return (
+    <div style={{ padding:24 }}>
+      {/* Top row: Score + Audit summary + Forecast */}
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:14, marginBottom:20 }}>
+
+        {/* Score card */}
+        <div onClick={() => onTabSwitch("score")} style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:14, padding:20, cursor:"pointer", display:"flex", alignItems:"center", gap:16 }}>
+          <div style={{ width:72, height:72, borderRadius:"50%", border:`5px solid ${scoreColor}`, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", background:`${scoreColor}10`, flexShrink:0 }}>
+            <div style={{ fontSize:20, fontWeight:800, color:scoreColor }}>{score?.overall || "—"}</div>
+            <div style={{ fontSize:9, color:scoreColor }}>/100</div>
+          </div>
+          <div>
+            <div style={{ fontSize:13, fontWeight:700, color:txt }}>SEO Score</div>
+            <div style={{ fontSize:20, fontWeight:800, color:scoreColor }}>{scoreLabel}</div>
+            <div style={{ fontSize:10, color:txt2, marginTop:2 }}>Click for full breakdown →</div>
+          </div>
+        </div>
+
+        {/* Audit Issues card */}
+        <div onClick={() => onTabSwitch("audit")} style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:14, padding:20, cursor:"pointer" }}>
+          <div style={{ fontSize:13, fontWeight:700, color:txt, marginBottom:12 }}>Audit Issues</div>
+          <div style={{ display:"flex", gap:12 }}>
+            {[
+              { label:"Critical", val:audit?.p1 || 0, color:"#DC2626" },
+              { label:"Important",val:audit?.p2 || 0, color:"#D97706" },
+              { label:"Minor",    val:audit?.p3 || 0, color:"#6B7280" },
+            ].map(s => (
+              <div key={s.label} style={{ textAlign:"center", flex:1 }}>
+                <div style={{ fontSize:22, fontWeight:800, color:s.color }}>{s.val}</div>
+                <div style={{ fontSize:10, color:txt2 }}>{s.label}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ fontSize:10, color:txt2, marginTop:10 }}>Click to see full audit →</div>
+        </div>
+
+        {/* Forecast card */}
+        <div onClick={() => onTabSwitch("score")} style={{ background:bg2, border:`1px solid #05966933`, borderRadius:14, padding:20, cursor:"pointer", borderLeft:"4px solid #059669" }}>
+          <div style={{ fontSize:13, fontWeight:700, color:txt, marginBottom:8 }}>Growth Forecast</div>
+          {forecast ? (
+            <>
+              <div style={{ fontSize:28, fontWeight:800, color:"#059669" }}>{forecast.trafficGrowth}</div>
+              <div style={{ fontSize:11, color:txt2, marginBottom:4 }}>estimated traffic growth</div>
+              <div style={{ fontSize:11, color:"#443DCB", fontWeight:600 }}>{forecast.scoreGain} score · {forecast.timeframe}</div>
+              <div style={{ fontSize:10, color:txt2, marginTop:6 }}>Fix top {forecast.tasksConsidered} issues</div>
+            </>
+          ) : (
+            <div style={{ fontSize:12, color:txt2 }}>Run full pipeline to see forecast</div>
+          )}
+        </div>
+      </div>
+
+      {/* Middle row: Top Tasks + Alerts */}
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14, marginBottom:20 }}>
+
+        {/* Top Tasks */}
+        <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:14, padding:20 }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
+            <div style={{ fontSize:13, fontWeight:700, color:txt }}>Top Priority Tasks</div>
+            <button onClick={() => onTabSwitch("tasks")} style={{ fontSize:10, color:"#443DCB", background:"transparent", border:"none", cursor:"pointer", fontWeight:600 }}>See all →</button>
+          </div>
+          {tasks.length === 0 ? (
+            <div style={{ fontSize:12, color:txt2, padding:"20px 0", textAlign:"center" }}>No tasks yet — run the pipeline</div>
+          ) : tasks.slice(0,4).map((t, i) => {
+            const ic = {High:"#DC2626",Medium:"#D97706",Low:"#6B7280"}[t.impact]||"#6B7280";
+            return (
+              <div key={t.id} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 0", borderBottom:`1px solid ${bdr}` }}>
+                <span style={{ fontSize:11, fontWeight:800, color:"#443DCB", minWidth:16 }}>#{i+1}</span>
+                <span style={{ flex:1, fontSize:12, color:txt, lineHeight:1.3 }}>{t.title}</span>
+                <span style={{ fontSize:9, padding:"2px 7px", borderRadius:8, background:`${ic}18`, color:ic, fontWeight:700, flexShrink:0 }}>{t.impact}</span>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Alerts */}
+        <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:14, padding:20 }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
+            <div style={{ fontSize:13, fontWeight:700, color:txt }}>Active Alerts</div>
+            <button onClick={() => onTabSwitch("alerts")} style={{ fontSize:10, color:"#DC2626", background:"transparent", border:"none", cursor:"pointer", fontWeight:600 }}>See all →</button>
+          </div>
+          {alerts.length === 0 ? (
+            <div style={{ fontSize:12, color:txt2, padding:"20px 0", textAlign:"center" }}>
+              <div style={{ fontSize:24, marginBottom:6 }}>✅</div>No active alerts
+            </div>
+          ) : alerts.slice(0,4).map(a => {
+            const sc = a.severity==="critical"?"#DC2626":a.severity==="warning"?"#D97706":"#0891B2";
+            return (
+              <div key={a.id} style={{ padding:"8px 0", borderBottom:`1px solid ${bdr}` }}>
+                <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:2 }}>
+                  <div style={{ width:6, height:6, borderRadius:"50%", background:sc, flexShrink:0 }} />
+                  <span style={{ fontSize:11, fontWeight:600, color:sc, textTransform:"uppercase" }}>{a.severity}</span>
+                </div>
+                <div style={{ fontSize:12, color:txt, lineHeight:1.4 }}>{a.businessMessage || a.message}</div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Score dimension mini-bars */}
+      {score?.breakdown && (
+        <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:14, padding:20 }}>
+          <div style={{ fontSize:13, fontWeight:700, color:txt, marginBottom:14 }}>Score Breakdown</div>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))", gap:12 }}>
+            {Object.values(score.breakdown).map(d => (
+              <div key={d.label}>
+                <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
+                  <span style={{ fontSize:12, color:txt, fontWeight:600 }}>{d.label}</span>
+                  <span style={{ fontSize:12, fontWeight:800, color:d.color }}>{d.score}</span>
+                </div>
+                <div style={{ height:6, borderRadius:3, background:bg3 }}>
+                  <div style={{ height:"100%", width:`${d.score}%`, background:d.color, borderRadius:3 }} />
+                </div>
+                <div style={{ fontSize:10, color:txt2, marginTop:2 }}>{Math.round(d.weight*100)}% of overall</div>
+              </div>
+            ))}
+          </div>
+          <button onClick={() => onTabSwitch("score")} style={{ marginTop:14, padding:"8px 16px", borderRadius:8, border:`1px solid #443DCB`, background:"transparent", color:"#443DCB", fontSize:12, fontWeight:600, cursor:"pointer" }}>
+            Full score breakdown & factor drill-down →
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Rankings View ────────────────────────────────────
+function RankingsView({ clientId, dark, bg2, bg3, bdr, txt, txt2, getToken, API, googleToken }) {
+  const [data,     setData]     = useState(null);
+  const [loading,  setLoading]  = useState(true);
+  const [running,  setRunning]  = useState(false);
+  const [filter,   setFilter]   = useState("all"); // all | top10 | notranking | drops
+
+  async function fetchRankings() {
+    try {
+      const token = await getToken();
+      const res = await window.fetch(`${API}/api/agents/${clientId}/rankings`, { headers: { Authorization: `Bearer ${token}` } });
+      const d   = await res.json();
+      setData(d);
+    } catch { /* noop */ }
+    setLoading(false);
+  }
+
+  async function runTracker() {
+    setRunning(true);
+    try {
+      const token = await getToken();
+      await window.fetch(`${API}/api/agents/${clientId}/run-a10`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ googleToken: googleToken || null }),
+      });
+      await fetchRankings();
+    } catch { /* noop */ }
+    setRunning(false);
+  }
+
+  useEffect(() => { fetchRankings(); }, [clientId]);
+
+  const rankings = data?.rankings || [];
+  const filtered = rankings.filter(r =>
+    filter === "top10"      ? r.position && r.position <= 10 :
+    filter === "notranking" ? (!r.position || r.position > 100) :
+    filter === "drops"      ? (data?.drops || 0) > 0 :
+    true
+  );
+
+  const top10   = rankings.filter(r => r.position && r.position <= 10).length;
+  const top3    = rankings.filter(r => r.position && r.position <= 3).length;
+  const notRank = rankings.filter(r => !r.position || r.position > 100).length;
+
+  if (loading) return <div style={{ padding:40, textAlign:"center", color:txt2 }}>Loading rankings...</div>;
+
+  return (
+    <div style={{ padding:24 }}>
+      {/* Header */}
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
+        <div>
+          <div style={{ fontSize:15, fontWeight:700, color:txt }}>📈 Keyword Rankings</div>
+          {data?.source && <div style={{ fontSize:11, color:txt2, marginTop:2 }}>Source: {data.source} · {data.snapshotDate || data.date || "latest"}</div>}
+        </div>
+        <button onClick={runTracker} disabled={running} style={{
+          padding:"8px 18px", borderRadius:10, border:"none",
+          background: running ? "#6B7280" : "#443DCB", color:"#fff",
+          fontSize:12, fontWeight:700, cursor: running ? "not-allowed" : "pointer",
+        }}>
+          {running ? "Tracking..." : "🔄 Refresh Rankings"}
+        </button>
+      </div>
+
+      {/* Stats */}
+      <div style={{ display:"flex", gap:12, marginBottom:20, flexWrap:"wrap" }}>
+        {[
+          { label:"Tracked",   val:rankings.length, color:"#443DCB" },
+          { label:"Top 3",     val:top3,            color:"#059669" },
+          { label:"Top 10",    val:top10,            color:"#D97706" },
+          { label:"Not Ranking",val:notRank,         color:"#DC2626" },
+          { label:"Position Drops",val:data?.drops||0,color:"#DC2626" },
+          { label:"Position Gains",val:data?.gains||0,color:"#059669" },
+        ].map(s => (
+          <div key={s.label} style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:12, padding:"12px 16px", textAlign:"center", minWidth:80 }}>
+            <div style={{ fontSize:20, fontWeight:800, color:s.color }}>{s.val}</div>
+            <div style={{ fontSize:10, color:txt2 }}>{s.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Filter tabs */}
+      <div style={{ display:"flex", gap:6, marginBottom:16 }}>
+        {[["all","All"],["top10","Top 10"],["notranking","Not Ranking"],["drops","Drops"]].map(([f,l]) => (
+          <button key={f} onClick={() => setFilter(f)} style={{
+            padding:"6px 12px", borderRadius:8, fontSize:11, fontWeight:600, cursor:"pointer",
+            background: filter===f ? "#443DCB" : "transparent",
+            color:      filter===f ? "#fff"    : txt2,
+            border:     `1px solid ${filter===f ? "#443DCB" : bdr}`,
+          }}>{l}</button>
+        ))}
+      </div>
+
+      {/* Rankings table */}
+      {rankings.length === 0 ? (
+        <div style={{ textAlign:"center", padding:60, color:txt2 }}>
+          <div style={{ fontSize:36, marginBottom:12 }}>📊</div>
+          <div style={{ fontSize:14, fontWeight:600, color:txt, marginBottom:6 }}>No ranking data yet</div>
+          <div style={{ fontSize:12, marginBottom:16 }}>Connect Google Search Console or click Refresh Rankings</div>
+          <button onClick={runTracker} disabled={running} style={{ padding:"10px 24px", borderRadius:10, border:"none", background:"#443DCB", color:"#fff", fontSize:13, fontWeight:700, cursor:"pointer" }}>
+            {running ? "Running..." : "🔄 Track Rankings Now"}
+          </button>
+        </div>
+      ) : (
+        <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:12, overflow:"hidden" }}>
+          {/* Table header */}
+          <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr 1fr 1fr", padding:"10px 16px", background:bg3, borderBottom:`1px solid ${bdr}` }}>
+            {["Keyword","Position","Clicks","CTR"].map(h => (
+              <div key={h} style={{ fontSize:10, fontWeight:700, color:txt2, textTransform:"uppercase" }}>{h}</div>
+            ))}
+          </div>
+          {filtered.slice(0,50).map((r, i) => {
+            const posColor = !r.position ? "#6B7280" : r.position <= 3 ? "#059669" : r.position <= 10 ? "#D97706" : r.position <= 30 ? "#0891B2" : "#DC2626";
+            return (
+              <div key={i} style={{ display:"grid", gridTemplateColumns:"2fr 1fr 1fr 1fr", padding:"10px 16px", borderBottom:`1px solid ${bdr}`, alignItems:"center" }}>
+                <div style={{ fontSize:12, color:txt, fontWeight:500 }}>{r.keyword}</div>
+                <div style={{ fontSize:13, fontWeight:800, color:posColor }}>{r.position ? `#${r.position}` : "—"}</div>
+                <div style={{ fontSize:12, color:txt2 }}>{r.clicks != null ? r.clicks.toLocaleString() : "—"}</div>
+                <div style={{ fontSize:12, color:txt2 }}>{r.ctr != null ? `${r.ctr}%` : "—"}</div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

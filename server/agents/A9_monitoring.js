@@ -143,6 +143,8 @@ Write an 8-step SEO report. Return ONLY valid JSON:
       gscAvgPos:      gscSummary?.avgPos || null,
       healthScore:    audit?.healthScore || null,
     });
+    // Save score to client doc for list view display
+    await db.collection("clients").doc(clientId).update({ seoScore: scoreData.overall }).catch(() => {});
   } catch (e) {
     console.error("[A9] Score calculation error:", e.message);
   }
