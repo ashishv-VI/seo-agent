@@ -1150,49 +1150,171 @@ function AuditIssueAccordion({ audit, bg2, bg3, bdr, txt, txt2 }) {
 }
 
 function FullKeywordsView({ kw, bg2, bg3, bdr, txt, txt2 }) {
-  const clusters = kw.clusters || {};
-  const intentColor = { transactional:"#059669", informational:"#0891B2", commercial:"#443DCB", navigational:"#D97706", local:"#DC2626" };
+  const [activeCluster, setActiveCluster] = useState("all");
+  const clusters     = kw.clusters || {};
+  const keywordMap   = kw.keywordMap || [];
+  const hasVolume    = keywordMap.some(k => k.searchVolume != null);
+  const hasRankings  = (kw.rankingKeywords || kw.currentRankings || []).length > 0;
+  const rankMap      = {};
+  (kw.currentRankings || []).forEach(r => { rankMap[(r.keyword||"").toLowerCase()] = r.position || r.rank; });
+
+  const intentColor  = { transactional:"#059669", informational:"#0891B2", commercial:"#443DCB", navigational:"#D97706", local:"#DC2626" };
+  const diffColor    = { low:"#059669", medium:"#D97706", high:"#DC2626" };
+
+  // Flatten all cluster keywords with their cluster name
+  const allKws = Object.entries(clusters)
+    .filter(([k]) => k !== "gaps")
+    .flatMap(([cluster, items]) => (items||[]).map(k => ({ ...k, cluster })));
+
+  const clusterNames = ["all", ...Object.keys(clusters).filter(k => k !== "gaps")];
+  const displayed    = activeCluster === "all" ? allKws : (clusters[activeCluster]||[]).map(k => ({ ...k, cluster:activeCluster }));
+
+  // Stats bar
+  const totalKws   = allKws.length;
+  const highPrio   = allKws.filter(k => k.priority === "high").length;
+  const avgVolume  = hasVolume ? Math.round(allKws.filter(k=>k.searchVolume).reduce((s,k)=>s+(k.searchVolume||0),0) / allKws.filter(k=>k.searchVolume).length) : null;
+
   return (
-    <div>
-      {Object.entries(clusters).filter(([k])=>k!=="gaps").map(([cluster, items]) => (
-        <div key={cluster} style={{ marginBottom:16 }}>
-          <div style={{ fontSize:11, fontWeight:700, color:txt2, textTransform:"uppercase", marginBottom:8 }}>{cluster} ({(items||[]).length})</div>
-          {(items||[]).map((kw_,i)=>(
-            <div key={i} style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:8, padding:"8px 12px", marginBottom:6, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-              <span style={{ fontSize:12, color:txt, fontWeight:500 }}>{kw_.keyword}</span>
-              <div style={{ display:"flex", gap:6 }}>
-                <span style={{ fontSize:10, padding:"2px 8px", borderRadius:10, background:(intentColor[kw_.intent]||"#6B7280")+"22", color:intentColor[kw_.intent]||"#6B7280" }}>{kw_.intent}</span>
-                <span style={{ fontSize:10, padding:"2px 8px", borderRadius:10, background:bg3, color:txt2 }}>{kw_.difficulty}</span>
-                <span style={{ fontSize:10, padding:"2px 8px", borderRadius:10, background:bg3, color:txt2 }}>{kw_.suggestedPage}</span>
+    <div style={{ padding:4 }}>
+      {/* Stats */}
+      <div style={{ display:"flex", gap:10, marginBottom:16, flexWrap:"wrap" }}>
+        {[
+          { label:"Total Keywords", val:totalKws,                                  color:"#443DCB" },
+          { label:"High Priority",  val:highPrio,                                  color:"#DC2626" },
+          { label:"Content Gaps",   val:(kw.gaps||[]).length,                      color:"#D97706" },
+          { label:"Avg. Volume",    val:avgVolume ? avgVolume.toLocaleString() : "—", color:"#059669" },
+          { label:"Snippet Opps",   val:(kw.snippetOpportunities||[]).length,      color:"#0891B2" },
+        ].map(s => (
+          <div key={s.label} style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, padding:"10px 16px", textAlign:"center", minWidth:80 }}>
+            <div style={{ fontSize:18, fontWeight:800, color:s.color }}>{s.val}</div>
+            <div style={{ fontSize:10, color:txt2 }}>{s.label}</div>
+          </div>
+        ))}
+        {!hasVolume && (
+          <div style={{ background:"#D9770611", border:"1px solid #D9770633", borderRadius:10, padding:"10px 16px", fontSize:11, color:"#D97706", display:"flex", alignItems:"center", gap:6 }}>
+            <span>⚠️</span> Add a SerpAPI or SE Ranking key in Settings to unlock real search volume, CPC &amp; competition data
+          </div>
+        )}
+      </div>
+
+      {/* Cluster filter tabs */}
+      <div style={{ display:"flex", gap:6, marginBottom:16, flexWrap:"wrap" }}>
+        {clusterNames.map(c => (
+          <button key={c} onClick={() => setActiveCluster(c)} style={{
+            padding:"5px 12px", borderRadius:8, fontSize:11, fontWeight:600, cursor:"pointer", textTransform:"capitalize",
+            background: activeCluster===c ? "#443DCB" : "transparent",
+            color:      activeCluster===c ? "#fff"    : txt2,
+            border:     `1px solid ${activeCluster===c ? "#443DCB" : bdr}`,
+          }}>
+            {c} {c !== "all" ? `(${(clusters[c]||[]).length})` : `(${totalKws})`}
+          </button>
+        ))}
+      </div>
+
+      {/* Table header */}
+      <div style={{ display:"grid", gridTemplateColumns:"2.5fr 1fr 1fr 1fr 1fr 1.5fr", padding:"8px 12px", background:bg3, borderRadius:"8px 8px 0 0", borderBottom:`1px solid ${bdr}`, border:`1px solid ${bdr}` }}>
+        {["Keyword","Volume","Difficulty","CPC","Position","Intent / Page"].map(h => (
+          <div key={h} style={{ fontSize:9, fontWeight:700, color:txt2, textTransform:"uppercase", letterSpacing:0.5 }}>{h}</div>
+        ))}
+      </div>
+
+      {/* Keyword rows */}
+      <div style={{ border:`1px solid ${bdr}`, borderTop:"none", borderRadius:"0 0 8px 8px", overflow:"hidden" }}>
+        {displayed.map((k, i) => {
+          const pos      = rankMap[k.keyword?.toLowerCase()];
+          const posColor = !pos ? "#6B7280" : pos <= 3 ? "#059669" : pos <= 10 ? "#D97706" : "#DC2626";
+          const dc       = diffColor[k.difficulty] || "#6B7280";
+          const ic       = intentColor[k.intent] || "#6B7280";
+          return (
+            <div key={i} style={{ display:"grid", gridTemplateColumns:"2.5fr 1fr 1fr 1fr 1fr 1.5fr", padding:"10px 12px", borderBottom:`1px solid ${bdr}`, background: i%2===0 ? bg2 : bg3, alignItems:"center" }}>
+              {/* Keyword */}
+              <div>
+                <div style={{ fontSize:12, fontWeight:600, color:txt }}>{k.keyword}</div>
+                {k.notes && <div style={{ fontSize:10, color:txt2, marginTop:1 }}>{k.notes}</div>}
+                {k.priority === "high" && <span style={{ fontSize:9, background:"#DC262618", color:"#DC2626", padding:"1px 6px", borderRadius:6, fontWeight:700 }}>HIGH PRIORITY</span>}
+              </div>
+              {/* Volume */}
+              <div style={{ fontSize:12, fontWeight:700, color:k.searchVolume ? "#059669" : txt2 }}>
+                {k.searchVolume ? k.searchVolume.toLocaleString() : "—"}
+              </div>
+              {/* Difficulty */}
+              <div>
+                <div style={{ fontSize:11, fontWeight:700, color:dc }}>{k.difficulty || "—"}</div>
+                {k.realDifficulty != null && (
+                  <div style={{ height:3, borderRadius:2, background:bdr, marginTop:3, width:"80%" }}>
+                    <div style={{ height:"100%", width:`${k.realDifficulty}%`, background:dc, borderRadius:2 }} />
+                  </div>
+                )}
+              </div>
+              {/* CPC */}
+              <div style={{ fontSize:12, color:txt2 }}>
+                {k.cpc ? `$${parseFloat(k.cpc).toFixed(2)}` : "—"}
+              </div>
+              {/* Current position */}
+              <div style={{ fontSize:13, fontWeight:800, color:posColor }}>
+                {pos ? `#${pos}` : "—"}
+              </div>
+              {/* Intent + Page */}
+              <div>
+                <span style={{ fontSize:9, padding:"2px 7px", borderRadius:8, background:`${ic}22`, color:ic, fontWeight:600, display:"inline-block", marginBottom:2 }}>{k.intent}</span>
+                <div style={{ fontSize:10, color:txt2 }}>{k.suggestedPage}</div>
               </div>
             </div>
-          ))}
-        </div>
-      ))}
+          );
+        })}
+      </div>
+
+      {/* Content Gaps */}
       {(kw.gaps||[]).length > 0 && (
-        <div style={{ marginBottom:16 }}>
-          <div style={{ fontSize:11, fontWeight:700, color:"#DC2626", textTransform:"uppercase", marginBottom:8 }}>Content Gaps ({kw.gaps.length})</div>
-          {kw.gaps.map((g,i)=>(
-            <div key={i} style={{ background:bg3, borderRadius:8, padding:"8px 12px", marginBottom:6 }}>
-              <div style={{ fontSize:12, color:txt, fontWeight:500 }}>{g.keyword}</div>
-              <div style={{ fontSize:11, color:txt2 }}>{g.reason} → {g.recommendedAction}</div>
+        <div style={{ marginTop:20 }}>
+          <div style={{ fontSize:11, fontWeight:700, color:"#DC2626", textTransform:"uppercase", marginBottom:10 }}>
+            🚨 Content Gaps — pages you should create ({kw.gaps.length})
+          </div>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))", gap:8 }}>
+            {kw.gaps.map((g,i)=>(
+              <div key={i} style={{ background:bg2, border:"1px solid #DC262633", borderRadius:10, padding:"12px 14px", borderLeft:"3px solid #DC2626" }}>
+                <div style={{ fontSize:12, color:txt, fontWeight:700, marginBottom:4 }}>{g.keyword}</div>
+                <div style={{ fontSize:11, color:txt2, marginBottom:6 }}>{g.reason}</div>
+                <div style={{ fontSize:11, color:"#059669", fontWeight:600 }}>→ {g.recommendedAction}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Snippet Opportunities */}
+      {(kw.snippetOpportunities||[]).length > 0 && (
+        <div style={{ marginTop:20 }}>
+          <div style={{ fontSize:11, fontWeight:700, color:"#0891B2", textTransform:"uppercase", marginBottom:10 }}>
+            ⭐ Featured Snippet Opportunities ({kw.snippetOpportunities.length})
+          </div>
+          {kw.snippetOpportunities.map((s,i)=>(
+            <div key={i} style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, padding:"12px 14px", marginBottom:8 }}>
+              <div style={{ display:"flex", justifyContent:"space-between", marginBottom:6 }}>
+                <span style={{ fontSize:13, color:txt, fontWeight:700 }}>{s.keyword}</span>
+                <div style={{ display:"flex", gap:6 }}>
+                  <span style={{ fontSize:9, padding:"2px 8px", borderRadius:8, background:"#0891B222", color:"#0891B2", fontWeight:700 }}>{s.snippetType?.replace("_"," ")}</span>
+                  <span style={{ fontSize:9, padding:"2px 8px", borderRadius:8, background:bg3, color:txt2 }}>{s.priority} priority</span>
+                </div>
+              </div>
+              <div style={{ fontSize:11, color:txt2, marginBottom:4 }}>Target page: <span style={{ color:txt, fontWeight:600 }}>{s.targetPage}</span></div>
+              <div style={{ fontSize:11, color:"#059669", background:"#05966911", padding:"6px 10px", borderRadius:6 }}>{s.strategy}</div>
             </div>
           ))}
         </div>
       )}
-      {(kw.snippetOpportunities||[]).length > 0 && (
-        <div>
-          <div style={{ fontSize:11, fontWeight:700, color:"#0891B2", textTransform:"uppercase", marginBottom:8 }}>⭐ Featured Snippet Opportunities ({kw.snippetOpportunities.length})</div>
-          {kw.snippetOpportunities.map((s,i)=>(
-            <div key={i} style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:8, padding:"10px 12px", marginBottom:6 }}>
-              <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
-                <span style={{ fontSize:12, color:txt, fontWeight:600 }}>{s.keyword}</span>
-                <div style={{ display:"flex", gap:6 }}>
-                  <span style={{ fontSize:10, padding:"2px 8px", borderRadius:10, background:"#0891B222", color:"#0891B2" }}>{s.snippetType?.replace("_"," ")}</span>
-                  <span style={{ fontSize:10, padding:"2px 8px", borderRadius:10, background:bg3, color:txt2 }}>{s.targetPage}</span>
-                </div>
-              </div>
-              <div style={{ fontSize:11, color:txt2 }}>{s.strategy}</div>
+
+      {/* Cannibalization alerts */}
+      {(kw.cannibalizationRisk||[]).length > 0 && (
+        <div style={{ marginTop:20 }}>
+          <div style={{ fontSize:11, fontWeight:700, color:"#D97706", textTransform:"uppercase", marginBottom:10 }}>
+            ⚠️ Keyword Cannibalization Risks ({kw.cannibalizationRisk.length})
+          </div>
+          {kw.cannibalizationRisk.map((c,i)=>(
+            <div key={i} style={{ background:"#D9770611", border:"1px solid #D9770633", borderRadius:10, padding:"12px 14px", marginBottom:8 }}>
+              <div style={{ fontSize:12, color:txt, fontWeight:600, marginBottom:4 }}>Page: {c.page}</div>
+              <div style={{ fontSize:11, color:txt2, marginBottom:4 }}>{c.keywordCount} keywords targeting the same page: {(c.keywords||[]).slice(0,3).join(", ")}{c.keywords?.length > 3 ? "..." : ""}</div>
+              <div style={{ fontSize:11, color:"#D97706", fontWeight:600 }}>{c.fix}</div>
             </div>
           ))}
         </div>
@@ -1754,6 +1876,7 @@ function FullReportView({ report, bg2, bg3, bdr, txt, txt2 }) {
 function ScoreBreakdownView({ clientId, state, dark, bg2, bg3, bdr, txt, txt2, getToken, API }) {
   const [score,    setScore]    = useState(null);
   const [forecast, setForecast] = useState(null);
+  const [tasks,    setTasks]    = useState([]);
   const [loading,  setLoading]  = useState(true);
   const [drill,    setDrill]    = useState(null);
 
@@ -1761,14 +1884,17 @@ function ScoreBreakdownView({ clientId, state, dark, bg2, bg3, bdr, txt, txt2, g
     async function fetchScore() {
       try {
         const token = await getToken();
-        const [sRes, fRes] = await Promise.all([
+        const [sRes, fRes, tRes] = await Promise.all([
           fetch(`${API}/api/agents/${clientId}/score`,    { headers: { Authorization: `Bearer ${token}` } }),
           fetch(`${API}/api/agents/${clientId}/forecast`, { headers: { Authorization: `Bearer ${token}` } }),
+          fetch(`${API}/api/agents/${clientId}/tasks`,    { headers: { Authorization: `Bearer ${token}` } }),
         ]);
         const sData = await sRes.json();
         const fData = await fRes.json();
+        const tData = await tRes.json();
         setScore(sData.score);
         setForecast(fData.forecast);
+        setTasks((tData.tasks || []).filter(t => t.status === "pending").slice(0, 10));
       } catch { /* noop */ }
       setLoading(false);
     }
@@ -1852,6 +1978,57 @@ function ScoreBreakdownView({ clientId, state, dark, bg2, bg3, bdr, txt, txt2, g
         })}
       </div>
 
+      {/* Fix Impact Board — THE most important section */}
+      {tasks.length > 0 && (
+        <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:14, padding:20, marginBottom:16 }}>
+          <div style={{ marginBottom:14 }}>
+            <div style={{ fontSize:15, fontWeight:700, color:txt }}>🔧 Fix Impact Board</div>
+            <div style={{ fontSize:12, color:txt2, marginTop:2 }}>
+              Current score: <strong style={{ color:scoreColor }}>{overall}</strong> → Fix these issues to reach <strong style={{ color:"#059669" }}>{Math.min(overall + tasks.reduce((s,t) => s+(t.expectedScoreGain||3),0), 100)}</strong>
+            </div>
+          </div>
+
+          {/* Score progress bar */}
+          <div style={{ position:"relative", height:12, borderRadius:6, background:bg3, marginBottom:20, overflow:"hidden" }}>
+            <div style={{ position:"absolute", left:0, top:0, height:"100%", width:`${overall}%`, background:scoreColor, borderRadius:6 }} />
+            <div style={{ position:"absolute", left:`${overall}%`, top:0, height:"100%", width:`${Math.min(tasks.reduce((s,t)=>s+(t.expectedScoreGain||3),0), 100-overall)}%`, background:"#05966966", borderRadius:"0 6px 6px 0" }} />
+            <div style={{ position:"absolute", left:`${overall}%`, top:"-2px", fontSize:10, color:"#059669", fontWeight:700, transform:"translateX(-50%)", whiteSpace:"nowrap" }}>
+              {overall} now
+            </div>
+          </div>
+
+          {/* Per-issue fix rows */}
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+            {tasks.map((t, i) => {
+              const impC = {High:"#DC2626",Medium:"#D97706",Low:"#6B7280"}[t.impact]||"#6B7280";
+              const effC = {easy:"#059669",medium:"#D97706",hard:"#DC2626"}[t.effort]||"#D97706";
+              const scoreAfter = Math.min(overall + (t.expectedScoreGain||3), 100);
+              return (
+                <div key={t.id} style={{ background:bg3, borderRadius:10, padding:"12px 14px", borderLeft:`3px solid ${impC}` }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:6 }}>
+                    <span style={{ fontSize:9, color:txt2, fontWeight:600 }}>#{i+1}</span>
+                    <div style={{ display:"flex", gap:4 }}>
+                      <span style={{ fontSize:9, padding:"1px 6px", borderRadius:6, background:`${impC}18`, color:impC, fontWeight:700 }}>{t.impact}</span>
+                      <span style={{ fontSize:9, padding:"1px 6px", borderRadius:6, background:`${effC}18`, color:effC, fontWeight:700 }}>{t.effort}</span>
+                    </div>
+                  </div>
+                  <div style={{ fontSize:12, fontWeight:600, color:txt, marginBottom:8, lineHeight:1.3 }}>{t.title}</div>
+                  {/* Score gain visualization */}
+                  <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6 }}>
+                    <span style={{ fontSize:18, fontWeight:800, color:scoreColor }}>{overall}</span>
+                    <span style={{ fontSize:12, color:txt2 }}>→</span>
+                    <span style={{ fontSize:18, fontWeight:800, color:"#059669" }}>{scoreAfter}</span>
+                    <span style={{ fontSize:11, color:"#059669", fontWeight:600, background:"#05966911", padding:"2px 8px", borderRadius:6 }}>+{t.expectedScoreGain||3} pts</span>
+                  </div>
+                  <div style={{ fontSize:10, color:"#443DCB", fontWeight:600 }}>{t.expectedRankGain || "1-3 positions"} in Google</div>
+                  {t.fixSuggestion && <div style={{ fontSize:10, color:txt2, marginTop:4, lineHeight:1.4 }}>{t.fixSuggestion}</div>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Growth Forecast */}
       {forecast && (
         <div style={{ background: bg2, border: `1px solid #05966933`, borderRadius: 14, padding: 20, borderLeft: "4px solid #059669" }}>
@@ -1860,9 +2037,9 @@ function ScoreBreakdownView({ clientId, state, dark, bg2, bg3, bdr, txt, txt2, g
           </div>
           <div style={{ display: "flex", gap: 20, flexWrap: "wrap", marginBottom: 14 }}>
             {[
-              { val: forecast.trafficGrowth, label: "Traffic growth",   color: "#059669" },
-              { val: forecast.scoreGain,     label: "Score improvement",color: "#443DCB" },
-              { val: forecast.timeframe,     label: "Timeframe",         color: "#D97706" },
+              { val: forecast.trafficGrowth, label: "Traffic growth",    color: "#059669" },
+              { val: forecast.scoreGain,     label: "Score improvement", color: "#443DCB" },
+              { val: forecast.timeframe,     label: "Timeframe",          color: "#D97706" },
               { val: forecast.confidence,    label: "Confidence",
                 color: forecast.confidence==="High"?"#059669":forecast.confidence==="Medium"?"#D97706":"#DC2626" },
             ].map(s => (
@@ -1879,6 +2056,14 @@ function ScoreBreakdownView({ clientId, state, dark, bg2, bg3, bdr, txt, txt2, g
               <span style={{ fontSize: 10, color: "#059669", background: "#05966911", padding: "2px 8px", borderRadius: 8 }}>{t.gain}</span>
             </div>
           ))}
+        </div>
+      )}
+
+      {tasks.length === 0 && !forecast && (
+        <div style={{ textAlign:"center", padding:40, color:txt2, background:bg2, border:`1px solid ${bdr}`, borderRadius:14 }}>
+          <div style={{ fontSize:32, marginBottom:12 }}>⚙️</div>
+          <div style={{ fontSize:14, fontWeight:600, color:txt, marginBottom:6 }}>Run the full pipeline to see your Fix Impact Board</div>
+          <div style={{ fontSize:12 }}>After analysis, we'll show exactly which fixes will increase your score and by how much</div>
         </div>
       )}
     </div>

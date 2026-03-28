@@ -143,14 +143,16 @@ async function runFullPipeline(clientId, keys) {
   } catch { /* non-blocking */ }
 
   // Lazy-load agent runners to avoid circular dependency
-  const { runA2 } = require("./A2_audit");
-  const { runA3 } = require("./A3_keywords");
-  const { runA4 } = require("./A4_competitor");
-  const { runA5 } = require("./A5_content");
-  const { runA6 } = require("./A6_onpage");
-  const { runA7 } = require("./A7_technical");
-  const { runA8 } = require("./A8_geo");
+  const { runA2 }          = require("./A2_audit");
+  const { runA3 }          = require("./A3_keywords");
+  const { runA4 }          = require("./A4_competitor");
+  const { runA5 }          = require("./A5_content");
+  const { runA6 }          = require("./A6_onpage");
+  const { runA7 }          = require("./A7_technical");
+  const { runA8 }          = require("./A8_geo");
   const { generateReport } = require("./A9_monitoring");
+  const { runA10 }         = require("./A10_rankingTracker");
+  const { runA12 }         = require("./A12_autoExec");
 
   const mark = async (agentId, status) => {
     await db.collection("clients").doc(clientId).update({ [`agents.${agentId}`]: status });
@@ -224,16 +226,30 @@ async function runFullPipeline(clientId, keys) {
       exec("A8", runA8),
     ]);
 
-    // ── Stage 5: Strategy Report ──────────────────────────────────────────
-    // A9 synthesises all agent outputs into a prioritised action plan
-    // with month-by-month execution roadmap
-    await exec("A9", (id, k) => generateReport(id, k, null));
+    // ── Stage 5: Strategy Report + Ranking Tracker (parallel) ────────────
+    // A9 synthesises all agent outputs; A10 captures keyword position baseline
+    await Promise.all([
+      exec("A9",  (id, k) => generateReport(id, k, null)),
+      exec("A10", (id, k) => runA10(id, k, null)),
+    ]);
 
     await db.collection("clients").doc(clientId).update({
       pipelineStatus:      "complete",
       pipelineCompletedAt: new Date().toISOString(),
       pipelineError:       null,
     });
+
+    // ── Stage 6: Auto-fix generation (semi / full automation mode) ────────
+    // If client has enabled semi or full automation, auto-generate AI fixes
+    // for all autoFixable pending tasks and push them to the approval queue
+    try {
+      const clientDoc    = await db.collection("clients").doc(clientId).get();
+      const autoMode     = clientDoc.data()?.automationMode || "manual";
+      if (autoMode === "semi" || autoMode === "full") {
+        await exec("A12", runA12);
+        console.log(`[A0] Auto-fix (A12) triggered for ${clientId} — mode: ${autoMode}`);
+      }
+    } catch { /* non-blocking */ }
 
   } catch (err) {
     console.error(`[A0] Pipeline fatal error for ${clientId}:`, err.message);
