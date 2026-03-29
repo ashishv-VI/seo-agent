@@ -2453,13 +2453,16 @@ function ScoreBreakdownView({ clientId, state, dark, bg2, bg3, bdr, txt, txt2, g
 
 // ── Task Queue View ──────────────────────────────────
 function TaskQueueView({ clientId, dark, bg2, bg3, bdr, txt, txt2, getToken, API }) {
-  const [tasks,     setTasks]     = useState([]);
-  const [loading,   setLoading]   = useState(true);
-  const [filter,    setFilter]    = useState("all");
-  const [updating,  setUpdating]  = useState(null);
-  const [expanded,  setExpanded]  = useState(null);
-  const [toast,     setToast]     = useState("");
-  const [bulkBusy,  setBulkBusy]  = useState(null); // "complete-all" | "generate-fixes" | "clear-completed"
+  const [tasks,      setTasks]      = useState([]);
+  const [loading,    setLoading]    = useState(true);
+  const [filter,     setFilter]     = useState("all");
+  const [updating,   setUpdating]   = useState(null);
+  const [expanded,   setExpanded]   = useState(null);
+  const [toast,      setToast]      = useState("");
+  const [bulkBusy,   setBulkBusy]   = useState(null);
+  const [copied,     setCopied]     = useState(null);   // taskId being copied
+  const [generating, setGenerating] = useState(null);   // taskId being AI-generated
+  const [aiFixes,    setAiFixes]    = useState({});     // taskId → { fix, codeSnippet, implementation }
 
   const AGENT_COLOR = {
     OnPageAgent:   { color:"#443DCB", bg:"#443DCB15", label:"On-Page"   },
@@ -2512,6 +2515,23 @@ function TaskQueueView({ clientId, dark, bg2, bg3, bdr, txt, txt2, getToken, API
       if (action !== "generate-fixes") { setLoading(true); fetchTasks(); }
     } catch { setToast("Action failed"); setTimeout(() => setToast(""), 3000); }
     setBulkBusy(null);
+  }
+
+  async function generateAIFix(task) {
+    setGenerating(task.id);
+    try {
+      const token = await getToken();
+      const res   = await fetch(`${API}/api/agents/${clientId}/generate-fix`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ type: task.issueType, detail: task.title, current: task.fixSuggestion }),
+      });
+      const data = await res.json();
+      if (data.fix) setAiFixes(f => ({ ...f, [task.id]: data }));
+      else setToast(data.error || "AI fix generation failed");
+    } catch { setToast("AI fix generation failed"); }
+    setTimeout(() => setToast(""), 4000);
+    setGenerating(null);
   }
 
   const filtered  = tasks.filter(t => filter==="all" ? true : filter==="pending" ? t.status==="pending" : t.status==="complete");
@@ -2614,6 +2634,7 @@ function TaskQueueView({ clientId, dark, bg2, bg3, bdr, txt, txt2, getToken, API
 
             {isOpen && (
               <div style={{ padding:"0 16px 16px", borderTop:`1px solid ${bdr}` }}>
+                {/* Impact + Fix info */}
                 <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginTop:14 }}>
                   <div style={{ background:bg3, borderRadius:10, padding:"12px 14px" }}>
                     <div style={{ fontSize:10, fontWeight:700, color:"#443DCB", textTransform:"uppercase", marginBottom:8 }}>📈 Expected Impact</div>
@@ -2627,9 +2648,68 @@ function TaskQueueView({ clientId, dark, bg2, bg3, bdr, txt, txt2, getToken, API
                     <div style={{ fontSize:12, color:txt, lineHeight:1.5 }}>{task.fixSuggestion||"See action plan for details"}</div>
                   </div>
                 </div>
-                {task.autoFixable && (
-                  <div style={{ marginTop:10, padding:"8px 12px", background:"#443DCB11", borderRadius:8, fontSize:11, color:"#443DCB", fontWeight:600 }}>
-                    ⚡ Auto-fixable — this issue can be resolved with a one-click fix
+
+                {/* AI-generated fix result */}
+                {aiFixes[task.id] && (
+                  <div style={{ marginTop:12, padding:"12px 14px", background:"#443DCB0d", border:"1px solid #443DCB30", borderRadius:10 }}>
+                    <div style={{ fontSize:10, fontWeight:700, color:"#443DCB", textTransform:"uppercase", marginBottom:8 }}>🤖 AI-Generated Fix</div>
+                    <div style={{ fontSize:13, color:txt, marginBottom:8, lineHeight:1.6 }}>{aiFixes[task.id].fix}</div>
+                    {aiFixes[task.id].implementation && (
+                      <div style={{ fontSize:12, color:txt2, marginBottom:8, lineHeight:1.6 }}>{aiFixes[task.id].implementation}</div>
+                    )}
+                    {aiFixes[task.id].codeSnippet && (
+                      <pre style={{ fontSize:11, color:"#059669", background:bg3, borderRadius:8, padding:"10px 12px", overflow:"auto", whiteSpace:"pre-wrap", margin:0 }}>
+                        {aiFixes[task.id].codeSnippet}
+                      </pre>
+                    )}
+                    <button
+                      onClick={() => {
+                        const text = [aiFixes[task.id].fix, aiFixes[task.id].codeSnippet].filter(Boolean).join("\n\n");
+                        navigator.clipboard?.writeText(text);
+                        setCopied(task.id + "_ai");
+                        setTimeout(() => setCopied(null), 2000);
+                      }}
+                      style={{ marginTop:10, padding:"6px 14px", borderRadius:8, border:"none", background:"#059669", color:"#fff", fontSize:11, fontWeight:700, cursor:"pointer" }}>
+                      {copied === task.id + "_ai" ? "✅ Copied!" : "📋 Copy AI Fix"}
+                    </button>
+                  </div>
+                )}
+
+                {/* Action buttons */}
+                <div style={{ display:"flex", gap:8, marginTop:12, flexWrap:"wrap" }}>
+                  {/* Step 2 — Fix Now: copy the fix suggestion */}
+                  <button
+                    onClick={() => {
+                      navigator.clipboard?.writeText(task.fixSuggestion || task.title || "");
+                      setCopied(task.id);
+                      setTimeout(() => setCopied(null), 2000);
+                    }}
+                    style={{ padding:"8px 16px", borderRadius:8, border:"none", background:"#059669", color:"#fff", fontSize:11, fontWeight:700, cursor:"pointer" }}>
+                    {copied === task.id ? "✅ Copied!" : "📋 Fix Now"}
+                  </button>
+
+                  {/* Step 3 — AI Fix: generate exact code via LLM */}
+                  <button
+                    onClick={() => generateAIFix(task)}
+                    disabled={generating === task.id}
+                    style={{ padding:"8px 16px", borderRadius:8, border:"1px solid #443DCB", background:"transparent", color:"#443DCB", fontSize:11, fontWeight:700, cursor:generating===task.id?"not-allowed":"pointer", opacity:generating===task.id?0.6:1 }}>
+                    {generating === task.id ? "⏳ Generating..." : aiFixes[task.id] ? "🔄 Regenerate AI Fix" : "🤖 AI Fix"}
+                  </button>
+
+                  {/* Step 4 — Mark as Done */}
+                  {!isDone && (
+                    <button
+                      onClick={e => { e.stopPropagation(); markComplete(task.id); }}
+                      disabled={updating === task.id}
+                      style={{ padding:"8px 16px", borderRadius:8, border:"1px solid #05966440", background:"transparent", color:"#059669", fontSize:11, fontWeight:700, cursor:updating===task.id?"not-allowed":"pointer", opacity:updating===task.id?0.5:1 }}>
+                      {updating === task.id ? "..." : "✅ Mark Done"}
+                    </button>
+                  )}
+                </div>
+
+                {task.autoFixable && !aiFixes[task.id] && (
+                  <div style={{ marginTop:10, padding:"7px 12px", background:"#443DCB0d", borderRadius:8, fontSize:11, color:"#443DCB", fontWeight:600 }}>
+                    ⚡ Auto-fixable — click "🤖 AI Fix" to generate the exact code to paste into your CMS
                   </div>
                 )}
               </div>
