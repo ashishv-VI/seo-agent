@@ -19,8 +19,25 @@ export function AuthProvider({ children }) {
     });
   }, []);
 
-  const login          = (e, p)    => signInWithEmailAndPassword(auth, e, p);
-  const loginWithGoogle= async ()  => {
+  // Fire-and-forget: records login/register event for admin activity log
+  async function recordLoginEvent(user, provider, method) {
+    try {
+      const t = await user.getIdToken();
+      await fetch(API + "/api/admin/login-event", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + t },
+        body: JSON.stringify({ provider, method }),
+      });
+    } catch(_) {} // non-blocking
+  }
+
+  const login = async (e, p) => {
+    const result = await signInWithEmailAndPassword(auth, e, p);
+    recordLoginEvent(result.user, "email", "login");
+    return result;
+  };
+
+  const loginWithGoogle = async () => {
     const result     = await signInWithPopup(auth, provider);
     const credential = GoogleAuthProvider.credentialFromResult(result);
     setGoogleToken(credential?.accessToken || null);
@@ -36,11 +53,14 @@ export function AuthProvider({ children }) {
           name: result.user.displayName || result.user.email,
         }),
       });
-    } catch(_) {} // Ignore — user may already exist
+    } catch(_) {}
+    recordLoginEvent(result.user, "google", "login");
     return result;
   };
-  const logout         = ()        => { setGoogleToken(null); return signOut(auth); };
-  const register       = async (e, p, n) => {
+
+  const logout   = () => { setGoogleToken(null); return signOut(auth); };
+
+  const register = async (e, p, n) => {
     const r = await createUserWithEmailAndPassword(auth, e, p);
     try {
       const t = await r.user.getIdToken();
@@ -50,6 +70,7 @@ export function AuthProvider({ children }) {
         body: JSON.stringify({ email: e, password: p, name: n }),
       });
     } catch(_) {}
+    recordLoginEvent(r.user, "email", "register");
     return r;
   };
 
