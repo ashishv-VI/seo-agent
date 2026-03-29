@@ -28,9 +28,16 @@ import BacklinkAnalyzer from "./BacklinkAnalyzer";
 import SitemapGenerator from "./SitemapGenerator";
 import UserPanel from "./pages/UserPanel";
 import GlobalChat from "./GlobalChat";
+import ClientPortal from "./pages/ClientPortal";
+
+// ── Portal token detection — no auth needed ────────
+const portalToken = new URLSearchParams(window.location.search).get("portal");
 
 // ── Main App wrapped with Auth ─────────────────────
 export default function App() {
+  // White-label portal: bypass login entirely
+  if (portalToken) return <ClientPortal token={portalToken} />;
+
   return (
     <AuthProvider>
       <AppInner />

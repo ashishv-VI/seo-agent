@@ -34,6 +34,9 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
   const [pipelineStatus, setPipelineStatus] = useState("idle"); // idle | running | complete | failed
   const [automationMode, setAutomationMode] = useState("manual"); // manual | semi | full
   const [savingMode,    setSavingMode]    = useState(false);
+  const [portalUrl,     setPortalUrl]     = useState(null);
+  const [showPortal,    setShowPortal]    = useState(false);
+  const [portalLoading, setPortalLoading] = useState(false);
   const pollRef     = useRef(null);
   const loadLatest  = useRef(null); // always points to the latest load fn for use in setInterval
 
@@ -156,6 +159,21 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
     }
   }
 
+  async function generatePortal() {
+    setPortalLoading(true);
+    try {
+      const token = await getToken();
+      const res   = await fetch(`${API}/api/portal/generate/${clientId}`, {
+        method: "POST", headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to generate portal");
+      setPortalUrl(data.url);
+      setShowPortal(true);
+    } catch (e) { setError(e.message); }
+    setPortalLoading(false);
+  }
+
   async function signOff() {
     setRunning("signoff"); setError("");
     const token = await getToken();
@@ -247,6 +265,13 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
           <div style={{ fontSize:16, fontWeight:700, color:txt }}>{client?.name}</div>
           <div style={{ fontSize:11, color:txt2 }}>{client?.website}</div>
         </div>
+        {/* Share Portal button */}
+        <button onClick={generatePortal} disabled={portalLoading}
+          style={{ padding:"8px 14px", borderRadius:10, border:`1px solid ${bdr}`, background:bg2, color:txt2, fontSize:12, cursor:"pointer", fontWeight:600, display:"flex", alignItems:"center", gap:5 }}
+          title="Generate a shareable read-only report link for your client">
+          {portalLoading ? "⏳" : "🔗"} Share Portal
+        </button>
+
         {/* Notification bell */}
         <div style={{ position:"relative", cursor:"pointer" }} onClick={() => setActiveTab("alerts")} title="View alerts">
           <div style={{ padding:"8px 10px", borderRadius:10, border:`1px solid ${bdr}`, background:bg2, fontSize:16 }}>🔔</div>
@@ -538,6 +563,38 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
       )}
 
       <AIChatBot dark={dark} clientId={clientId} getToken={getToken} API={API} />
+
+      {/* ── Portal Share Modal ── */}
+      {showPortal && portalUrl && (
+        <div style={{ position:"fixed", inset:0, background:"#0008", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center" }}
+          onClick={() => setShowPortal(false)}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:16, padding:28, maxWidth:480, width:"90%", boxShadow:"0 8px 40px #0004" }}>
+            <div style={{ fontSize:18, fontWeight:800, color:txt, marginBottom:6 }}>🔗 Client Portal Ready</div>
+            <p style={{ fontSize:13, color:txt2, lineHeight:1.6, margin:"0 0 18px" }}>
+              Share this link with your client. They can view a read-only SEO report — no login required.
+            </p>
+            <div style={{ background:bg3, border:`1px solid ${bdr}`, borderRadius:8, padding:"10px 14px", fontSize:12, color:txt, wordBreak:"break-all", marginBottom:14, fontFamily:"monospace" }}>
+              {portalUrl}
+            </div>
+            <div style={{ display:"flex", gap:10 }}>
+              <button
+                onClick={() => { navigator.clipboard.writeText(portalUrl); }}
+                style={{ flex:1, padding:"10px 0", borderRadius:8, border:`1px solid #443DCB`, background:"#443DCB", color:"#fff", fontWeight:700, fontSize:13, cursor:"pointer" }}>
+                📋 Copy Link
+              </button>
+              <button
+                onClick={() => setShowPortal(false)}
+                style={{ padding:"10px 18px", borderRadius:8, border:`1px solid ${bdr}`, background:"transparent", color:txt2, fontSize:13, cursor:"pointer" }}>
+                Close
+              </button>
+            </div>
+            <p style={{ fontSize:11, color:txt2, marginTop:14, borderTop:`1px solid ${bdr}`, paddingTop:12 }}>
+              The link is permanent until you regenerate it. To revoke access, contact your agency admin.
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
