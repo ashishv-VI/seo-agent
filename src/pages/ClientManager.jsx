@@ -321,7 +321,9 @@ export default function ClientManager({ dark }) {
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
         <div>
           <div style={{ fontSize:20, fontWeight:700, color:txt }}>Client Manager</div>
-          <div style={{ fontSize:13, color:txt2, marginTop:2 }}>Manage clients · Run A1 brief · Trigger pipeline</div>
+          <div style={{ fontSize:13, color:txt2, marginTop:2 }}>
+            {clients.length > 0 ? `${clients.length} client${clients.length === 1 ? "" : "s"}` : "No clients yet"} · Run AI Pipeline · Export Reports
+          </div>
         </div>
         <button onClick={() => { setShowForm(true); setError(""); setForm(blankForm); }} style={s.btn()}>+ Add Client</button>
       </div>
@@ -441,6 +443,24 @@ export default function ClientManager({ dark }) {
               <button type="button" onClick={() => setShowForm(false)} style={{ ...s.btn(bg3), color:txt, border:`1px solid ${bdr}` }}>Cancel</button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* Stats bar */}
+      {clients.length > 0 && (
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))", gap:8, marginBottom:16 }}>
+          {[
+            { l:"Total Clients",    v: clients.length,                                                           c:"#443DCB" },
+            { l:"Pipeline Complete",v: clients.filter(c => c.pipelineStatus === "complete").length,              c:"#059669" },
+            { l:"Running Now",      v: clients.filter(c => c.pipelineStatus === "running").length,               c:"#D97706" },
+            { l:"Avg SEO Score",    v: (() => { const s=clients.filter(c=>c.seoScore!=null); return s.length ? Math.round(s.reduce((a,c)=>a+c.seoScore,0)/s.length) : "—"; })(), c:"#443DCB" },
+            { l:"Needs Attention",  v: clients.filter(c => c.seoScore != null && c.seoScore < 50).length,        c:"#DC2626" },
+          ].map(s => (
+            <div key={s.l} style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, padding:"10px 14px", borderTop:`2px solid ${s.c}` }}>
+              <div style={{ fontSize:20, fontWeight:800, color:s.c }}>{s.v}</div>
+              <div style={{ fontSize:11, color:txt2, marginTop:2 }}>{s.l}</div>
+            </div>
+          ))}
         </div>
       )}
 

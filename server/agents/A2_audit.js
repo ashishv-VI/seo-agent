@@ -172,9 +172,10 @@ async function runA2(clientId) {
   }
 
   // ── 5. Multi-Page Crawler ──────────────────────────
-  const pageAudits   = [];
-  const brokenLinks  = [];
+  const pageAudits    = [];
+  const brokenLinks   = [];
   const internalLinks = checks.internalLinks || [];
+  let   discoveredUrls = [];
 
   if (checks.isAccessible) {
     try {
@@ -192,6 +193,7 @@ async function runA2(clientId) {
         } catch { /* skip malformed */ }
       }
       const pagesToCrawl = [...foundLinks].slice(0, 4);
+      discoveredUrls = [...foundLinks];
       checks.internalLinksFound = pagesToCrawl.length;
 
       // Crawl each page in parallel (with timeout)
@@ -333,6 +335,7 @@ async function runA2(clientId) {
     totalIssues,
     issues,
     checks,
+    pages: discoveredUrls.slice(0, 50).map(url => ({ url, discovered: "crawl" })),
     summary: {
       p1Count:       issues.p1.length,
       p2Count:       issues.p2.length,

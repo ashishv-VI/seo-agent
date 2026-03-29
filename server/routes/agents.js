@@ -50,6 +50,7 @@ router.post("/:clientId/run-pipeline", verifyToken, async (req, res) => {
   try {
     await getClientDoc(req.params.clientId, req.uid);
     const keys = await getUserKeys(req.uid);
+    const { googleToken } = req.body;
 
     // Reset all downstream agents to pending so frontend shows fresh state
     await db.collection("clients").doc(req.params.clientId).update({
@@ -68,7 +69,7 @@ router.post("/:clientId/run-pipeline", verifyToken, async (req, res) => {
 
     // Fire-and-forget: respond immediately so HTTP doesn't timeout on Render free tier
     // Pipeline continues running in the background and updates Firestore as each agent completes
-    runFullPipeline(req.params.clientId, keys).catch(err => {
+    runFullPipeline(req.params.clientId, keys, googleToken || null).catch(err => {
       console.error(`[run-pipeline] Background error for ${req.params.clientId}:`, err.message);
     });
 
@@ -677,8 +678,20 @@ router.get("/:clientId/pages", verifyToken, async (req, res) => {
       ...(audit.issues?.p3||[]).map(i => ({ ...i, severity:"info" })),
     ];
 
-    // Use pages crawled from checks, fallback to homepage
-    const crawledPages = audit.checks?.pages || [{ url: audit.checks?.finalUrl || "", title: audit.checks?.serpPreview?.title || "", issues: [] }];
+    // Use pages crawled from checks, then A2 auto-discovered pages, fallback to homepage
+    let crawledPages = audit.checks?.pages || null;
+    if (!crawledPages || crawledPages.length === 0) {
+      const crawledFromAudit = audit?.pages || audit?.internalLinks || [];
+      if (crawledFromAudit.length > 0) {
+        crawledPages = crawledFromAudit.slice(0, 30).map(p => ({
+          url: typeof p === "string" ? p : p.url,
+          autoDiscovered: true,
+        }));
+      }
+    }
+    if (!crawledPages || crawledPages.length === 0) {
+      crawledPages = [{ url: audit.checks?.finalUrl || "", title: audit.checks?.serpPreview?.title || "", issues: [] }];
+    }
 
     // Map keywords to pages
     const kwMap = {};

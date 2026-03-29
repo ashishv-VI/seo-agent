@@ -1,4 +1,4 @@
-const { getClientState, saveState, updateState } = require("../shared-state/stateManager");
+const { getClientState, saveState, updateState, getState } = require("../shared-state/stateManager");
 const { db }                                     = require("../config/firebase");
 const { sendPipelineComplete }                   = require("../utils/emailer");
 
@@ -136,7 +136,7 @@ async function handleFailure(clientId, agentId, error) {
 // ── Full automated pipeline ──────────────────────────────────────────────────
 // Uses lazy requires to avoid circular dependency issues.
 // Called fire-and-forget from the /run-pipeline route — does NOT block the HTTP response.
-async function runFullPipeline(clientId, keys) {
+async function runFullPipeline(clientId, keys, googleToken = null) {
   // Clear previous task queue so we start fresh
   try {
     const { clearTasks } = require("../utils/taskQueue");
@@ -224,14 +224,14 @@ async function runFullPipeline(clientId, keys) {
     // Independent of each other — parallelise for speed
     await Promise.all([
       exec("A6", runA6),
-      exec("A8", runA8),
+      exec("A8", (id, k) => runA8(id, k, googleToken)),
     ]);
 
     // ── Stage 5: Strategy Report + Ranking Tracker (parallel) ────────────
     // A9 synthesises all agent outputs; A10 captures keyword position baseline
     await Promise.all([
       exec("A9",  (id, k) => generateReport(id, k, null)),
-      exec("A10", (id, k) => runA10(id, k, null)),
+      exec("A10", (id, k) => runA10(id, k, googleToken)),
     ]);
 
     await db.collection("clients").doc(clientId).update({
@@ -239,6 +239,24 @@ async function runFullPipeline(clientId, keys) {
       pipelineCompletedAt: new Date().toISOString(),
       pipelineError:       null,
     });
+
+    // ── Auto-save SEO score after pipeline completes ───────────────────────
+    try {
+      const { calculateScore, saveScoreHistory } = require("../utils/scoreCalculator");
+      const [audit, keywords, geo, onpage, technical] = await Promise.all([
+        getState(clientId, "A2_audit").catch(() => null),
+        getState(clientId, "A3_keywords").catch(() => null),
+        getState(clientId, "A8_geo").catch(() => null),
+        getState(clientId, "A6_onpage").catch(() => null),
+        getState(clientId, "A7_technical").catch(() => null),
+      ]);
+      if (audit) {
+        const score = calculateScore(audit, keywords, geo, onpage, technical);
+        await saveScoreHistory(clientId, score);
+        await db.collection("clients").doc(clientId).update({ seoScore: score.overall });
+        console.log(`[A0] seoScore ${score.overall} saved for ${clientId}`);
+      }
+    } catch (e) { console.error("[A0] Score save failed:", e.message); }
 
     // ── Stage 6: Send pipeline complete email ──────────────────────────────
     try {

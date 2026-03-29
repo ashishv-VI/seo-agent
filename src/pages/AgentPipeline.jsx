@@ -1230,6 +1230,29 @@ function FullAuditView({ audit, bg2, bg3, bdr, txt, txt2 }) {
         </div>
       )}
 
+      {/* Structured Data & Schema */}
+      {audit.checks?.eeat && (
+        <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, padding:"14px 16px", marginBottom:12 }}>
+          <div style={{ fontSize:12, fontWeight:700, color:txt, marginBottom:10 }}>Structured Data & Schema</div>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))", gap:8 }}>
+            {[
+              { l:"Schema.org", ok: audit.checks.eeat.hasSchemaOrg,        detail: audit.checks.eeat.hasSchemaOrg ? "Detected" : "Missing — add LocalBusiness schema" },
+              { l:"JSON-LD",    ok: (audit.checks.jsonLdSchemas?.length>0), detail: audit.checks.jsonLdSchemas?.length > 0 ? `${audit.checks.jsonLdSchemas.length} blocks found` : "No JSON-LD blocks found" },
+              { l:"Open Graph", ok: audit.checks.eeat.hasOpenGraph,         detail: audit.checks.eeat.hasOpenGraph ? "Present" : "Missing og:title/og:image" },
+              { l:"Twitter Cards",ok:audit.checks.eeat.hasTwitterCard,      detail: audit.checks.eeat.hasTwitterCard ? "Present" : "Add twitter:card meta" },
+            ].map(item => (
+              <div key={item.l} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 10px", background:bg3, borderRadius:8, border:`1px solid ${item.ok?"#05966930":"#DC262630"}` }}>
+                <span style={{ fontSize:16 }}>{item.ok ? "✅" : "❌"}</span>
+                <div>
+                  <div style={{ fontSize:12, fontWeight:600, color:txt }}>{item.l}</div>
+                  <div style={{ fontSize:10, color:txt2 }}>{item.detail}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Issues Accordion */}
       <AuditIssueAccordion audit={audit} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2} />
     </div>
@@ -1830,16 +1853,27 @@ function FullTechnicalView({ tech, bg2, bg3, bdr, txt, txt2, onRefresh }) {
     <div>
       {/* Error / Refresh banner */}
       {hasError && (
-        <div style={{ background:"#DC262611", border:"1px solid #DC262633", borderRadius:10, padding:"12px 16px", marginBottom:12, display:"flex", alignItems:"center", justifyContent:"space-between", gap:12 }}>
-          <div>
-            <div style={{ fontSize:12, fontWeight:700, color:"#DC2626", marginBottom:3 }}>PageSpeed API returned an error</div>
-            <div style={{ fontSize:11, color:txt2 }}>
-              {mobileError || desktopError} — Make sure <strong>PageSpeed Insights API</strong> is enabled in Google Cloud Console for your key.
+        <div style={{ background:"#DC262611", border:"1px solid #DC262633", borderRadius:10, padding:"12px 16px", marginBottom:12 }}>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:12 }}>
+            <div>
+              <div style={{ fontSize:12, fontWeight:700, color:"#DC2626", marginBottom:3 }}>PageSpeed API returned an error</div>
+              <div style={{ fontSize:11, color:txt2 }}>
+                {mobileError || desktopError} — Make sure <strong>PageSpeed Insights API</strong> is enabled in Google Cloud Console for your key.
+              </div>
             </div>
+            <button onClick={doRefresh} disabled={refreshing} style={{ flexShrink:0, padding:"7px 14px", borderRadius:8, background:"#DC2626", color:"#fff", border:"none", fontSize:11, fontWeight:700, cursor:refreshing?"not-allowed":"pointer", opacity:refreshing?0.6:1 }}>
+              {refreshing ? "Refreshing…" : "🔄 Retry"}
+            </button>
           </div>
-          <button onClick={doRefresh} disabled={refreshing} style={{ flexShrink:0, padding:"7px 14px", borderRadius:8, background:"#DC2626", color:"#fff", border:"none", fontSize:11, fontWeight:700, cursor:refreshing?"not-allowed":"pointer", opacity:refreshing?0.6:1 }}>
-            {refreshing ? "Refreshing…" : "🔄 Retry"}
-          </button>
+          <div style={{ marginTop:8 }}>
+            <div style={{ fontSize:11, fontWeight:700, color:txt2, marginBottom:6 }}>Common solutions:</div>
+            <ol style={{ margin:0, paddingLeft:18, fontSize:11, color:txt2, lineHeight:2 }}>
+              <li><strong>Browser key restriction</strong> — Go to GCP → Credentials → Edit key → Set restrictions to "None"</li>
+              <li><strong>PageSpeed API not enabled</strong> — GCP → APIs & Services → Enable "PageSpeed Insights API"</li>
+              <li><strong>Wrong key</strong> — Verify key at Settings → API Keys matches your GCP project</li>
+              <li><strong>Free quota exceeded</strong> — Check GCP Console → APIs → PageSpeed → Quotas</li>
+            </ol>
+          </div>
         </div>
       )}
 
@@ -3559,13 +3593,23 @@ function RankingsView({ clientId, dark, bg2, bg3, bdr, txt, txt2, getToken, API,
 
       {/* Rankings table */}
       {rankings.length === 0 ? (
-        <div style={{ textAlign:"center", padding:60, color:txt2 }}>
-          <div style={{ fontSize:36, marginBottom:12 }}>📊</div>
-          <div style={{ fontSize:14, fontWeight:600, color:txt, marginBottom:6 }}>No ranking data yet</div>
-          <div style={{ fontSize:12, marginBottom:16 }}>Connect Google Search Console or click Refresh Rankings</div>
-          <button onClick={runTracker} disabled={running} style={{ padding:"10px 24px", borderRadius:10, border:"none", background:"#443DCB", color:"#fff", fontSize:13, fontWeight:700, cursor:"pointer" }}>
-            {running ? "Running..." : "🔄 Track Rankings Now"}
-          </button>
+        <div style={{ padding:"0 0 24px 0" }}>
+          <div style={{ background:"#D9770611", border:"1px solid #D9770633", borderRadius:10, padding:"12px 16px", marginBottom:12 }}>
+            <div style={{ fontSize:12, fontWeight:700, color:"#D97706", marginBottom:6 }}>No ranking data — here's how to fix it:</div>
+            <ol style={{ margin:0, paddingLeft:18, fontSize:11, color:txt2, lineHeight:2 }}>
+              <li><strong>Connect Google Search Console</strong> — Click "Connect GSC" button → Log in with Google → It will show real keyword positions</li>
+              <li><strong>Add SerpAPI key</strong> — Settings → API Keys → SerpAPI key from serpapi.com (free tier: 100 searches/month)</li>
+              <li><strong>Re-run A10</strong> — After adding a key, click "Refresh Rankings" to pull live data</li>
+            </ol>
+          </div>
+          <div style={{ textAlign:"center", padding:"24px 0 0 0", color:txt2 }}>
+            <div style={{ fontSize:36, marginBottom:12 }}>📊</div>
+            <div style={{ fontSize:14, fontWeight:600, color:txt, marginBottom:6 }}>No ranking data yet</div>
+            <div style={{ fontSize:12, marginBottom:16 }}>Connect Google Search Console or click Refresh Rankings</div>
+            <button onClick={runTracker} disabled={running} style={{ padding:"10px 24px", borderRadius:10, border:"none", background:"#443DCB", color:"#fff", fontSize:13, fontWeight:700, cursor:"pointer" }}>
+              {running ? "Running..." : "🔄 Track Rankings Now"}
+            </button>
+          </div>
         </div>
       ) : (
         <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:12, overflow:"hidden" }}>
