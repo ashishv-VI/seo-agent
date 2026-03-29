@@ -6,6 +6,7 @@
 const { saveState, getState } = require("../shared-state/stateManager");
 const { db, FieldValue }      = require("../config/firebase");
 const { emitTasks }           = require("../utils/taskQueue");
+const { sendRankingAlert }    = require("../utils/emailer");
 
 async function runA10(clientId, keys, gscToken = null) {
   const brief    = await getState(clientId, "A1_brief");
@@ -140,6 +141,24 @@ async function runA10(clientId, keys, gscToken = null) {
       fix:    "Review content quality and backlink profile for this keyword",
     }));
     await emitTasks(clientId, dropAlerts.slice(0, 5), "p2", "A10").catch(() => {});
+
+    // Send ranking drop email alert
+    try {
+      const clientDoc = await db.collection("clients").doc(clientId).get();
+      const cData     = clientDoc.data() || {};
+      const { auth }  = require("../config/firebase");
+      const fbUser    = await auth.getUser(cData.ownerId).catch(() => null);
+      const toEmail   = fbUser?.email;
+      if (toEmail && drops.length >= 3) { // only alert if 3+ drops
+        sendRankingAlert({
+          to:         toEmail,
+          clientName: cData.name || cData.website || clientId,
+          websiteUrl: brief.websiteUrl,
+          drops:      drops.slice(0, 10),
+          agentUrl:   process.env.APP_URL || "https://seo-agent.onrender.com",
+        });
+      }
+    } catch { /* non-blocking */ }
   }
 
   const ranked     = results.rankings.filter(r => r.position && r.position <= 10).length;

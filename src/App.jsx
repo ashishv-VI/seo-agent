@@ -561,6 +561,16 @@ function MainApp({ onLogout }) {
             <input type="password" value={tmpKeys.openrouter} onChange={e=>setTmpKeys(k=>({...k,openrouter:e.target.value}))} placeholder="sk-or-xxxxxxxxxxxx" style={s.inp} />
             <label style={s.label}>GA Property ID — Google Analytics Data API</label>
             <input type="text" value={tmpKeys.gaPropertyId} onChange={e=>setTmpKeys(k=>({...k,gaPropertyId:e.target.value}))} placeholder="properties/123456789" style={s.inp} />
+            <div style={{ borderTop:`1px solid ${dark?"#222":"#e5e5e5"}`, margin:"16px 0 12px", paddingTop:12 }}>
+              <div style={{ fontSize:12, fontWeight:700, color:txt, marginBottom:6 }}>📧 Email Notifications</div>
+              <div style={{ fontSize:11, color:txt2, marginBottom:8, lineHeight:1.5 }}>Set these in <strong>Render Environment Variables</strong>. Pipeline complete + ranking drop alerts will be emailed automatically.</div>
+              <div style={{ background:dark?"#1a1a1a":"#f0f0ea", borderRadius:8, padding:"10px 12px", fontSize:11, color:txt2, fontFamily:"monospace", lineHeight:2 }}>
+                GMAIL_USER=you@gmail.com<br/>
+                GMAIL_PASS=xxxx-xxxx-xxxx-xxxx<br/>
+                APP_URL=https://your-app.onrender.com
+              </div>
+              <div style={{ fontSize:11, color:"#D97706", marginTop:6 }}>Gmail: use App Password — Google Account → Security → App Passwords</div>
+            </div>
             <button onClick={saveKeys} style={s.saveBtn}>💾 Save Keys</button>
             <div style={{ fontSize:11, color:txt3, marginTop:10, textAlign:"center" }}>
               Groq: console.groq.com · Gemini: aistudio.google.com · OpenRouter: openrouter.ai

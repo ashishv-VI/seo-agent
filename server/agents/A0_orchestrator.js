@@ -1,5 +1,6 @@
 const { getClientState, saveState, updateState } = require("../shared-state/stateManager");
 const { db }                                     = require("../config/firebase");
+const { sendPipelineComplete }                   = require("../utils/emailer");
 
 /**
  * A0 — Orchestrator
@@ -239,7 +240,36 @@ async function runFullPipeline(clientId, keys) {
       pipelineError:       null,
     });
 
-    // ── Stage 6: Auto-fix generation (semi / full automation mode) ────────
+    // ── Stage 6: Send pipeline complete email ──────────────────────────────
+    try {
+      const [clientDoc, ownerDoc, reportState, auditState] = await Promise.all([
+        db.collection("clients").doc(clientId).get(),
+        null, // resolved below
+        getState(clientId, "A9_report").catch(() => null),
+        getState(clientId, "A2_audit").catch(() => null),
+      ]);
+      const cData = clientDoc.data() || {};
+      const ownerSnap = await db.collection("users").doc(cData.ownerId).get().catch(() => null);
+      const ownerEmail = ownerSnap?.data()?.email;
+      const { auth }   = require("../config/firebase");
+      const fbUser     = await auth.getUser(cData.ownerId).catch(() => null);
+      const toEmail    = ownerEmail || fbUser?.email;
+      if (toEmail) {
+        const topIssues = (auditState?.issues || []).filter(i => i.severity === "critical").slice(0, 5).map(i => ({ title: i.description || i.detail }));
+        const score = reportState?.healthScore || auditState?.score || null;
+        const appUrl = process.env.APP_URL || "https://seo-agent.onrender.com";
+        sendPipelineComplete({
+          to:         toEmail,
+          clientName: cData.name || cData.website || clientId,
+          websiteUrl: cData.website || "",
+          score,
+          topIssues,
+          agentUrl:   `${appUrl}`,
+        }); // fire-and-forget
+      }
+    } catch { /* non-blocking */ }
+
+    // ── Stage 7: Auto-fix generation (semi / full automation mode) ────────
     // If client has enabled semi or full automation, auto-generate AI fixes
     // for all autoFixable pending tasks and push them to the approval queue
     try {

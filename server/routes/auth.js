@@ -2,6 +2,7 @@ const express              = require("express");
 const router               = express.Router();
 const { auth, db, FieldValue } = require("../config/firebase");
 const { verifyToken }      = require("../middleware/auth");
+const { sendWelcome }      = require("../utils/emailer");
 
 router.post("/register", async (req, res) => {
   try {
@@ -25,10 +26,20 @@ router.post("/register", async (req, res) => {
     }
 
     // Upsert user document (set with merge — safe for new and existing users)
+    const isNew = !(await db.collection("users").doc(uid).get()).exists;
     await db.collection("users").doc(uid).set({
       uid, email, name,
       plan: "free", createdAt: FieldValue.serverTimestamp(), apiKeys: {}, clients: [],
     }, { merge: true });
+
+    // Send welcome email only on first registration (not on Google re-login)
+    if (isNew) {
+      sendWelcome({
+        to:       email,
+        name:     name || email.split("@")[0],
+        loginUrl: process.env.APP_URL || "https://seo-agent.onrender.com",
+      }); // fire-and-forget
+    }
 
     return res.status(201).json({ message: "User ready", uid });
   } catch (err) {
