@@ -468,7 +468,20 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
 
       {/* Technical Tab */}
       {activeTab==="technical" && state.A7_technical && (
-        <FullTechnicalView tech={state.A7_technical} dark={dark} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2} />
+        <FullTechnicalView
+          tech={state.A7_technical} dark={dark} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2}
+          clientId={clientId} API={API} getToken={getToken}
+          onRefresh={async () => {
+            try {
+              const token = await getToken();
+              setAgentStatus(s => ({ ...s, A7: "running" }));
+              const r = await fetch(`${API}/api/agents/${clientId}/A7/run`, { method:"POST", headers:{ Authorization:`Bearer ${token}` } });
+              const d = await r.json();
+              if (d.success) setState(s => ({ ...s, A7_technical: d.technical }));
+              setAgentStatus(s => ({ ...s, A7: d.success ? "complete" : "failed" }));
+            } catch { setAgentStatus(s => ({ ...s, A7: "failed" })); }
+          }}
+        />
       )}
 
       {/* GEO Tab */}
@@ -1786,10 +1799,21 @@ function FullOnPageView({ op, bg2, bg3, bdr, txt, txt2 }) {
   );
 }
 
-function FullTechnicalView({ tech, bg2, bg3, bdr, txt, txt2 }) {
-  const hasMobile  = !!(tech.cwvData?.mobile);
-  const hasDesktop = !!(tech.cwvData?.desktop);
+function FullTechnicalView({ tech, bg2, bg3, bdr, txt, txt2, onRefresh }) {
+  const [refreshing, setRefreshing] = useState(false);
+  const hasMobile  = !!(tech.cwvData?.mobile?.scores);
+  const hasDesktop = !!(tech.cwvData?.desktop?.scores);
   const hasAnyData = hasMobile || hasDesktop;
+  const mobileError  = tech.cwvData?.mobile?.error;
+  const desktopError = tech.cwvData?.desktop?.error;
+  const hasError = mobileError || desktopError;
+
+  async function doRefresh() {
+    if (!onRefresh || refreshing) return;
+    setRefreshing(true);
+    await onRefresh();
+    setRefreshing(false);
+  }
 
   const CWV_INFO = {
     lcp: { name:"LCP (Largest Contentful Paint)", good:"< 2.5s", desc:"How fast the main content loads" },
@@ -1801,8 +1825,42 @@ function FullTechnicalView({ tech, bg2, bg3, bdr, txt, txt2 }) {
 
   return (
     <div>
+      {/* Error / Refresh banner */}
+      {hasError && (
+        <div style={{ background:"#DC262611", border:"1px solid #DC262633", borderRadius:10, padding:"12px 16px", marginBottom:12, display:"flex", alignItems:"center", justifyContent:"space-between", gap:12 }}>
+          <div>
+            <div style={{ fontSize:12, fontWeight:700, color:"#DC2626", marginBottom:3 }}>PageSpeed API returned an error</div>
+            <div style={{ fontSize:11, color:txt2 }}>
+              {mobileError || desktopError} — Make sure <strong>PageSpeed Insights API</strong> is enabled in Google Cloud Console for your key.
+            </div>
+          </div>
+          <button onClick={doRefresh} disabled={refreshing} style={{ flexShrink:0, padding:"7px 14px", borderRadius:8, background:"#DC2626", color:"#fff", border:"none", fontSize:11, fontWeight:700, cursor:refreshing?"not-allowed":"pointer", opacity:refreshing?0.6:1 }}>
+            {refreshing ? "Refreshing…" : "🔄 Retry"}
+          </button>
+        </div>
+      )}
+
+      {/* Refresh button when data exists but scores are missing */}
+      {!hasError && !hasAnyData && tech.cwvData && (
+        <div style={{ background:"#D9770611", border:"1px solid #D9770633", borderRadius:10, padding:"10px 16px", marginBottom:12, display:"flex", alignItems:"center", justifyContent:"space-between", gap:12 }}>
+          <div style={{ fontSize:12, color:"#D97706" }}>CWV data incomplete — click to refresh with your API key.</div>
+          <button onClick={doRefresh} disabled={refreshing} style={{ flexShrink:0, padding:"7px 14px", borderRadius:8, background:"#D97706", color:"#fff", border:"none", fontSize:11, fontWeight:700, cursor:refreshing?"not-allowed":"pointer", opacity:refreshing?0.6:1 }}>
+            {refreshing ? "Refreshing…" : "🔄 Refresh CWV"}
+          </button>
+        </div>
+      )}
+
+      {/* Refresh button in top-right when data is good */}
+      {hasAnyData && (
+        <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:8 }}>
+          <button onClick={doRefresh} disabled={refreshing} style={{ padding:"6px 12px", borderRadius:8, background:bg2, border:`1px solid ${bdr}`, color:txt2, fontSize:11, cursor:refreshing?"not-allowed":"pointer", opacity:refreshing?0.6:1 }}>
+            {refreshing ? "Refreshing…" : "🔄 Refresh CWV"}
+          </button>
+        </div>
+      )}
+
       {/* Google API key setup card */}
-      {!hasAnyData && (
+      {!hasAnyData && !tech.cwvData && (
         <div style={{ background:"#D9770611", border:"1px solid #D9770633", borderRadius:12, padding:"16px 20px", marginBottom:16 }}>
           <div style={{ fontSize:13, fontWeight:700, color:"#D97706", marginBottom:8 }}>📡 Connect Google PageSpeed API for real Core Web Vitals data</div>
           <div style={{ fontSize:12, color:txt2, lineHeight:1.7, marginBottom:12 }}>
