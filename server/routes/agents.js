@@ -153,7 +153,8 @@ router.post("/:clientId/A8/run", verifyToken, async (req, res) => {
   try {
     await getClientDoc(req.params.clientId, req.uid);
     const keys = await getUserKeys(req.uid);
-    return await runAgent(req.params.clientId, "A8", (id, k) => runA8(id, k), keys, res);
+    const { googleToken } = req.body;
+    return await runAgent(req.params.clientId, "A8", (id, k) => runA8(id, k, googleToken), keys, res);
   } catch (e) {
     return res.status(e.code || 500).json({ error: e.message });
   }

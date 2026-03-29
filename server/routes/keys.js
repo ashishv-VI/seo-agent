@@ -5,16 +5,17 @@ const { verifyToken }          = require("../middleware/auth");
 
 router.post("/save", verifyToken, async (req, res) => {
   try {
-    const { groq, gemini, google, openrouter, serpapi, perplexity, seranking } = req.body;
+    const { groq, gemini, google, openrouter, serpapi, perplexity, seranking, gaPropertyId } = req.body;
     await db.collection("users").doc(req.uid).update({
       apiKeys: {
-        ...(groq       && { groq }),
-        ...(gemini     && { gemini }),
-        ...(google     && { google }),
-        ...(openrouter && { openrouter }),
-        ...(serpapi    && { serpapi }),
-        ...(perplexity && { perplexity }),
-        ...(seranking  && { seranking }),
+        ...(groq         && { groq }),
+        ...(gemini       && { gemini }),
+        ...(google       && { google }),
+        ...(openrouter   && { openrouter }),
+        ...(serpapi      && { serpapi }),
+        ...(perplexity   && { perplexity }),
+        ...(seranking    && { seranking }),
+        ...(gaPropertyId && { gaPropertyId }),
       },
       updatedAt: FieldValue.serverTimestamp(),
     });

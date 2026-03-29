@@ -187,6 +187,9 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
     if (agentId === "A9") {
       url  = `${API}/api/agents/${clientId}/A9/report`;
       body = JSON.stringify({ gscToken: googleToken || null });
+    } else if (agentId === "A8") {
+      url  = `${API}/api/agents/${clientId}/A8/run`;
+      body = JSON.stringify({ googleToken: googleToken || null });
     } else {
       url  = `${API}/api/agents/${clientId}/${agentId}/run`;
       body = "{}";
@@ -1963,8 +1966,91 @@ function FullTechnicalView({ tech, bg2, bg3, bdr, txt, txt2, onRefresh }) {
 
 function FullGeoView({ geo, bg2, bg3, bdr, txt, txt2 }) {
   const prioColor = { high:"#DC2626", medium:"#D97706", low:"#059669" };
+  const rd = geo.realData || {};
   return (
     <div>
+      {/* ── Live Google Data ─────────────────────────── */}
+      {(geo.hasKG || geo.hasRealGBPData || geo.hasAnalytics) && (
+        <div style={{ marginBottom:16 }}>
+          <div style={{ fontSize:11, fontWeight:700, color:"#443DCB", textTransform:"uppercase", letterSpacing:1, marginBottom:10 }}>
+            Live Google Data
+          </div>
+
+          {/* Knowledge Graph Card */}
+          {geo.hasKG && rd.knowledgeGraph && (
+            <div style={{ background:bg2, border:"1px solid #443DCB33", borderRadius:10, padding:14, marginBottom:10, borderLeft:"3px solid #443DCB" }}>
+              <div style={{ fontSize:11, fontWeight:700, color:"#443DCB", marginBottom:6 }}>Knowledge Graph Match</div>
+              <div style={{ fontSize:13, fontWeight:700, color:txt, marginBottom:2 }}>{rd.knowledgeGraph.name}</div>
+              {rd.knowledgeGraph.description && (
+                <div style={{ fontSize:11, color:txt2, lineHeight:1.5, marginBottom:6 }}>{rd.knowledgeGraph.description}</div>
+              )}
+              <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                {(rd.knowledgeGraph.types||[]).map((t,i) => (
+                  <span key={i} style={{ fontSize:10, padding:"2px 8px", borderRadius:8, background:"#443DCB15", color:"#443DCB", fontWeight:600 }}>{t}</span>
+                ))}
+                {rd.knowledgeGraph.score && (
+                  <span style={{ fontSize:10, padding:"2px 8px", borderRadius:8, background:"#05966915", color:"#059669", fontWeight:600 }}>Score: {rd.knowledgeGraph.score?.toFixed(1)}</span>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* GBP Performance Card */}
+          {geo.hasRealGBPData && rd.gbpPerformance && (
+            <div style={{ background:bg2, border:"1px solid #05966933", borderRadius:10, padding:14, marginBottom:10, borderLeft:"3px solid #059669" }}>
+              <div style={{ fontSize:11, fontWeight:700, color:"#059669", marginBottom:8 }}>GBP Performance (last {rd.gbpPerformance.period})</div>
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))", gap:8 }}>
+                {[
+                  { label:"Map Views (Desktop)", val:(rd.gbpPerformance.desktopMapViews||0).toLocaleString(), color:"#443DCB" },
+                  { label:"Map Views (Mobile)",  val:(rd.gbpPerformance.mobileMapViews||0).toLocaleString(),  color:"#0891B2" },
+                  { label:"Website Clicks",      val:(rd.gbpPerformance.websiteClicks||0).toLocaleString(),   color:"#059669" },
+                  { label:"Call Clicks",         val:(rd.gbpPerformance.callClicks||0).toLocaleString(),      color:"#D97706" },
+                  { label:"Direction Requests",  val:(rd.gbpPerformance.directionRequests||0).toLocaleString(), color:"#DC2626" },
+                ].map(m => (
+                  <div key={m.label} style={{ background:bg3, borderRadius:8, padding:"8px 10px", textAlign:"center" }}>
+                    <div style={{ fontSize:16, fontWeight:800, color:m.color }}>{m.val}</div>
+                    <div style={{ fontSize:10, color:txt2, marginTop:2 }}>{m.label}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Analytics Card */}
+          {geo.hasAnalytics && rd.analytics && (
+            <div style={{ background:bg2, border:"1px solid #0891B233", borderRadius:10, padding:14, marginBottom:10, borderLeft:"3px solid #0891B2" }}>
+              <div style={{ fontSize:11, fontWeight:700, color:"#0891B2", marginBottom:8 }}>Google Analytics — Organic (last {rd.analytics.period})</div>
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))", gap:8, marginBottom:10 }}>
+                {[
+                  { label:"Organic Sessions",   val:(rd.analytics.organicSessions||0).toLocaleString(),  color:"#059669" },
+                  { label:"Organic Users",       val:(rd.analytics.organicUsers||0).toLocaleString(),     color:"#443DCB" },
+                  { label:"Bounce Rate",         val:`${rd.analytics.bounceRate}%`,                       color: parseFloat(rd.analytics.bounceRate) > 60 ? "#DC2626" : "#059669" },
+                  { label:"Avg Session (sec)",   val:rd.analytics.avgSessionDuration,                     color:"#0891B2" },
+                  { label:"Pages/Session",       val:rd.analytics.pagesPerSession,                        color:"#D97706" },
+                ].map(m => (
+                  <div key={m.label} style={{ background:bg3, borderRadius:8, padding:"8px 10px", textAlign:"center" }}>
+                    <div style={{ fontSize:16, fontWeight:800, color:m.color }}>{m.val}</div>
+                    <div style={{ fontSize:10, color:txt2, marginTop:2 }}>{m.label}</div>
+                  </div>
+                ))}
+              </div>
+              {(rd.analytics.allChannels||[]).length > 0 && (
+                <div>
+                  <div style={{ fontSize:10, fontWeight:700, color:txt2, textTransform:"uppercase", marginBottom:6 }}>All Channels</div>
+                  {rd.analytics.allChannels.map((ch,i) => (
+                    <div key={i} style={{ display:"flex", justifyContent:"space-between", fontSize:11, padding:"3px 0", borderBottom:`1px solid ${bdr}` }}>
+                      <span style={{ color:txt }}>{ch.channel}</span>
+                      <span style={{ color:txt2 }}>{(ch.sessions||0).toLocaleString()} sessions · {(ch.users||0).toLocaleString()} users</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── AI GEO Analysis ─────────────────────────── */}
       {geo.geoData?.geoAudit && (
         <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, padding:16, marginBottom:12 }}>
           <div style={{ fontSize:12, fontWeight:700, color:txt, marginBottom:8 }}>Local Pack Opportunity: <span style={{ color:geo.geoData.geoAudit.localPackOpportunity==="high"?"#059669":"#D97706" }}>{geo.geoData.geoAudit.localPackOpportunity}</span></div>

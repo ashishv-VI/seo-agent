@@ -64,8 +64,8 @@ function MainApp({ onLogout }) {
   const [showSettings, setShowSettings] = useState(false);
   const [count, setCount]     = useState(0);
   const [dark, setDark]       = useState(true);
-  const [keys, setKeys]       = useState({ groq:"", gemini:"", google:"", openrouter:"" });
-  const [tmpKeys, setTmpKeys] = useState({ groq:"", gemini:"", google:"", openrouter:"" });
+  const [keys, setKeys]       = useState({ groq:"", gemini:"", google:"", openrouter:"", gaPropertyId:"" });
+  const [tmpKeys, setTmpKeys] = useState({ groq:"", gemini:"", google:"", openrouter:"", gaPropertyId:"" });
   const [copied, setCopied]   = useState(null);
   const [bulkInput, setBulkInput]     = useState("");
   const [bulkResults, setBulkResults] = useState([]);
@@ -559,6 +559,8 @@ function MainApp({ onLogout }) {
             <input type="password" value={tmpKeys.google} onChange={e=>setTmpKeys(k=>({...k,google:e.target.value}))} placeholder="AIzaxxxxxxxxxx" style={s.inp} />
             <label style={s.label}>OpenRouter Key — DeepSeek + Mistral (Free)</label>
             <input type="password" value={tmpKeys.openrouter} onChange={e=>setTmpKeys(k=>({...k,openrouter:e.target.value}))} placeholder="sk-or-xxxxxxxxxxxx" style={s.inp} />
+            <label style={s.label}>GA Property ID — Google Analytics Data API</label>
+            <input type="text" value={tmpKeys.gaPropertyId} onChange={e=>setTmpKeys(k=>({...k,gaPropertyId:e.target.value}))} placeholder="properties/123456789" style={s.inp} />
             <button onClick={saveKeys} style={s.saveBtn}>💾 Save Keys</button>
             <div style={{ fontSize:11, color:txt3, marginTop:10, textAlign:"center" }}>
               Groq: console.groq.com · Gemini: aistudio.google.com · OpenRouter: openrouter.ai
