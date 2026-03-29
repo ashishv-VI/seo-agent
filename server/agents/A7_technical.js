@@ -17,10 +17,12 @@ async function runA7(clientId, keys) {
   const cwvData = { mobile: null, desktop: null };
 
   // ── PageSpeed Insights API ─────────────────────────
-  if (keys.google) {
+  // Works without API key (rate-limited); key gives higher quota
+  {
+    const apiKey = keys.google ? `&key=${keys.google}` : "";
     for (const strategy of ["mobile", "desktop"]) {
       try {
-        const apiUrl = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(siteUrl)}&strategy=${strategy}&key=${keys.google}&category=performance&category=seo&category=accessibility`;
+        const apiUrl = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(siteUrl)}&strategy=${strategy}${apiKey}&category=performance&category=seo&category=accessibility`;
         const res    = await fetch(apiUrl, { signal: AbortSignal.timeout(30000) });
         const data   = await res.json();
 
@@ -151,8 +153,9 @@ Provide technical fix recommendations. Return ONLY valid JSON:
     hasRealCWVData: !!keys.google && (!!cwvData.mobile?.scores || !!cwvData.desktop?.scores),
     techRecs,
     summary: {
-      mobileScore:  cwvData.mobile?.scores?.performance || null,
-      desktopScore: cwvData.desktop?.scores?.performance || null,
+      mobileScore:     cwvData.mobile?.scores?.performance  ?? null,
+      desktopScore:    cwvData.desktop?.scores?.performance ?? null,
+      criticalIssues:  techRecs.priorityFixes?.filter(f => f.impact === "high").length || 0,
       highImpactFixes: techRecs.priorityFixes?.filter(f => f.impact === "high").length || 0,
       responseTime,
       lcpMs:    cwvData.mobile?.rawMetrics?.lcp?.ms    ?? null,
