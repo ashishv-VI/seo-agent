@@ -27,6 +27,7 @@ import ReadabilityChecker from "./ReadabilityChecker";
 import BacklinkAnalyzer from "./BacklinkAnalyzer";
 import SitemapGenerator from "./SitemapGenerator";
 import UserPanel from "./pages/UserPanel";
+import GlobalChat from "./GlobalChat";
 
 // ── Main App wrapped with Auth ─────────────────────
 export default function App() {
@@ -578,6 +579,13 @@ function MainApp({ onLogout }) {
           </div>
         </div>
       )}
+
+      {/* ── Global AI Chatbot ── */}
+      <GlobalChat
+        dark={dark}
+        currentPage={page}
+        onNavigate={setPage}
+      />
     </div>
   );
 }
