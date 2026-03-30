@@ -128,7 +128,8 @@ async function recordFixOutcome(clientId, outcome) {
  */
 async function recordPublishedTopic(clientId, topic, keyword, wpPostId) {
   const ref = db.collection(COLLECTION).doc(clientId);
-  await ref.set({
+  // Use update() so dot-notation is treated as a nested field path (arrayUnion needs this)
+  await ref.update({
     "contentMemory.topicsPublished": FieldValue.arrayUnion({
       topic,
       keyword,
@@ -136,7 +137,7 @@ async function recordPublishedTopic(clientId, topic, keyword, wpPostId) {
       date:     new Date().toISOString(),
     }),
     updatedAt: new Date().toISOString(),
-  }, { merge: true });
+  });
 }
 
 /**

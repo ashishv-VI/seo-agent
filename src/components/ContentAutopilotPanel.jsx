@@ -49,7 +49,7 @@ export default function ContentAutopilotPanel({ dark, clientId, getToken, API })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to run content autopilot");
-      setSuccess(`Generated ${data.articlesCreated || 0} article draft(s) — ready for review in WordPress`);
+      setSuccess(`Generated ${data.created || 0} article draft(s) — ready for review in WordPress`);
       await loadDrafts();
     } catch (e) {
       setError(e.message);
@@ -167,10 +167,10 @@ export default function ContentAutopilotPanel({ dark, clientId, getToken, API })
                       </div>
                     </div>
                     <div style={{ display:"flex", gap:6 }}>
-                      {d.wpPostUrl && (
-                        <a href={d.wpPostUrl} target="_blank" rel="noopener noreferrer"
+                      {d.wpEditUrl && (
+                        <a href={d.wpEditUrl} target="_blank" rel="noopener noreferrer"
                           style={{ padding:"5px 12px", borderRadius:6, background:"transparent", border:`1px solid ${bdr}`, color:txt2, fontSize:12, textDecoration:"none" }}>
-                          View Post ↗
+                          View in WP ↗
                         </a>
                       )}
                       <span style={{ padding:"5px 12px", borderRadius:6, background:"#05966922", color:"#059669", fontSize:12 }}>✅ Published</span>
@@ -187,7 +187,7 @@ export default function ContentAutopilotPanel({ dark, clientId, getToken, API })
 }
 
 function DraftCard({ draft, bg, bg2, bdr, txt, txt2, expanded, onToggle, onMarkPublished }) {
-  const wordCount = draft.content ? draft.content.split(/\s+/).length : 0;
+  const wordCount = draft.wordCount || 0;
 
   return (
     <div style={{ borderRadius:10, background:bg2, border:`1px solid ${bdr}`, overflow:"hidden" }}>
@@ -246,13 +246,15 @@ function DraftCard({ draft, bg, bg2, bdr, txt, txt2, expanded, onToggle, onMarkP
             )}
           </div>
 
-          {/* Content preview */}
-          {draft.content && (
+          {/* Excerpt / WP link */}
+          {draft.excerpt ? (
             <div style={{ padding:"12px 14px", borderRadius:8, background:bg, border:`1px solid ${bdr}` }}>
-              <div style={{ fontSize:10, fontWeight:700, color:"#6B62E8", marginBottom:8 }}>CONTENT PREVIEW</div>
-              <div style={{ fontSize:12, color:txt, lineHeight:1.7, maxHeight:300, overflowY:"auto", whiteSpace:"pre-wrap" }}>
-                {draft.content.slice(0, 1500)}{draft.content.length > 1500 ? "…" : ""}
-              </div>
+              <div style={{ fontSize:10, fontWeight:700, color:"#6B62E8", marginBottom:8 }}>EXCERPT</div>
+              <div style={{ fontSize:12, color:txt, lineHeight:1.7 }}>{draft.excerpt}</div>
+            </div>
+          ) : (
+            <div style={{ padding:"12px 14px", borderRadius:8, background:bg, border:`1px solid ${bdr}`, textAlign:"center" }}>
+              <div style={{ fontSize:12, color:txt2 }}>Full article content is in WordPress — click <strong>Edit in WP</strong> to review before publishing.</div>
             </div>
           )}
         </div>
