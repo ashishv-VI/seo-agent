@@ -12,6 +12,7 @@ const rankTrackerRoutes = require("./routes/rank-tracker");
 const adminRoutes        = require("./routes/admin");
 const portalRoutes       = require("./routes/portal");
 const integrationsRoutes = require("./routes/integrations");
+const gscRoutes          = require("./routes/gsc");
 
 const app  = express();
 const PORT = process.env.PORT || 5000;
@@ -73,6 +74,7 @@ app.use("/api/rank-tracker", rankTrackerRoutes);
 app.use("/api/admin",        adminRoutes);
 app.use("/api/portal",       portalRoutes);
 app.use("/api/integrations", integrationsRoutes);
+app.use("/api/gsc",          gscRoutes);
 
 // ── Daily alert monitoring ─────────────────────────
 // Runs A9.checkAlerts for every active client — detects new technical issues,

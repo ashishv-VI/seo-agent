@@ -10,16 +10,19 @@ import { useState, useEffect } from "react";
 const B = "#443DCB";
 
 export default function IntegrationsPanel({ dark, clientId, getToken, API }) {
-  const [wpStatus,    setWpStatus]    = useState(null);   // null | object
-  const [loading,     setLoading]     = useState(true);
-  const [testing,     setTesting]     = useState(false);
-  const [connecting,  setConnecting]  = useState(false);
+  const [wpStatus,      setWpStatus]      = useState(null);
+  const [gscStatus,     setGscStatus]     = useState(null);   // null | { connected, email, sites[] }
+  const [loading,       setLoading]       = useState(true);
+  const [testing,       setTesting]       = useState(false);
+  const [connecting,    setConnecting]    = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
-  const [showForm,    setShowForm]    = useState(false);
-  const [wpPages,     setWpPages]     = useState(null);
-  const [loadingPages,setLoadingPages]= useState(false);
-  const [error,       setError]       = useState("");
-  const [success,     setSuccess]     = useState("");
+  const [gscConnecting, setGscConnecting] = useState(false);
+  const [gscDisconnecting, setGscDisconnecting] = useState(false);
+  const [showForm,      setShowForm]      = useState(false);
+  const [wpPages,       setWpPages]       = useState(null);
+  const [loadingPages,  setLoadingPages]  = useState(false);
+  const [error,         setError]         = useState("");
+  const [success,       setSuccess]       = useState("");
 
   const [form, setForm] = useState({ url: "", username: "", appPassword: "" });
 
@@ -35,13 +38,47 @@ export default function IntegrationsPanel({ dark, clientId, getToken, API }) {
     setLoading(true);
     try {
       const token = await getToken();
-      const res   = await fetch(`${API}/api/integrations/${clientId}`, {
+      const [wpRes, gscRes] = await Promise.all([
+        fetch(`${API}/api/integrations/${clientId}`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${API}/api/gsc/${clientId}/status`,   { headers: { Authorization: `Bearer ${token}` } }).catch(() => null),
+      ]);
+      const wpData  = await wpRes.json();
+      const gscData = gscRes ? await gscRes.json().catch(() => null) : null;
+      setWpStatus(wpData.wordpress || null);
+      setGscStatus(gscData?.connected ? gscData : null);
+    } catch { setWpStatus(null); }
+    setLoading(false);
+  }
+
+  async function connectGSC() {
+    setGscConnecting(true); setError(""); setSuccess("");
+    try {
+      const token = await getToken();
+      const res   = await fetch(`${API}/api/gsc/auth-url/${clientId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
-      setWpStatus(data.wordpress || null);
-    } catch { setWpStatus(null); }
-    setLoading(false);
+      if (!res.ok) throw new Error(data.error || "Could not get auth URL");
+      // Open OAuth in a new tab — user logs in with the CLIENT's Google account
+      window.open(data.authUrl, "_blank", "noopener");
+      setSuccess("Google OAuth window opened — sign in with the CLIENT's Google account that has Search Console access, then come back and refresh.");
+    } catch (e) { setError(e.message); }
+    setGscConnecting(false);
+  }
+
+  async function disconnectGSC() {
+    if (!confirm("Disconnect Search Console? Client's access token will be removed.")) return;
+    setGscDisconnecting(true);
+    try {
+      const token = await getToken();
+      const res   = await fetch(`${API}/api/gsc/${clientId}`, {
+        method: "DELETE", headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error("Disconnect failed");
+      setGscStatus(null);
+      setSuccess("Search Console disconnected");
+    } catch (e) { setError(e.message); }
+    setGscDisconnecting(false);
   }
 
   async function connect(e) {
@@ -299,6 +336,96 @@ export default function IntegrationsPanel({ dark, clientId, getToken, API }) {
             </form>
           </div>
         )}
+      </div>
+
+      {/* ── Google Search Console Integration ── */}
+      <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:14, overflow:"hidden", marginBottom:20 }}>
+        {/* Header */}
+        <div style={{ padding:"16px 20px", borderBottom:`1px solid ${bdr}`, display:"flex", alignItems:"center", gap:12 }}>
+          <div style={{ width:36, height:36, background:"#EA4335", borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18 }}>G</div>
+          <div style={{ flex:1 }}>
+            <div style={{ fontSize:15, fontWeight:700, color:txt }}>Google Search Console</div>
+            <div style={{ fontSize:12, color:txt2 }}>Per-client OAuth — each client connects their own Google account. No site verification by agency needed.</div>
+          </div>
+          {gscStatus?.connected
+            ? <div style={{ display:"flex", alignItems:"center", gap:6, padding:"5px 12px", borderRadius:20, background:"#05966915", border:"1px solid #05966940" }}>
+                <div style={{ width:7, height:7, borderRadius:"50%", background:"#059669" }}/>
+                <span style={{ fontSize:12, fontWeight:600, color:"#059669" }}>Connected</span>
+              </div>
+            : <div style={{ padding:"5px 12px", borderRadius:20, background:bg3, border:`1px solid ${bdr}`, fontSize:12, color:txt2 }}>Not connected</div>
+          }
+        </div>
+
+        <div style={{ padding:"18px 20px" }}>
+          {gscStatus?.connected ? (
+            <>
+              {/* Connected state */}
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))", gap:10, marginBottom:16 }}>
+                {[
+                  { label:"Google Account", value: gscStatus.email || "—" },
+                  { label:"Sites Accessible", value: gscStatus.sites?.length ?? "—" },
+                  { label:"Connected", value: gscStatus.connectedAt ? new Date(gscStatus.connectedAt).toLocaleDateString() : "—" },
+                ].map(i => (
+                  <div key={i.label} style={{ padding:"10px 12px", borderRadius:8, background:bg3, border:`1px solid ${bdr}` }}>
+                    <div style={{ fontSize:10, fontWeight:700, color:txt2, marginBottom:3 }}>{i.label.toUpperCase()}</div>
+                    <div style={{ fontSize:13, fontWeight:600, color:txt, wordBreak:"break-all" }}>{i.value}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Accessible sites list */}
+              {gscStatus.sites?.length > 0 && (
+                <div style={{ marginBottom:14 }}>
+                  <div style={{ fontSize:12, fontWeight:600, color:txt2, marginBottom:6 }}>ACCESSIBLE SITES IN SEARCH CONSOLE</div>
+                  <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+                    {gscStatus.sites.map(s => (
+                      <div key={s.url} style={{ padding:"4px 10px", borderRadius:6, background:`${B}11`, border:`1px solid ${B}33`, fontSize:11, color:B }}>
+                        {s.url}
+                        <span style={{ color:txt2, marginLeft:6 }}>({s.permissionLevel})</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div style={{ display:"flex", gap:8 }}>
+                <button onClick={connectGSC} disabled={gscConnecting}
+                  style={{ padding:"7px 16px", borderRadius:8, border:`1px solid ${bdr}`, background:"transparent", color:txt2, fontSize:12, cursor:"pointer" }}>
+                  🔄 Reconnect
+                </button>
+                <button onClick={disconnectGSC} disabled={gscDisconnecting}
+                  style={{ padding:"7px 16px", borderRadius:8, border:"1px solid #DC262633", background:"#DC262611", color:"#DC2626", fontSize:12, cursor:"pointer" }}>
+                  {gscDisconnecting ? "Disconnecting…" : "Disconnect"}
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              {/* Not connected state */}
+              <div style={{ padding:"14px 16px", borderRadius:10, background:"#443DCB11", border:"1px solid #443DCB33", marginBottom:16 }}>
+                <div style={{ fontSize:12, fontWeight:700, color:"#6B62E8", marginBottom:6 }}>How per-client GSC connection works</div>
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))", gap:8 }}>
+                  {[
+                    { n:"1", t:"Click Connect below", d:"Opens Google OAuth in a new tab" },
+                    { n:"2", t:"Client's Google account", d:"Sign in with the Google account that has Search Console access for this client's site" },
+                    { n:"3", t:"One-time only", d:"We store a refresh token — works permanently without re-auth" },
+                    { n:"4", t:"No agency verification", d:"Agency never needs to add sites to their own Google account" },
+                  ].map(s => (
+                    <div key={s.n} style={{ padding:"8px 10px", borderRadius:8, background:bg2, border:`1px solid ${bdr}` }}>
+                      <div style={{ fontSize:10, fontWeight:700, color:"#6B62E8", marginBottom:2 }}>STEP {s.n} · {s.t}</div>
+                      <div style={{ fontSize:11, color:txt2 }}>{s.d}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <button onClick={connectGSC} disabled={gscConnecting}
+                style={{ padding:"10px 24px", borderRadius:8, background: gscConnecting ? "#666" : "#EA4335", color:"#fff", fontWeight:700, fontSize:13, cursor: gscConnecting ? "not-allowed" : "pointer", border:"none" }}>
+                {gscConnecting ? "Opening…" : "🔗 Connect Search Console"}
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       {/* ── How Auto-Push Works ── */}

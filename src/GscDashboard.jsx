@@ -1,6 +1,17 @@
 import { useState } from "react";
 
-export default function GscDashboard({ dark, gscToken }) {
+/**
+ * GscDashboard
+ *
+ * Two modes:
+ *   1. Per-client mode (clientId + getToken + API props): uses server-side stored
+ *      OAuth tokens — the client connected their own Google account in Integrations.
+ *      Agency does NOT need to verify each site.
+ *
+ *   2. Agency mode (gscToken prop only): uses the agency's own Google OAuth token.
+ *      Only works for sites the agency's Google account has access to.
+ */
+export default function GscDashboard({ dark, gscToken, clientId, getToken, API }) {
   const [siteUrl, setSiteUrl]     = useState("");
   const [loading, setLoading]     = useState(false);
   const [data, setData]           = useState(null);
@@ -8,6 +19,9 @@ export default function GscDashboard({ dark, gscToken }) {
   const [activeTab, setActiveTab] = useState("overview");
   const [days, setDays]           = useState(28);
   const [device, setDevice]       = useState("all");
+
+  // Whether we can use per-client server-side tokens
+  const useServerMode = !!(clientId && getToken && API);
 
   const bg   = dark ? "#0a0a0a" : "#f5f5f0";
   const bg2  = dark ? "#111"    : "#ffffff";
@@ -19,64 +33,86 @@ export default function GscDashboard({ dark, gscToken }) {
 
   async function fetchGSC() {
     if (!siteUrl.trim()) return;
-    if (!gscToken) { setError("Google login required — please sign out and login again with Google to use Search Console."); return; }
     setLoading(true); setError(""); setData(null);
 
-    const url       = siteUrl.startsWith("http") ? siteUrl : `https://${siteUrl}`;
-    const endDate   = new Date().toISOString().split("T")[0];
-    const startDate = new Date(Date.now() - days*24*60*60*1000).toISOString().split("T")[0];
-
-    const makeBody = (dimensions) => {
-      const body = { startDate, endDate, dimensions, rowLimit: 20 };
-      if (device !== "all") body.dimensionFilterGroups = [{ filters:[{ dimension:"device", operator:"equals", expression: device }] }];
-      return JSON.stringify(body);
-    };
-
-    const apiUrl = `https://searchconsole.googleapis.com/webmasters/v3/sites/${encodeURIComponent(url)}/searchAnalytics/query`;
-    const headers = { "Content-Type":"application/json", "Authorization": `Bearer ${gscToken}` };
+    const url = siteUrl.startsWith("http") ? siteUrl : `https://${siteUrl}`;
 
     try {
-      const [queryRes, pageRes, countryRes, deviceRes, dateRes] = await Promise.all([
-        fetch(apiUrl, { method:"POST", headers, body: makeBody(["query"]) }).then(r=>r.json()),
-        fetch(apiUrl, { method:"POST", headers, body: makeBody(["page"]) }).then(r=>r.json()),
-        fetch(apiUrl, { method:"POST", headers, body: makeBody(["country"]) }).then(r=>r.json()),
-        fetch(apiUrl, { method:"POST", headers, body: JSON.stringify({ startDate, endDate, dimensions:["device"], rowLimit:10 }) }).then(r=>r.json()),
-        fetch(apiUrl, { method:"POST", headers, body: makeBody(["date"]) }).then(r=>r.json()),
-      ]);
-
-      if (queryRes.error) {
-        const msg = queryRes.error.message || "";
-        const code = queryRes.error.code || queryRes.error.status || "";
-        if (code === 403 || msg.toLowerCase().includes("permission") || msg.toLowerCase().includes("forbidden")) {
-          setError(
-            `Permission denied for "${url}". Fix checklist:\n` +
-            `1. Go to search.google.com/search-console → Add & verify this site under your Google account\n` +
-            `2. In Google Cloud Console → APIs & Services → Library → search "Search Console API" → Enable it\n` +
-            `3. Sign out and sign back in with Google (your login token may be expired)`
-          );
-        } else if (code === 401 || msg.toLowerCase().includes("unauthorized") || msg.toLowerCase().includes("invalid credentials")) {
-          setError("Google token expired — please sign out and sign back in with Google to refresh access.");
-        } else {
-          setError(msg || "GSC API error — make sure the site is verified in Google Search Console");
+      if (useServerMode) {
+        // ── Per-client mode: backend uses stored per-client OAuth refresh token ──
+        const token = await getToken();
+        const params = new URLSearchParams({ siteUrl: url, days, device });
+        const res = await fetch(`${API}/api/gsc/${clientId}/analytics?${params}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const d = await res.json();
+        if (!res.ok) {
+          if (d.error?.includes("not connected")) {
+            setError("Search Console not connected for this client — go to the 🔌 Integrations tab and click Connect Search Console.");
+          } else {
+            setError(d.error || "GSC fetch failed");
+          }
+          setLoading(false); return;
         }
-        setLoading(false); return;
+        setData(d);
+      } else {
+        // ── Agency mode: direct frontend call using agency's Google OAuth token ──
+        if (!gscToken) {
+          setError("Google login required — sign out and sign back in with Google.");
+          setLoading(false); return;
+        }
+
+        const endDate   = new Date().toISOString().split("T")[0];
+        const startDate = new Date(Date.now() - days*24*60*60*1000).toISOString().split("T")[0];
+        const makeBody  = (dimensions) => {
+          const body = { startDate, endDate, dimensions, rowLimit: 20 };
+          if (device !== "all") body.dimensionFilterGroups = [{ filters:[{ dimension:"device", operator:"equals", expression: device }] }];
+          return JSON.stringify(body);
+        };
+
+        const apiUrl  = `https://searchconsole.googleapis.com/webmasters/v3/sites/${encodeURIComponent(url)}/searchAnalytics/query`;
+        const headers = { "Content-Type":"application/json", "Authorization": `Bearer ${gscToken}` };
+
+        const [queryRes, pageRes, countryRes, deviceRes, dateRes] = await Promise.all([
+          fetch(apiUrl, { method:"POST", headers, body: makeBody(["query"]) }).then(r=>r.json()),
+          fetch(apiUrl, { method:"POST", headers, body: makeBody(["page"]) }).then(r=>r.json()),
+          fetch(apiUrl, { method:"POST", headers, body: makeBody(["country"]) }).then(r=>r.json()),
+          fetch(apiUrl, { method:"POST", headers, body: JSON.stringify({ startDate, endDate, dimensions:["device"], rowLimit:10 }) }).then(r=>r.json()),
+          fetch(apiUrl, { method:"POST", headers, body: makeBody(["date"]) }).then(r=>r.json()),
+        ]);
+
+        if (queryRes.error) {
+          const msg  = queryRes.error.message || "";
+          const code = queryRes.error.code || queryRes.error.status || "";
+          if (code === 403 || msg.toLowerCase().includes("permission") || msg.toLowerCase().includes("forbidden")) {
+            setError(
+              `Permission denied for "${url}". Fix checklist:\n` +
+              `1. Go to search.google.com/search-console → verify this site under your Google account\n` +
+              `2. Enable "Google Search Console API" in Google Cloud Console → APIs & Services → Library\n` +
+              `3. Sign out and sign back in with Google`
+            );
+          } else if (code === 401 || msg.toLowerCase().includes("unauthorized")) {
+            setError("Google token expired — sign out and sign back in with Google.");
+          } else {
+            setError(msg || "GSC API error");
+          }
+          setLoading(false); return;
+        }
+
+        const rows = queryRes.rows || [];
+        setData({
+          queries:   rows,
+          pages:     pageRes.rows   || [],
+          countries: countryRes.rows|| [],
+          devices:   deviceRes.rows || [],
+          dates:     dateRes.rows   || [],
+          totalClicks:      rows.reduce((a,r)=>a+r.clicks, 0),
+          totalImpressions: rows.reduce((a,r)=>a+r.impressions, 0),
+          avgCTR:           rows.length ? (rows.reduce((a,r)=>a+r.ctr,0)/rows.length*100).toFixed(1) : 0,
+          avgPosition:      rows.length ? (rows.reduce((a,r)=>a+r.position,0)/rows.length).toFixed(1) : 0,
+          startDate, endDate,
+        });
       }
-
-      const rows = queryRes.rows || [];
-      const totalClicks      = rows.reduce((a,r)=>a+r.clicks, 0);
-      const totalImpressions = rows.reduce((a,r)=>a+r.impressions, 0);
-      const avgCTR           = rows.length ? (rows.reduce((a,r)=>a+r.ctr,0)/rows.length*100).toFixed(1) : 0;
-      const avgPosition      = rows.length ? (rows.reduce((a,r)=>a+r.position,0)/rows.length).toFixed(1) : 0;
-
-      setData({
-        queries:   queryRes.rows||[],
-        pages:     pageRes.rows||[],
-        countries: countryRes.rows||[],
-        devices:   deviceRes.rows||[],
-        dates:     dateRes.rows||[],
-        totalClicks, totalImpressions, avgCTR, avgPosition,
-        startDate, endDate
-      });
     } catch(e) { setError("Error: "+e.message); }
     setLoading(false);
   }

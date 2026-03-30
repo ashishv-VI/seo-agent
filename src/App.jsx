@@ -30,8 +30,11 @@ import UserPanel from "./pages/UserPanel";
 import GlobalChat from "./GlobalChat";
 import ClientPortal from "./pages/ClientPortal";
 
-// ── Portal token detection — no auth needed ────────
-const portalToken = new URLSearchParams(window.location.search).get("portal");
+// ── URL param detection — no auth needed ──────────
+const _params      = new URLSearchParams(window.location.search);
+const portalToken  = _params.get("portal");
+const gscConnected = _params.get("gsc_connected"); // clientId returned after GSC OAuth
+const gscError     = _params.get("gsc_error");
 
 // ── Main App wrapped with Auth ─────────────────────
 export default function App() {
@@ -63,6 +66,9 @@ function MainApp({ onLogout }) {
   const { user, googleToken } = useAuth();
   const [tool, setTool]       = useState(null);
   const [page, setPage]       = useState("dashboard");
+  const [gscBanner, setGscBanner] = useState(
+    gscConnected ? "success" : gscError ? "error" : null
+  );
   const [input, setInput]     = useState("");
   const [msgs, setMsgs]       = useState({});
   const [loading, setLoading] = useState(false);
@@ -308,6 +314,19 @@ function MainApp({ onLogout }) {
 
   return (
     <div style={s.app}>
+      {/* ── GSC OAuth return banner ── */}
+      {gscBanner === "success" && (
+        <div style={{ position:"fixed", top:16, left:"50%", transform:"translateX(-50%)", zIndex:9999, padding:"12px 24px", borderRadius:10, background:"#059669", color:"#fff", fontWeight:600, fontSize:13, boxShadow:"0 4px 20px #0005", display:"flex", gap:12, alignItems:"center" }}>
+          ✅ Search Console connected! Go to the client's 🔌 Integrations tab to see connected sites.
+          <button onClick={() => { setGscBanner(null); window.history.replaceState({}, "", window.location.pathname); }} style={{ background:"none", border:"none", color:"#fff", fontSize:16, cursor:"pointer", lineHeight:1 }}>×</button>
+        </div>
+      )}
+      {gscBanner === "error" && (
+        <div style={{ position:"fixed", top:16, left:"50%", transform:"translateX(-50%)", zIndex:9999, padding:"12px 24px", borderRadius:10, background:"#DC2626", color:"#fff", fontWeight:600, fontSize:13, boxShadow:"0 4px 20px #0005", display:"flex", gap:12, alignItems:"center" }}>
+          ❌ Search Console connection failed: {decodeURIComponent(gscError || "unknown error")}
+          <button onClick={() => { setGscBanner(null); window.history.replaceState({}, "", window.location.pathname); }} style={{ background:"none", border:"none", color:"#fff", fontSize:16, cursor:"pointer", lineHeight:1 }}>×</button>
+        </div>
+      )}
       {/* ── Sidebar ── */}
       <div style={s.side}>
         <div style={s.logo}>
