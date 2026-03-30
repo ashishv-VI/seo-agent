@@ -10,15 +10,47 @@ provider.addScope("https://www.googleapis.com/auth/analytics.readonly");
 provider.addScope("https://www.googleapis.com/auth/analytics.manage.users.readonly");
 const API        = "https://seo-agent-backend-8m1z.onrender.com";
 
+const GSC_TOKEN_KEY    = "seo_gsc_token";
+const GSC_TOKEN_EXPIRY = "seo_gsc_token_expiry";
+
+function saveGoogleToken(token) {
+  try {
+    sessionStorage.setItem(GSC_TOKEN_KEY, token);
+    // Google OAuth tokens expire in 1 hour; we treat them as valid for 55 minutes
+    sessionStorage.setItem(GSC_TOKEN_EXPIRY, String(Date.now() + 55 * 60 * 1000));
+  } catch { /* sessionStorage unavailable */ }
+}
+
+function loadGoogleToken() {
+  try {
+    const expiry = parseInt(sessionStorage.getItem(GSC_TOKEN_EXPIRY) || "0", 10);
+    if (expiry > Date.now()) {
+      return sessionStorage.getItem(GSC_TOKEN_KEY) || null;
+    }
+    sessionStorage.removeItem(GSC_TOKEN_KEY);
+    sessionStorage.removeItem(GSC_TOKEN_EXPIRY);
+  } catch { /* sessionStorage unavailable */ }
+  return null;
+}
+
+function clearGoogleToken() {
+  try {
+    sessionStorage.removeItem(GSC_TOKEN_KEY);
+    sessionStorage.removeItem(GSC_TOKEN_EXPIRY);
+  } catch { /* sessionStorage unavailable */ }
+}
+
 export function AuthProvider({ children }) {
   const [user,        setUser]        = useState(null);
   const [loading,     setLoading]     = useState(true);
-  const [googleToken, setGoogleToken] = useState(null);
+  const [googleToken, setGoogleToken] = useState(() => loadGoogleToken());
 
   useEffect(() => {
     return onAuthStateChanged(auth, (u) => {
       setUser(u);
       setLoading(false);
+      // If user signed out, clear stored token
+      if (!u) { clearGoogleToken(); setGoogleToken(null); }
     });
   }, []);
 
@@ -43,7 +75,9 @@ export function AuthProvider({ children }) {
   const loginWithGoogle = async () => {
     const result     = await signInWithPopup(auth, provider);
     const credential = GoogleAuthProvider.credentialFromResult(result);
-    setGoogleToken(credential?.accessToken || null);
+    const token = credential?.accessToken || null;
+    if (token) saveGoogleToken(token);
+    setGoogleToken(token);
     // Auto-create user document if first Google login
     try {
       const t = await result.user.getIdToken();

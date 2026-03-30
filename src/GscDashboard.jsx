@@ -45,7 +45,20 @@ export default function GscDashboard({ dark, gscToken }) {
       ]);
 
       if (queryRes.error) {
-        setError(queryRes.error.message || "GSC API Error — make sure site is verified in Search Console");
+        const msg = queryRes.error.message || "";
+        const code = queryRes.error.code || queryRes.error.status || "";
+        if (code === 403 || msg.toLowerCase().includes("permission") || msg.toLowerCase().includes("forbidden")) {
+          setError(
+            `Permission denied for "${url}". Fix checklist:\n` +
+            `1. Go to search.google.com/search-console → Add & verify this site under your Google account\n` +
+            `2. In Google Cloud Console → APIs & Services → Library → search "Search Console API" → Enable it\n` +
+            `3. Sign out and sign back in with Google (your login token may be expired)`
+          );
+        } else if (code === 401 || msg.toLowerCase().includes("unauthorized") || msg.toLowerCase().includes("invalid credentials")) {
+          setError("Google token expired — please sign out and sign back in with Google to refresh access.");
+        } else {
+          setError(msg || "GSC API error — make sure the site is verified in Google Search Console");
+        }
         setLoading(false); return;
       }
 
@@ -147,7 +160,11 @@ export default function GscDashboard({ dark, gscToken }) {
             {loading ? "Loading..." : "Fetch Data"}
           </button>
         </div>
-        {error && <div style={{ fontSize:12, color:"#DC2626", padding:"8px 12px", background:"#DC262611", borderRadius:8 }}>{error}</div>}
+        {error && (
+          <div style={{ fontSize:12, color:"#DC2626", padding:"10px 14px", background:"#DC262611", borderRadius:8, lineHeight:1.7 }}>
+            {error.split("\n").map((line, i) => <div key={i}>{line}</div>)}
+          </div>
+        )}
         <div style={{ fontSize:11, color:txt3 }}>⚠️ Site must be verified in Google Search Console · GSC API must be enabled</div>
       </div>
 
