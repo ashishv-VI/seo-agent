@@ -154,6 +154,7 @@ async function runFullPipeline(clientId, keys, googleToken = null) {
   const { generateReport } = require("./A9_monitoring");
   const { runA10 }         = require("./A10_rankingTracker");
   const { runA12 }         = require("./A12_autoExec");
+  const { runA16 }         = require("./A16_memory");
 
   const mark = async (agentId, status) => {
     await db.collection("clients").doc(clientId).update({ [`agents.${agentId}`]: status });
@@ -297,6 +298,13 @@ async function runFullPipeline(clientId, keys, googleToken = null) {
         await exec("A12", runA12);
         console.log(`[A0] Auto-fix (A12) triggered for ${clientId} — mode: ${autoMode}`);
       }
+    } catch { /* non-blocking */ }
+
+    // ── Stage 8: Initialize/update client AI memory (Level 3) ────────────
+    // Runs after every pipeline so memory is always current
+    try {
+      await runA16(clientId, keys);
+      console.log(`[A0] A16 memory updated for ${clientId}`);
     } catch { /* non-blocking */ }
 
   } catch (err) {

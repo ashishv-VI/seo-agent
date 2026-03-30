@@ -4,6 +4,9 @@ import ApprovalQueue from "./ApprovalQueue";
 import AlertCenter from "./AlertCenter";
 import PrintReport from "./PrintReport";
 import AIChatBot from "../components/AIChatBot";
+import IntegrationsPanel from "../components/IntegrationsPanel";
+import ContentAutopilotPanel from "../components/ContentAutopilotPanel";
+import ROIDashboard from "../components/ROIDashboard";
 
 const ALL_AGENTS = [
   { id:"A1",  label:"Client Brief",       icon:"📋", phase:1 },
@@ -323,6 +326,9 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
         {isComplete("A5") && <div style={s.tab(activeTab==="briefs")} onClick={()=>setActiveTab("briefs")}>📝 Briefs</div>}
         {isComplete("A10") && <div style={s.tab(activeTab==="rankings")} onClick={()=>setActiveTab("rankings")}>📈 Rankings</div>}
         {isComplete("A10") && <div style={s.tab(activeTab==="comparison")} onClick={()=>setActiveTab("comparison")}>📊 Before/After</div>}
+        <div style={s.tab(activeTab==="integrations")} onClick={()=>setActiveTab("integrations")}>🔌 Integrations</div>
+        {isComplete("A3") && <div style={s.tab(activeTab==="autopilot")} onClick={()=>setActiveTab("autopilot")}>📝 Autopilot</div>}
+        {isComplete("A10") && <div style={s.tab(activeTab==="roi")} onClick={()=>setActiveTab("roi")}>💰 ROI</div>}
       </div>
 
       {/* Pipeline Tab */}
@@ -560,6 +566,21 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
       {/* Before/After Rankings Comparison Tab */}
       {activeTab==="comparison" && (
         <RankComparisonView clientId={clientId} dark={dark} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2} getToken={getToken} API={API} />
+      )}
+
+      {/* ── Level 1: WordPress Integration Tab ── */}
+      {activeTab==="integrations" && (
+        <IntegrationsPanel dark={dark} clientId={clientId} getToken={getToken} API={API} />
+      )}
+
+      {/* ── Level 2: Content Autopilot Tab ── */}
+      {activeTab==="autopilot" && (
+        <ContentAutopilotPanel dark={dark} clientId={clientId} getToken={getToken} API={API} />
+      )}
+
+      {/* ── Level 4: ROI Dashboard Tab ── */}
+      {activeTab==="roi" && (
+        <ROIDashboard dark={dark} clientId={clientId} getToken={getToken} API={API} />
       )}
 
       <AIChatBot dark={dark} clientId={clientId} getToken={getToken} API={API} />

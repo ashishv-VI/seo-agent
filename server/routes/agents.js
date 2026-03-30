@@ -1035,4 +1035,186 @@ router.get("/:clientId/content-briefs", verifyToken, async (req, res) => {
   }
 });
 
+// ────────────────────────────────────────────────────
+// LEVEL 2 — ACT: A13 Auto-Push to WordPress
+// ────────────────────────────────────────────────────
+
+// POST: Push all approved fixes to WordPress
+router.post("/:clientId/run-a13", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const { runA13 } = require("../agents/A13_autopush");
+    const keys = await getUserKeys(req.uid);
+    await db.collection("clients").doc(req.params.clientId).update({ "agents.A13": "running" });
+    const result = await runA13(req.params.clientId, keys);
+    await db.collection("clients").doc(req.params.clientId).update({ "agents.A13": result.success ? "complete" : "failed" });
+    return res.json(result);
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
+// POST: Push a single approval item to WordPress
+router.post("/:clientId/approvals/:itemId/push-to-wp", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const { pushSingleFix } = require("../agents/A13_autopush");
+    const result = await pushSingleFix(req.params.clientId, req.params.itemId);
+    return res.json(result);
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
+// ────────────────────────────────────────────────────
+// LEVEL 2 — ACT: A14 Content Autopilot
+// ────────────────────────────────────────────────────
+
+// POST: Run content autopilot — generate articles for keyword gaps
+router.post("/:clientId/run-a14", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const { runA14 } = require("../agents/A14_contentAutopilot");
+    const keys       = await getUserKeys(req.uid);
+    const maxArticles = parseInt(req.body.maxArticles || "3", 10);
+    await db.collection("clients").doc(req.params.clientId).update({ "agents.A14": "running" });
+    const result = await runA14(req.params.clientId, keys, maxArticles);
+    await db.collection("clients").doc(req.params.clientId).update({ "agents.A14": result.success ? "complete" : "failed" });
+    return res.json(result);
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
+// GET: Get content drafts for a client
+router.get("/:clientId/content-drafts", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const { getContentDrafts } = require("../agents/A14_contentAutopilot");
+    const drafts = await getContentDrafts(req.params.clientId);
+    return res.json({ drafts, total: drafts.length });
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
+// POST: Mark a content draft as published
+router.post("/:clientId/content-drafts/:draftId/publish", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const { markDraftPublished } = require("../agents/A14_contentAutopilot");
+    await markDraftPublished(req.params.draftId, req.body.wpPostId || null);
+    return res.json({ message: "Draft marked as published" });
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
+// ────────────────────────────────────────────────────
+// LEVEL 3 — LEARN: A15 Competitor Monitor
+// ────────────────────────────────────────────────────
+
+// POST: Run competitor monitoring
+router.post("/:clientId/run-a15", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const { runA15 } = require("../agents/A15_competitorMonitor");
+    const keys = await getUserKeys(req.uid);
+    await db.collection("clients").doc(req.params.clientId).update({ "agents.A15": "running" });
+    const result = await runA15(req.params.clientId, keys);
+    await db.collection("clients").doc(req.params.clientId).update({ "agents.A15": result.success ? "complete" : "failed" });
+    return res.json(result);
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
+// ────────────────────────────────────────────────────
+// LEVEL 3 — LEARN: A16 Client Memory
+// ────────────────────────────────────────────────────
+
+// POST: Run memory update
+router.post("/:clientId/run-a16", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const { runA16 } = require("../agents/A16_memory");
+    const keys = await getUserKeys(req.uid);
+    const result = await runA16(req.params.clientId, keys);
+    return res.json(result);
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
+// GET: Get client memory
+router.get("/:clientId/memory", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const { getMemory } = require("../utils/memory");
+    const memory = await getMemory(req.params.clientId);
+    return res.json({ memory });
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
+// ────────────────────────────────────────────────────
+// LEVEL 4 — ROI: ROI Tracker
+// ────────────────────────────────────────────────────
+
+// GET: Get full ROI report for a client
+router.get("/:clientId/roi", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const { calculateROI, saveROISnapshot } = require("../utils/roiTracker");
+    const roi = await calculateROI(req.params.clientId);
+    // Save snapshot for history (fire-and-forget)
+    saveROISnapshot(req.params.clientId, roi).catch(() => {});
+    return res.json({ roi });
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
+// GET: Get ROI history snapshots
+router.get("/:clientId/roi/history", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const { getROIHistory } = require("../utils/roiTracker");
+    const history = await getROIHistory(req.params.clientId);
+    return res.json({ history });
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
+// PUT: Update ROI revenue settings (conversion rate, avg order value)
+router.put("/:clientId/roi/settings", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const { updateROISettings } = require("../utils/roiTracker");
+    await updateROISettings(req.params.clientId, req.body);
+    return res.json({ message: "ROI settings updated" });
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
+// GET: Get wp_push_log for client (all pushes made to WordPress)
+router.get("/:clientId/wp-push-log", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const snap = await db.collection("wp_push_log")
+      .where("clientId", "==", req.params.clientId)
+      .get();
+    const logs = snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => new Date(b.pushedAt || 0) - new Date(a.pushedAt || 0))
+      .slice(0, 50);
+    return res.json({ logs, total: logs.length });
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
 module.exports = router;

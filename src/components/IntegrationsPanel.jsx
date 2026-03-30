@@ -1,0 +1,326 @@
+/**
+ * IntegrationsPanel — Level 1 (Connect)
+ *
+ * WordPress connection UI embedded inside AgentPipeline.
+ * Allows agency to connect a client's WordPress site via Application Password.
+ * Shows connection status, site info, page/post count, and Yoast status.
+ */
+import { useState, useEffect } from "react";
+
+const B = "#443DCB";
+
+export default function IntegrationsPanel({ dark, clientId, getToken, API }) {
+  const [wpStatus,    setWpStatus]    = useState(null);   // null | object
+  const [loading,     setLoading]     = useState(true);
+  const [testing,     setTesting]     = useState(false);
+  const [connecting,  setConnecting]  = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
+  const [showForm,    setShowForm]    = useState(false);
+  const [wpPages,     setWpPages]     = useState(null);
+  const [loadingPages,setLoadingPages]= useState(false);
+  const [error,       setError]       = useState("");
+  const [success,     setSuccess]     = useState("");
+
+  const [form, setForm] = useState({ url: "", username: "", appPassword: "" });
+
+  const bg2  = dark ? "#111"    : "#ffffff";
+  const bg3  = dark ? "#1a1a1a" : "#f0f0ea";
+  const bdr  = dark ? "#2a2a2a" : "#e0e0d8";
+  const txt  = dark ? "#e8e8e8" : "#1a1a18";
+  const txt2 = dark ? "#777"    : "#888";
+
+  useEffect(() => { loadStatus(); }, [clientId]);
+
+  async function loadStatus() {
+    setLoading(true);
+    try {
+      const token = await getToken();
+      const res   = await fetch(`${API}/api/integrations/${clientId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      setWpStatus(data.wordpress || null);
+    } catch { setWpStatus(null); }
+    setLoading(false);
+  }
+
+  async function connect(e) {
+    e.preventDefault();
+    setConnecting(true); setError(""); setSuccess("");
+    try {
+      const token = await getToken();
+      const res   = await fetch(`${API}/api/integrations/${clientId}/wordpress/connect`, {
+        method:  "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body:    JSON.stringify(form),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Connection failed");
+      setSuccess(`Connected to ${data.siteInfo?.siteName || form.url} — ${data.pageCount} pages, ${data.postCount} posts`);
+      setShowForm(false);
+      setForm({ url: "", username: "", appPassword: "" });
+      await loadStatus();
+    } catch (e) { setError(e.message); }
+    setConnecting(false);
+  }
+
+  async function testConnection() {
+    setTesting(true); setError(""); setSuccess("");
+    try {
+      const token = await getToken();
+      const res   = await fetch(`${API}/api/integrations/${clientId}/wordpress/test`, {
+        method: "POST", headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Test failed");
+      setSuccess("Connection is healthy");
+      await loadStatus();
+    } catch (e) { setError(e.message); }
+    setTesting(false);
+  }
+
+  async function disconnect() {
+    if (!confirm("Disconnect WordPress? Credentials will be removed.")) return;
+    setDisconnecting(true);
+    try {
+      const token = await getToken();
+      const res   = await fetch(`${API}/api/integrations/${clientId}/wordpress`, {
+        method: "DELETE", headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error("Disconnect failed");
+      setWpStatus(null);
+      setWpPages(null);
+      setSuccess("WordPress disconnected");
+    } catch (e) { setError(e.message); }
+    setDisconnecting(false);
+  }
+
+  async function loadPages() {
+    setLoadingPages(true); setError("");
+    try {
+      const token = await getToken();
+      const res   = await fetch(`${API}/api/integrations/${clientId}/wordpress/pages`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setWpPages(data.pages || []);
+    } catch (e) { setError(e.message); }
+    setLoadingPages(false);
+  }
+
+  if (loading) return (
+    <div style={{ padding:24, textAlign:"center", color:txt2, fontSize:13 }}>Loading integrations…</div>
+  );
+
+  return (
+    <div>
+      {error   && <div style={{ padding:"10px 14px", borderRadius:8, background:"#DC262611", color:"#DC2626", fontSize:12, marginBottom:14 }}>{error}<button onClick={()=>setError("")} style={{ marginLeft:8, background:"none", border:"none", color:"#DC2626", cursor:"pointer" }}>×</button></div>}
+      {success && <div style={{ padding:"10px 14px", borderRadius:8, background:"#05966911", color:"#059669", fontSize:12, marginBottom:14 }}>{success}<button onClick={()=>setSuccess("")} style={{ marginLeft:8, background:"none", border:"none", color:"#059669", cursor:"pointer" }}>×</button></div>}
+
+      {/* ── WordPress Integration Card ── */}
+      <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:14, overflow:"hidden", marginBottom:20 }}>
+
+        {/* Header */}
+        <div style={{ padding:"16px 20px", borderBottom:`1px solid ${bdr}`, display:"flex", alignItems:"center", gap:12 }}>
+          <div style={{ width:36, height:36, background:"#21759B", borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center", fontSize:20 }}>W</div>
+          <div style={{ flex:1 }}>
+            <div style={{ fontSize:15, fontWeight:700, color:txt }}>WordPress</div>
+            <div style={{ fontSize:12, color:txt2 }}>Direct site integration via REST API + Application Password</div>
+          </div>
+          {wpStatus?.connected
+            ? <div style={{ display:"flex", alignItems:"center", gap:6, padding:"5px 12px", borderRadius:20, background:"#05966915", border:"1px solid #05966940" }}>
+                <div style={{ width:7, height:7, borderRadius:"50%", background:"#059669" }}/>
+                <span style={{ fontSize:12, fontWeight:600, color:"#059669" }}>Connected</span>
+              </div>
+            : <div style={{ padding:"5px 12px", borderRadius:20, background:bg3, border:`1px solid ${bdr}`, fontSize:12, color:txt2 }}>Not connected</div>
+          }
+        </div>
+
+        {/* Connected state */}
+        {wpStatus?.connected ? (
+          <div style={{ padding:"18px 20px" }}>
+            {/* Site info grid */}
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))", gap:10, marginBottom:18 }}>
+              {[
+                { label:"Site", value: wpStatus.siteInfo?.name || "—" },
+                { label:"WP Version", value: wpStatus.siteInfo?.wpVersion || "—" },
+                { label:"Connected as", value: wpStatus.siteInfo?.userName || "—" },
+                { label:"Pages", value: wpStatus.pageCount || "—" },
+                { label:"Posts", value: wpStatus.postCount || "—" },
+                { label:"Yoast SEO", value: wpStatus.hasYoast ? "✓ Active" : "✗ Not found" },
+              ].map(item => (
+                <div key={item.label} style={{ background:bg3, borderRadius:8, padding:"10px 12px" }}>
+                  <div style={{ fontSize:10, color:txt2, marginBottom:2 }}>{item.label}</div>
+                  <div style={{ fontSize:13, fontWeight:600, color: item.label === "Yoast SEO" ? (wpStatus.hasYoast ? "#059669" : txt2) : txt }}>{item.value}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Yoast warning */}
+            {!wpStatus.hasYoast && (
+              <div style={{ padding:"10px 14px", borderRadius:8, background:"#D9770611", border:"1px solid #D9770633", fontSize:12, color:"#D97706", marginBottom:14 }}>
+                <strong>Yoast SEO not detected</strong> — Install Yoast SEO plugin for meta description and SEO title auto-push to work.
+              </div>
+            )}
+
+            {/* Credential info */}
+            <div style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 12px", background:bg3, borderRadius:8, fontSize:12, color:txt2, marginBottom:16 }}>
+              <span>🔐</span>
+              <span>{wpStatus.url}</span>
+              <span style={{ color:bdr }}>·</span>
+              <span>Password: {wpStatus.appPasswordMasked}</span>
+              {wpStatus.lastSynced && <><span style={{ color:bdr }}>·</span><span>Last synced: {new Date(wpStatus.lastSynced).toLocaleDateString()}</span></>}
+            </div>
+
+            {/* Action buttons */}
+            <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+              <button onClick={testConnection} disabled={testing}
+                style={{ padding:"8px 16px", borderRadius:8, border:`1px solid ${B}`, background:"transparent", color:B, fontSize:12, cursor:"pointer", fontWeight:600 }}>
+                {testing ? "Testing…" : "Test Connection"}
+              </button>
+              <button onClick={loadPages} disabled={loadingPages}
+                style={{ padding:"8px 16px", borderRadius:8, border:`1px solid ${bdr}`, background:bg3, color:txt, fontSize:12, cursor:"pointer" }}>
+                {loadingPages ? "Loading…" : `View All Pages (${wpStatus.pageCount || 0})`}
+              </button>
+              <button onClick={() => setShowForm(true)}
+                style={{ padding:"8px 16px", borderRadius:8, border:`1px solid ${bdr}`, background:bg3, color:txt, fontSize:12, cursor:"pointer" }}>
+                Update Credentials
+              </button>
+              <button onClick={disconnect} disabled={disconnecting}
+                style={{ padding:"8px 16px", borderRadius:8, border:"1px solid #DC2626", background:"transparent", color:"#DC2626", fontSize:12, cursor:"pointer" }}>
+                {disconnecting ? "Disconnecting…" : "Disconnect"}
+              </button>
+            </div>
+
+            {/* Pages list */}
+            {wpPages && (
+              <div style={{ marginTop:16 }}>
+                <div style={{ fontSize:13, fontWeight:700, color:txt, marginBottom:10 }}>
+                  Pages ({wpPages.length})
+                </div>
+                <div style={{ maxHeight:300, overflowY:"auto", display:"flex", flexDirection:"column", gap:6 }}>
+                  {wpPages.map(page => (
+                    <div key={page.id} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 12px", background:bg3, borderRadius:8 }}>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ fontSize:12, fontWeight:600, color:txt, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{page.title}</div>
+                        <div style={{ fontSize:11, color:txt2 }}>{page.slug}</div>
+                      </div>
+                      <div style={{ display:"flex", gap:5, flexShrink:0 }}>
+                        {page.seoTitle
+                          ? <span style={{ fontSize:10, padding:"2px 6px", borderRadius:4, background:"#05966915", color:"#059669" }}>SEO Title ✓</span>
+                          : <span style={{ fontSize:10, padding:"2px 6px", borderRadius:4, background:"#DC262615", color:"#DC2626" }}>No SEO Title</span>
+                        }
+                        {page.metaDescription
+                          ? <span style={{ fontSize:10, padding:"2px 6px", borderRadius:4, background:"#05966915", color:"#059669" }}>Meta ✓</span>
+                          : <span style={{ fontSize:10, padding:"2px 6px", borderRadius:4, background:"#D9770615", color:"#D97706" }}>No Meta</span>
+                        }
+                        {page.hasSchema && <span style={{ fontSize:10, padding:"2px 6px", borderRadius:4, background:"#2563EB15", color:"#2563EB" }}>Schema ✓</span>}
+                      </div>
+                      <a href={page.url} target="_blank" rel="noreferrer"
+                        style={{ fontSize:11, color:B, textDecoration:"none" }}>↗</a>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div style={{ padding:"20px", textAlign:"center" }}>
+            <div style={{ fontSize:32, marginBottom:10 }}>🔌</div>
+            <div style={{ fontSize:14, fontWeight:600, color:txt, marginBottom:6 }}>Connect WordPress</div>
+            <div style={{ fontSize:12, color:txt2, marginBottom:18, maxWidth:380, margin:"0 auto 18px" }}>
+              Connect this client's WordPress site to enable AI auto-push fixes directly to live pages — title tags, meta descriptions, schema markup, and more.
+            </div>
+            <button onClick={() => setShowForm(true)}
+              style={{ padding:"10px 24px", borderRadius:10, border:"none", background:B, color:"#fff", fontWeight:700, fontSize:13, cursor:"pointer" }}>
+              Connect WordPress
+            </button>
+          </div>
+        )}
+
+        {/* Connection Form */}
+        {showForm && (
+          <div style={{ padding:"18px 20px", borderTop:`1px solid ${bdr}`, background:bg3 }}>
+            <div style={{ fontSize:14, fontWeight:700, color:txt, marginBottom:14 }}>WordPress Connection Details</div>
+
+            <div style={{ padding:"12px 14px", borderRadius:8, background: dark?"#1a1a00":"#fffbeb", border:"1px solid #D9770633", fontSize:12, color:"#D97706", marginBottom:16 }}>
+              <strong>How to get Application Password:</strong><br/>
+              WP Admin → Users → Your Profile → scroll to <em>Application Passwords</em> → type "SEO Agent" → click Add New → copy the password shown.
+            </div>
+
+            <form onSubmit={connect}>
+              <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+                <div>
+                  <label style={{ fontSize:11, color:txt2, display:"block", marginBottom:4 }}>WordPress Site URL</label>
+                  <input
+                    type="url"
+                    placeholder="https://example.com"
+                    value={form.url}
+                    onChange={e => setForm(f => ({ ...f, url: e.target.value }))}
+                    required
+                    style={{ width:"100%", padding:"9px 12px", borderRadius:8, border:`1px solid ${bdr}`, background:bg2, color:txt, fontSize:13, outline:"none", boxSizing:"border-box" }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize:11, color:txt2, display:"block", marginBottom:4 }}>WordPress Username</label>
+                  <input
+                    type="text"
+                    placeholder="admin"
+                    value={form.username}
+                    onChange={e => setForm(f => ({ ...f, username: e.target.value }))}
+                    required
+                    style={{ width:"100%", padding:"9px 12px", borderRadius:8, border:`1px solid ${bdr}`, background:bg2, color:txt, fontSize:13, outline:"none", boxSizing:"border-box" }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize:11, color:txt2, display:"block", marginBottom:4 }}>Application Password</label>
+                  <input
+                    type="password"
+                    placeholder="xxxx xxxx xxxx xxxx xxxx xxxx"
+                    value={form.appPassword}
+                    onChange={e => setForm(f => ({ ...f, appPassword: e.target.value }))}
+                    required
+                    style={{ width:"100%", padding:"9px 12px", borderRadius:8, border:`1px solid ${bdr}`, background:bg2, color:txt, fontSize:13, outline:"none", boxSizing:"border-box", fontFamily:"monospace" }}
+                  />
+                  <div style={{ fontSize:11, color:txt2, marginTop:4 }}>Use Application Password, NOT your WordPress login password.</div>
+                </div>
+                <div style={{ display:"flex", gap:8 }}>
+                  <button type="submit" disabled={connecting}
+                    style={{ flex:1, padding:"10px 0", borderRadius:8, border:"none", background:B, color:"#fff", fontWeight:700, fontSize:13, cursor:"pointer" }}>
+                    {connecting ? "Connecting…" : "Test & Connect"}
+                  </button>
+                  <button type="button" onClick={() => { setShowForm(false); setError(""); }}
+                    style={{ padding:"10px 18px", borderRadius:8, border:`1px solid ${bdr}`, background:"transparent", color:txt2, fontSize:13, cursor:"pointer" }}>
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        )}
+      </div>
+
+      {/* ── How Auto-Push Works ── */}
+      <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:14, padding:"18px 20px" }}>
+        <div style={{ fontSize:14, fontWeight:700, color:txt, marginBottom:12 }}>How Auto-Push Works</div>
+        <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+          {[
+            { step:"1", icon:"🤖", title:"AI analyzes your site", desc:"The pipeline runs and detects SEO issues (missing titles, bad meta, schema gaps)" },
+            { step:"2", icon:"✏️", title:"AI generates the fix", desc:"A12 auto-generates the exact text — ready-to-use title tags, meta descriptions, JSON-LD schema" },
+            { step:"3", icon:"✅", title:"You approve", desc:"Fixes appear in the Approvals tab. Review and click Approve for each one you're happy with" },
+            { step:"4", icon:"🚀", title:"Auto-push to WordPress", desc:"Click 'Push to WordPress' and the fix goes live on your site instantly via REST API — no manual editing" },
+          ].map(item => (
+            <div key={item.step} style={{ display:"flex", gap:12, alignItems:"flex-start" }}>
+              <div style={{ width:28, height:28, borderRadius:"50%", background:`${B}20`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:14, flexShrink:0 }}>{item.icon}</div>
+              <div>
+                <div style={{ fontSize:13, fontWeight:600, color:txt }}>{item.title}</div>
+                <div style={{ fontSize:12, color:txt2, lineHeight:1.5 }}>{item.desc}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}

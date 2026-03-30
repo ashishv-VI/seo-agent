@@ -9,8 +9,9 @@ const clientsRoutes = require("./routes/clients");
 const agentsRoutes  = require("./routes/agents");
 const chatRoutes    = require("./routes/chat");
 const rankTrackerRoutes = require("./routes/rank-tracker");
-const adminRoutes   = require("./routes/admin");
-const portalRoutes  = require("./routes/portal");
+const adminRoutes        = require("./routes/admin");
+const portalRoutes       = require("./routes/portal");
+const integrationsRoutes = require("./routes/integrations");
 
 const app  = express();
 const PORT = process.env.PORT || 5000;
@@ -69,8 +70,9 @@ app.use("/api/clients", clientsRoutes);
 app.use("/api/agents",  agentsRoutes);
 app.use("/api/chat",   chatRoutes);
 app.use("/api/rank-tracker", rankTrackerRoutes);
-app.use("/api/admin",  adminRoutes);
-app.use("/api/portal", portalRoutes);
+app.use("/api/admin",        adminRoutes);
+app.use("/api/portal",       portalRoutes);
+app.use("/api/integrations", integrationsRoutes);
 
 // ── Daily alert monitoring ─────────────────────────
 // Runs A9.checkAlerts for every active client — detects new technical issues,
@@ -81,23 +83,48 @@ setInterval(async () => {
     for (const doc of snap.docs) {
       const data = doc.data();
       try {
-        const { getUserKeys } = require("./utils/getUserKeys");
-        const { checkAlerts } = require("./agents/A9_monitoring");
+        const { getUserKeys }  = require("./utils/getUserKeys");
+        const { checkAlerts }  = require("./agents/A9_monitoring");
+        const { runA15 }       = require("./agents/A15_competitorMonitor");
+        const { runA16 }       = require("./agents/A16_memory");
         const keys = await getUserKeys(data.ownerId).catch(() => null);
         if (!keys) continue;
-        const result = await checkAlerts(doc.id, keys);
-        if (result?.alertsCreated > 0) {
-          console.log(`[daily-monitor] ${result.alertsCreated} new alert(s) for ${data.name}`);
+
+        // A9: check for new technical SEO alerts
+        const alertResult = await checkAlerts(doc.id, keys);
+        if (alertResult?.alertsCreated > 0) {
+          console.log(`[daily-monitor] ${alertResult.alertsCreated} new alert(s) for ${data.name}`);
           await db.collection("notifications").add({
             clientId:  doc.id,
             ownerId:   data.ownerId,
             type:      "new_alerts",
-            count:     result.alertsCreated,
-            message:   `${result.alertsCreated} new SEO issue(s) detected for ${data.name}`,
+            count:     alertResult.alertsCreated,
+            message:   `${alertResult.alertsCreated} new SEO issue(s) detected for ${data.name}`,
             read:      false,
             createdAt: new Date().toISOString(),
           }).catch(() => {});
         }
+
+        // A15: competitor monitoring — detect new competitor content
+        try {
+          const compResult = await runA15(doc.id, keys);
+          if (compResult?.alertsCreated > 0) {
+            console.log(`[daily-monitor] A15: ${compResult.alertsCreated} competitor alert(s) for ${data.name}`);
+            await db.collection("notifications").add({
+              clientId:  doc.id,
+              ownerId:   data.ownerId,
+              type:      "competitor_activity",
+              count:     compResult.alertsCreated,
+              message:   `Competitor published new content — counter-content opportunities detected for ${data.name}`,
+              read:      false,
+              createdAt: new Date().toISOString(),
+            }).catch(() => {});
+          }
+        } catch { /* non-blocking */ }
+
+        // A16: update client AI memory after daily check
+        runA16(doc.id, keys).catch(() => {});
+
       } catch { /* skip client on error */ }
     }
   } catch (err) {
