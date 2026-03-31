@@ -589,11 +589,11 @@ function parseOnPage(html, pageUrl) {
   };
 
   // Emit tasks to task queue (non-blocking — won't break audit if this fails)
-  await Promise.allSettled([
+  Promise.allSettled([
     emitTasks(clientId, issues.p1, "p1", "A2"),
     emitTasks(clientId, issues.p2, "p2", "A2"),
     emitTasks(clientId, issues.p3, "p3", "A2"),
-  ]);
+  ]).catch(() => {});
 
   return { checks, issues };
 }
