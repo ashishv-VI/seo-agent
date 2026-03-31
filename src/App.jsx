@@ -83,8 +83,8 @@ function MainApp({ onLogout }) {
   const [showSettings, setShowSettings] = useState(false);
   const [count, setCount]     = useState(0);
   const [dark, setDark]       = useState(true);
-  const [keys, setKeys]       = useState({ groq:"", gemini:"", google:"", openrouter:"", gaPropertyId:"", seranking:"", serpapi:"" });
-  const [tmpKeys, setTmpKeys] = useState({ groq:"", gemini:"", google:"", openrouter:"", gaPropertyId:"", seranking:"", serpapi:"" });
+  const [keys, setKeys]       = useState({ groq:"", gemini:"", google:"", openrouter:"", gaPropertyId:"", seranking:"", serpapi:"", semrush:"", dataforseo:"" });
+  const [tmpKeys, setTmpKeys] = useState({ groq:"", gemini:"", google:"", openrouter:"", gaPropertyId:"", seranking:"", serpapi:"", semrush:"", dataforseo:"" });
   const [copied, setCopied]   = useState(null);
   const [bulkInput, setBulkInput]     = useState("");
   const [bulkResults, setBulkResults] = useState([]);
@@ -112,8 +112,10 @@ function MainApp({ onLogout }) {
       const k    = data.keys || {};
       setTmpKeys(prev => ({
         ...prev,
-        seranking: k.seranking ? "••••••••" : "",
-        serpapi:   k.serpapi   ? "••••••••" : "",
+        seranking:  k.seranking  ? "••••••••" : "",
+        serpapi:    k.serpapi    ? "••••••••" : "",
+        semrush:    k.semrush    ? "••••••••" : "",
+        dataforseo: k.dataforseo ? "••••••••" : "",
       }));
     } catch { /* silent */ }
   }
@@ -152,8 +154,10 @@ function MainApp({ onLogout }) {
     try {
       const token   = await user.getIdToken();
       const payload = {};
-      if (tmpKeys.seranking && tmpKeys.seranking !== "••••••••") payload.seranking = tmpKeys.seranking;
-      if (tmpKeys.serpapi   && tmpKeys.serpapi   !== "••••••••") payload.serpapi   = tmpKeys.serpapi;
+      if (tmpKeys.seranking  && tmpKeys.seranking  !== "••••••••") payload.seranking  = tmpKeys.seranking;
+      if (tmpKeys.serpapi    && tmpKeys.serpapi    !== "••••••••") payload.serpapi    = tmpKeys.serpapi;
+      if (tmpKeys.semrush    && tmpKeys.semrush    !== "••••••••") payload.semrush    = tmpKeys.semrush;
+      if (tmpKeys.dataforseo && tmpKeys.dataforseo !== "••••••••") payload.dataforseo = tmpKeys.dataforseo;
       if (Object.keys(payload).length > 0) {
         await fetch("https://seo-agent-backend-8m1z.onrender.com/api/keys/save", {
           method:  "POST",
@@ -645,8 +649,12 @@ function MainApp({ onLogout }) {
             </div>
             <label style={s.label}>SerpAPI Key — Live rank checking (100 free/month · serpapi.com)</label>
             <input type="password" value={tmpKeys.serpapi} onChange={e=>setTmpKeys(k=>({...k,serpapi:e.target.value}))} placeholder="Paste your SerpAPI key" style={s.inp} />
-            <label style={s.label}>SE Ranking API Key — Keyword volume + difficulty (seranking.com)</label>
+            <label style={s.label}>SE Ranking API Key — Keyword metrics: volume, KD, CPC (seranking.com)</label>
             <input type="password" value={tmpKeys.seranking} onChange={e=>setTmpKeys(k=>({...k,seranking:e.target.value}))} placeholder="Paste your SE Ranking API key" style={s.inp} />
+            <label style={s.label}>Semrush API Key — Keyword research + competitor analysis (semrush.com)</label>
+            <input type="password" value={tmpKeys.semrush} onChange={e=>setTmpKeys(k=>({...k,semrush:e.target.value}))} placeholder="Paste your Semrush API key" style={s.inp} />
+            <label style={s.label}>DataForSEO — login:password (bulk SERP · ~$0.001/keyword · dataforseo.com)</label>
+            <input type="text" value={tmpKeys.dataforseo} onChange={e=>setTmpKeys(k=>({...k,dataforseo:e.target.value}))} placeholder="yourlogin@email.com:password" style={s.inp} />
             <div style={{ borderTop:`1px solid ${dark?"#222":"#e5e5e5"}`, margin:"16px 0 12px", paddingTop:12 }}>
               <div style={{ fontSize:12, fontWeight:700, color:txt, marginBottom:6 }}>📧 Email Notifications</div>
               <div style={{ fontSize:11, color:txt2, marginBottom:8, lineHeight:1.5 }}>Set these in <strong>Render Environment Variables</strong>. Pipeline complete + ranking drop alerts will be emailed automatically.</div>

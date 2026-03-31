@@ -11,6 +11,7 @@ async function getUserKeys(uid) {
     serp:         userKeys.serp         || userKeys.serpapi || process.env.SERP_API_KEY || null,
     seranking:    userKeys.seranking    || process.env.SERANKING_API_KEY  || null,
     dataforseo:   userKeys.dataforseo   || process.env.DATAFORSEO_KEY     || null,
+    semrush:      userKeys.semrush      || process.env.SEMRUSH_API_KEY    || null,
     google:       userKeys.google       || process.env.GOOGLE_API_KEY     || null,
     gaPropertyId: userKeys.gaPropertyId || process.env.GA_PROPERTY_ID    || null,
   };
