@@ -37,6 +37,19 @@ async function getClientDoc(clientId, uid) {
   return doc;
 }
 
+// ── GET: Debug — shows exact redirect URI being used (temporary) ─────────────
+router.get("/debug-config", (req, res) => {
+  const backendUrl = (process.env.BACKEND_URL || "https://seo-agent-backend-8m1z.onrender.com").replace(/\/+$/, "");
+  res.json({
+    backendUrl,
+    redirectUri:      backendUrl + "/api/gsc/oauth/callback",
+    ga4RedirectUri:   backendUrl + "/api/ga4/oauth/callback",
+    googleClientId:   process.env.GOOGLE_CLIENT_ID ? process.env.GOOGLE_CLIENT_ID.slice(0, 20) + "..." : "NOT SET",
+    googleSecret:     process.env.GOOGLE_CLIENT_SECRET ? "SET ✓" : "NOT SET",
+    backendUrlEnvVar: process.env.BACKEND_URL || "(using hardcoded default)",
+  });
+});
+
 // ── GET: Generate OAuth URL for connecting a client's Search Console ────────
 // Call from frontend: GET /api/gsc/auth-url/:clientId
 router.get("/auth-url/:clientId", verifyToken, async (req, res) => {
