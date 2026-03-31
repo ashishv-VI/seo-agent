@@ -10,6 +10,7 @@ async function getUserKeys(uid) {
     gemini:       userKeys.gemini       || process.env.GEMINI_API_KEY     || null,
     serp:         userKeys.serp         || process.env.SERP_API_KEY       || null,
     seranking:    userKeys.seranking    || process.env.SERANKING_API_KEY  || null,
+    dataforseo:   userKeys.dataforseo   || process.env.DATAFORSEO_KEY     || null,
     google:       userKeys.google       || process.env.GOOGLE_API_KEY     || null,
     gaPropertyId: userKeys.gaPropertyId || process.env.GA_PROPERTY_ID    || null,
   };

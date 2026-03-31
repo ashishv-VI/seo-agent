@@ -7,6 +7,7 @@ const { db }   = require("../config/firebase");
 const { verifyToken }   = require("../middleware/auth");
 const { getUserKeys }   = require("../utils/getUserKeys");
 const { getDomainKeywords, getKeywordMetrics, checkBulkPositions } = require("../utils/seranking");
+const { checkBulkPositionsDFS, verifyDFSCredentials }              = require("../utils/dataforseo");
 const { getState }      = require("../shared-state/stateManager");
 
 // ── DEBUG: Test SE Ranking API endpoints (temporary) ─────────────────────────
@@ -285,8 +286,8 @@ router.delete("/:clientId/tracked-keywords", verifyToken, async (req, res) => {
   }
 });
 
-// POST — check positions for ALL tracked keywords (grouped by country)
-// This is the main "refresh rankings" endpoint
+// POST — check positions for ALL tracked keywords
+// Uses DataForSEO (preferred) or SE Ranking Research API fallback
 router.post("/:clientId/check-positions", verifyToken, async (req, res) => {
   try {
     const doc    = await getClientDoc(req.params.clientId, req.uid);
@@ -294,8 +295,10 @@ router.post("/:clientId/check-positions", verifyToken, async (req, res) => {
     const brief  = await getState(req.params.clientId, "A1_brief") || {};
     const domain = brief.websiteUrl || doc.data().website || "";
 
-    if (!keys.seranking) {
-      return res.status(400).json({ error: "SE Ranking API key not configured. Add it in Settings." });
+    if (!keys.dataforseo && !keys.seranking) {
+      return res.status(400).json({
+        error: "No rank checking API configured. Add a DataForSEO key (login:password) in Rank Tracker settings for live position checks.",
+      });
     }
     if (!domain) {
       return res.status(400).json({ error: "No website URL found for this client" });
@@ -307,7 +310,7 @@ router.post("/:clientId/check-positions", verifyToken, async (req, res) => {
 
     const kwDocs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
 
-    // Group keywords by country for efficient batching (1 API call per country)
+    // Group keywords by country
     const byCountry = {};
     for (const kw of kwDocs) {
       const country = kw.location?.country || "US";
@@ -315,34 +318,39 @@ router.post("/:clientId/check-positions", verifyToken, async (req, res) => {
       byCountry[country].push(kw);
     }
 
-    const now   = new Date().toISOString();
-    const today = now.split("T")[0];
+    const now    = new Date().toISOString();
+    const today  = now.split("T")[0];
     let   checked = 0;
     const batch   = db.batch();
+    const useDataForSEO = !!keys.dataforseo;
 
     for (const [country, kwGroup] of Object.entries(byCountry)) {
       const keywordStrings = kwGroup.map(k => k.keyword);
-      const positions      = await checkBulkPositions(domain, keywordStrings, keys.seranking, country);
+      let   positions      = {};
+
+      if (useDataForSEO) {
+        // ── DataForSEO: live Google SERP — works for any domain/keyword ──────
+        positions = await checkBulkPositionsDFS(domain, keywordStrings, keys.dataforseo, country);
+      } else {
+        // ── SE Ranking fallback: Research DB — may not have small domains ────
+        positions = await checkBulkPositions(domain, keywordStrings, keys.seranking, country);
+      }
 
       for (const kw of kwGroup) {
-        const key      = kw.keyword.toLowerCase();
-        const result   = positions[key] || { position: null, url: null, volume: 0, difficulty: 0 };
-        const prevPos  = kw.currentPosition;
-        const newPos   = result.position;
-        const change   = (prevPos !== null && newPos !== null) ? prevPos - newPos : null; // positive = improved
+        const key     = kw.keyword.toLowerCase();
+        const result  = positions[key] || { position: null, url: null };
+        const prevPos = kw.currentPosition;
+        const newPos  = result.position;
+        const change  = (prevPos !== null && newPos !== null) ? prevPos - newPos : null;
 
-        // Append to history (keep last 90 entries)
-        const history  = (kw.history || []).slice(-89);
-        history.push({ date: today, position: newPos, url: result.url });
+        const history = (kw.history || []).slice(-89);
+        history.push({ date: today, position: newPos, url: result.url || null });
 
-        const ref = kwCol.doc(kw.id);
-        batch.update(ref, {
+        batch.update(kwCol.doc(kw.id), {
           currentPosition:  newPos,
           previousPosition: prevPos,
           change,
           rankingUrl:       result.url || null,
-          volume:           result.volume     || kw.volume     || 0,
-          difficulty:       result.difficulty || kw.difficulty || 0,
           lastChecked:      now,
           history,
         });
@@ -352,24 +360,45 @@ router.post("/:clientId/check-positions", verifyToken, async (req, res) => {
 
     await batch.commit();
 
-    // Enrich with keyword metrics (volume/difficulty) for any that are missing
-    const allKws = kwDocs.map(k => k.keyword);
-    const primaryCountry = kwDocs[0]?.location?.country || "US";
-    try {
-      const metrics = await getKeywordMetrics(allKws.slice(0, 100), keys.seranking, primaryCountry);
-      const metricBatch = db.batch();
-      for (const kw of kwDocs) {
-        const m = metrics[kw.keyword.toLowerCase()];
-        if (m && (!kw.volume || kw.volume === 0)) {
-          metricBatch.update(kwCol.doc(kw.id), { volume: m.volume, difficulty: m.difficulty, cpc: m.cpc });
+    // Enrich volume/difficulty via SE Ranking keyword metrics (non-blocking)
+    if (keys.seranking) {
+      const allKws         = kwDocs.map(k => k.keyword);
+      const primaryCountry = kwDocs[0]?.location?.country || "US";
+      try {
+        const metrics     = await getKeywordMetrics(allKws.slice(0, 100), keys.seranking, primaryCountry);
+        const metricBatch = db.batch();
+        for (const kw of kwDocs) {
+          const m = metrics[kw.keyword.toLowerCase()];
+          if (m && (!kw.volume || kw.volume === 0)) {
+            metricBatch.update(kwCol.doc(kw.id), { volume: m.volume || 0, difficulty: m.difficulty || 0, cpc: m.cpc || 0 });
+          }
         }
-      }
-      await metricBatch.commit();
-    } catch { /* non-blocking */ }
+        await metricBatch.commit();
+      } catch { /* non-blocking */ }
+    }
 
-    return res.json({ success: true, checked, domain, countries: Object.keys(byCountry) });
+    return res.json({
+      success: true,
+      checked,
+      domain,
+      engine:    useDataForSEO ? "dataforseo" : "seranking",
+      countries: Object.keys(byCountry),
+    });
   } catch (e) {
     return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
+// POST — verify DataForSEO credentials and check balance
+router.post("/:clientId/verify-dataforseo", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const { auth } = req.body;
+    if (!auth) return res.status(400).json({ error: "auth (login:password) required" });
+    const result = await verifyDFSCredentials(auth);
+    return res.json(result);
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
   }
 });
 
