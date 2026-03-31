@@ -334,6 +334,7 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
         {isComplete("A10") && <div style={s.tab(activeTab==="roi")} onClick={()=>setActiveTab("roi")}>💰 ROI</div>}
         <div style={s.tab(activeTab==="analytics")} onClick={()=>setActiveTab("analytics")}>📊 Analytics</div>
         <div style={s.tab(activeTab==="tracking")} onClick={()=>setActiveTab("tracking")}>🔍 Tracking</div>
+        <div style={{...s.tab(activeTab==="gsckeys"), background:activeTab==="gsckeys"?"#0891B2":"transparent", color:activeTab==="gsckeys"?"#fff":txt2, border:`1px solid ${activeTab==="gsckeys"?"#0891B2":bdr}`}} onClick={()=>setActiveTab("gsckeys")}>📈 GSC Keywords</div>
       </div>
 
       {/* Pipeline Tab */}
@@ -603,6 +604,11 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
         <TrackingVerifier dark={dark} clientId={clientId} getToken={getToken} API={API} clientWebsite={client?.website} />
       )}
 
+      {/* ── GSC Keywords: Live ranking keywords from Search Console ── */}
+      {activeTab==="gsckeys" && (
+        <GscKeywordsTab dark={dark} clientId={clientId} getToken={getToken} API={API} clientWebsite={client?.website} onGoToIntegrations={()=>setActiveTab("integrations")} />
+      )}
+
       <AIChatBot dark={dark} clientId={clientId} getToken={getToken} API={API} />
 
       {/* ── Portal Share Modal ── */}
@@ -633,6 +639,257 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
             <p style={{ fontSize:11, color:txt2, marginTop:14, borderTop:`1px solid ${bdr}`, paddingTop:12 }}>
               The link is permanent until you regenerate it. To revoke access, contact your agency admin.
             </p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── GSC Keywords Tab ────────────────────────────────────────────────────────
+function GscKeywordsTab({ dark, clientId, getToken, API, clientWebsite, onGoToIntegrations }) {
+  const [status,   setStatus]   = useState(null);   // null | { connected, email, sites[] }
+  const [data,     setData]     = useState(null);   // analytics response
+  const [loading,  setLoading]  = useState(true);
+  const [fetching, setFetching] = useState(false);
+  const [error,    setError]    = useState("");
+  const [days,     setDays]     = useState(28);
+  const [sortBy,   setSortBy]   = useState("clicks"); // clicks | impressions | position | ctr
+  const [siteUrl,  setSiteUrl]  = useState("");
+  const [filter,   setFilter]   = useState("");
+
+  const bg  = dark ? "#0a0a0a" : "#f5f5f0";
+  const bg2 = dark ? "#111"    : "#ffffff";
+  const bg3 = dark ? "#1a1a1a" : "#f0f0ea";
+  const bdr = dark ? "#222"    : "#e0e0d8";
+  const txt = dark ? "#e8e8e8" : "#1a1a18";
+  const txt2= dark ? "#666"    : "#888";
+
+  useEffect(() => {
+    async function loadStatus() {
+      setLoading(true);
+      try {
+        const token = await getToken();
+        const res   = await fetch(`${API}/api/gsc/${clientId}/status`, { headers: { Authorization: `Bearer ${token}` } });
+        const d     = await res.json();
+        if (d.connected) {
+          setStatus(d);
+          // Pick best siteUrl: prefer sc-domain or https, fallback to first site
+          const sites = d.sites || [];
+          let best = sites.find(s => s.startsWith("sc-domain:")) ||
+                     sites.find(s => s.startsWith("https://")) ||
+                     sites[0] || "";
+          // Also try matching client website
+          if (clientWebsite) {
+            const ws = clientWebsite.replace(/^https?:\/\//, "").replace(/\/$/, "");
+            const match = sites.find(s => s.includes(ws));
+            if (match) best = match;
+          }
+          setSiteUrl(best);
+        } else {
+          setStatus({ connected: false });
+        }
+      } catch { setStatus({ connected: false }); }
+      setLoading(false);
+    }
+    loadStatus();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientId]);
+
+  useEffect(() => {
+    if (siteUrl && status?.connected) fetchData();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [siteUrl, days]);
+
+  async function fetchData() {
+    if (!siteUrl) return;
+    setFetching(true); setError("");
+    try {
+      const token = await getToken();
+      const res   = await fetch(
+        `${API}/api/gsc/${clientId}/analytics?siteUrl=${encodeURIComponent(siteUrl)}&days=${days}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const d = await res.json();
+      if (!res.ok) { setError(d.error || "Failed to load GSC data"); setFetching(false); return; }
+      setData(d);
+    } catch (e) { setError(e.message); }
+    setFetching(false);
+  }
+
+  if (loading) return (
+    <div style={{ padding:32, background:bg, color:txt2, fontSize:13, textAlign:"center" }}>
+      Loading Search Console status...
+    </div>
+  );
+
+  // ── Not connected ──
+  if (!status?.connected) return (
+    <div style={{ padding:32, background:bg }}>
+      <div style={{ maxWidth:480, margin:"40px auto", background:bg2, border:`1px solid ${bdr}`, borderRadius:16, padding:32, textAlign:"center" }}>
+        <div style={{ fontSize:40, marginBottom:12 }}>🔍</div>
+        <div style={{ fontSize:16, fontWeight:700, color:txt, marginBottom:8 }}>Search Console Not Connected</div>
+        <div style={{ fontSize:13, color:txt2, lineHeight:1.7, marginBottom:20 }}>
+          Connect your client&apos;s Google Search Console to see which keywords they rank for, their positions, clicks, and impressions.
+        </div>
+        <button
+          onClick={onGoToIntegrations}
+          style={{ padding:"10px 24px", borderRadius:10, border:"none", background:"#0891B2", color:"#fff", fontWeight:700, fontSize:13, cursor:"pointer" }}
+        >
+          🔌 Go to Integrations → Connect GSC
+        </button>
+      </div>
+    </div>
+  );
+
+  const rows = data?.queries || [];
+  const filtered = filter
+    ? rows.filter(r => (r.keys?.[0] || "").toLowerCase().includes(filter.toLowerCase()))
+    : rows;
+  const sorted = [...filtered].sort((a, b) => {
+    if (sortBy === "position") return (a.position||999) - (b.position||999);
+    return (b[sortBy] || 0) - (a[sortBy] || 0);
+  });
+
+  function posColor(pos) {
+    if (pos <= 3)  return "#059669";
+    if (pos <= 10) return "#D97706";
+    return "#6B7280";
+  }
+  function posBg(pos) {
+    if (pos <= 3)  return "#05966918";
+    if (pos <= 10) return "#D9770618";
+    return "#6B728018";
+  }
+
+  const sites = status?.sites || [];
+
+  return (
+    <div style={{ padding:24, background:bg }}>
+      {/* Header */}
+      <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", marginBottom:16, flexWrap:"wrap", gap:10 }}>
+        <div>
+          <div style={{ fontSize:15, fontWeight:700, color:txt, marginBottom:2 }}>📈 GSC Ranking Keywords</div>
+          <div style={{ fontSize:11, color:txt2 }}>Connected as {status.email} · Last {days} days</div>
+        </div>
+        <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center" }}>
+          {/* Site selector */}
+          {sites.length > 1 && (
+            <select value={siteUrl} onChange={e => setSiteUrl(e.target.value)}
+              style={{ padding:"6px 10px", borderRadius:8, border:`1px solid ${bdr}`, background:bg2, color:txt, fontSize:11, cursor:"pointer" }}>
+              {sites.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          )}
+          {/* Days filter */}
+          {[7,28,90].map(d => (
+            <button key={d} onClick={() => setDays(d)}
+              style={{ padding:"5px 12px", borderRadius:8, border:`1px solid ${days===d?"#0891B2":bdr}`,
+                background:days===d?"#0891B2":bg2, color:days===d?"#fff":txt2, fontSize:11, cursor:"pointer", fontWeight:days===d?700:400 }}>
+              {d}d
+            </button>
+          ))}
+          <button onClick={fetchData} disabled={fetching}
+            style={{ padding:"6px 14px", borderRadius:8, border:`1px solid ${bdr}`, background:bg2, color:txt2, fontSize:11, cursor:"pointer" }}>
+            {fetching ? "⏳" : "↺ Refresh"}
+          </button>
+        </div>
+      </div>
+
+      {error && (
+        <div style={{ padding:"10px 14px", borderRadius:8, background:"#DC262611", color:"#DC2626", fontSize:12, marginBottom:12 }}>
+          {error}
+        </div>
+      )}
+
+      {/* Summary cards */}
+      {data && (
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:10, marginBottom:16 }}>
+          {[
+            { label:"Total Clicks",       value: data.totalClicks?.toLocaleString() || "0",        color:"#0891B2" },
+            { label:"Total Impressions",  value: data.totalImpressions?.toLocaleString() || "0",   color:"#443DCB" },
+            { label:"Avg. CTR",           value: `${data.avgCTR || 0}%`,                            color:"#D97706" },
+            { label:"Avg. Position",      value: data.avgPosition || "—",                           color:"#059669" },
+          ].map(card => (
+            <div key={card.label} style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, padding:"12px 14px" }}>
+              <div style={{ fontSize:10, color:txt2, marginBottom:4 }}>{card.label}</div>
+              <div style={{ fontSize:20, fontWeight:800, color:card.color }}>{card.value}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* No data yet */}
+      {!data && !fetching && !error && (
+        <div style={{ textAlign:"center", padding:40, color:txt2, fontSize:13 }}>Select a site above to load keywords</div>
+      )}
+      {fetching && !data && (
+        <div style={{ textAlign:"center", padding:40, color:txt2, fontSize:13 }}>Loading keywords from Google Search Console...</div>
+      )}
+
+      {/* Keywords table */}
+      {data && rows.length === 0 && (
+        <div style={{ textAlign:"center", padding:40, background:bg2, border:`1px solid ${bdr}`, borderRadius:12, color:txt2, fontSize:13 }}>
+          No keyword data found for this property in the last {days} days.
+          <div style={{ fontSize:11, marginTop:6 }}>Make sure the siteUrl matches exactly what is verified in your Google Search Console.</div>
+        </div>
+      )}
+
+      {data && rows.length > 0 && (
+        <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:12, overflow:"hidden" }}>
+          {/* Table controls */}
+          <div style={{ padding:"12px 16px", borderBottom:`1px solid ${bdr}`, display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
+            <input
+              placeholder="Filter keywords…"
+              value={filter}
+              onChange={e => setFilter(e.target.value)}
+              style={{ padding:"6px 12px", borderRadius:8, border:`1px solid ${bdr}`, background:bg3, color:txt, fontSize:12, width:200 }}
+            />
+            <span style={{ fontSize:11, color:txt2, marginLeft:"auto" }}>{sorted.length} keywords</span>
+            {/* Sort buttons */}
+            {["clicks","impressions","ctr","position"].map(col => (
+              <button key={col} onClick={() => setSortBy(col)}
+                style={{ padding:"4px 10px", borderRadius:6, border:`1px solid ${sortBy===col?"#0891B2":bdr}`,
+                  background:sortBy===col?"#0891B2":bg3, color:sortBy===col?"#fff":txt2, fontSize:10, cursor:"pointer", fontWeight:sortBy===col?700:400, textTransform:"capitalize" }}>
+                {col === "ctr" ? "CTR" : col.charAt(0).toUpperCase()+col.slice(1)}
+              </button>
+            ))}
+          </div>
+
+          {/* Header row */}
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 80px 100px 70px 90px", padding:"8px 16px", background:bg3, fontSize:10, fontWeight:700, color:txt2, textTransform:"uppercase", letterSpacing:0.8 }}>
+            <span>Keyword</span>
+            <span style={{ textAlign:"center" }}>Position</span>
+            <span style={{ textAlign:"right" }}>Impressions</span>
+            <span style={{ textAlign:"right" }}>Clicks</span>
+            <span style={{ textAlign:"right" }}>CTR</span>
+          </div>
+
+          {/* Rows */}
+          <div style={{ maxHeight:480, overflowY:"auto" }}>
+            {sorted.map((row, i) => {
+              const kw  = row.keys?.[0] || "—";
+              const pos = row.position ? +row.position.toFixed(1) : null;
+              return (
+                <div key={i} style={{
+                  display:"grid", gridTemplateColumns:"1fr 80px 100px 70px 90px",
+                  padding:"10px 16px", borderBottom:`1px solid ${bdr}`,
+                  alignItems:"center",
+                  background: i % 2 === 0 ? "transparent" : (dark ? "#ffffff05" : "#f9f9f7"),
+                }}>
+                  <span style={{ fontSize:13, color:txt, fontWeight:500, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }} title={kw}>{kw}</span>
+                  <span style={{ textAlign:"center" }}>
+                    {pos !== null ? (
+                      <span style={{ fontSize:12, fontWeight:700, color:posColor(pos), background:posBg(pos), padding:"2px 8px", borderRadius:6 }}>
+                        #{pos}
+                      </span>
+                    ) : <span style={{ color:txt2, fontSize:11 }}>—</span>}
+                  </span>
+                  <span style={{ textAlign:"right", fontSize:12, color:txt2 }}>{row.impressions?.toLocaleString() || "0"}</span>
+                  <span style={{ textAlign:"right", fontSize:12, fontWeight:600, color:txt }}>{row.clicks?.toLocaleString() || "0"}</span>
+                  <span style={{ textAlign:"right", fontSize:12, color:txt2 }}>{row.ctr ? (row.ctr*100).toFixed(1)+"%" : "0%"}</span>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
