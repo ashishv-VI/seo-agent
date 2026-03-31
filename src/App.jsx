@@ -307,11 +307,11 @@ function MainApp({ onLogout }) {
     inputArea:{ padding:"12px 16px", borderTop:`1px solid ${bdr}`, background:bg2, flexShrink:0 },
     textarea: { flex:1, padding:"10px 14px", borderRadius:10, border:`1px solid ${bdr}`, background:bg3, color:txt, fontSize:13, resize:"none", outline:"none", fontFamily:"inherit", lineHeight:1.5 },
     runBtn:  ok => ({ padding:"0 18px", borderRadius:10, border:"none", background:ok?"#443DCB":bdr, color:ok?"#fff":txt3, fontWeight:600, fontSize:13, cursor:ok?"pointer":"not-allowed", flexShrink:0, minWidth:64 }),
-    overlay: { position:"fixed", inset:0, background:"rgba(0,0,0,0.85)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:100 },
-    modal:   { background:bg2, border:`1px solid ${bdr}`, borderRadius:16, padding:28, width:440, maxWidth:"92vw" },
-    label:   { fontSize:12, color:txt2, marginBottom:4, display:"block", marginTop:12 },
-    inp:     { width:"100%", padding:"9px 12px", borderRadius:8, border:`1px solid ${bdr}`, background:bg3, color:txt, fontSize:13, outline:"none", boxSizing:"border-box" },
-    saveBtn: { width:"100%", padding:11, borderRadius:8, border:"none", background:"#443DCB", color:"#fff", fontWeight:600, fontSize:14, cursor:"pointer", marginTop:16 },
+    overlay: { position:"fixed", inset:0, background:"rgba(0,0,0,0.85)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:100, padding:"16px" },
+    modal:   { background:bg2, border:`1px solid ${bdr}`, borderRadius:16, width:500, maxWidth:"100%", maxHeight:"90vh", display:"flex", flexDirection:"column", overflow:"hidden", boxShadow:"0 24px 60px rgba(0,0,0,0.5)" },
+    label:   { fontSize:11, color:txt2, marginBottom:3, display:"block", marginTop:10, fontWeight:500 },
+    inp:     { width:"100%", padding:"8px 11px", borderRadius:7, border:`1px solid ${bdr}`, background:bg3, color:txt, fontSize:12, outline:"none", boxSizing:"border-box", transition:"border 0.15s" },
+    saveBtn: { flex:1, padding:"10px 0", borderRadius:8, border:"none", background:"#443DCB", color:"#fff", fontWeight:700, fontSize:13, cursor:"pointer" },
   };
 
   const pageLabels = {
@@ -631,44 +631,89 @@ function MainApp({ onLogout }) {
       {showSettings && (
         <div style={s.overlay} onClick={()=>setShowSettings(false)}>
           <div style={s.modal} onClick={e=>e.stopPropagation()}>
-            <div style={{ fontWeight:700, fontSize:17, color:txt }}>⚙️ API Keys</div>
-            <div style={{ fontSize:12, color:txt2, marginTop:4 }}>Saved in browser · persist across sessions</div>
-            <label style={s.label}>Groq API Key (gsk_...)</label>
-            <input type="password" value={tmpKeys.groq} onChange={e=>setTmpKeys(k=>({...k,groq:e.target.value}))} placeholder="gsk_xxxxxxxxxxxx" style={s.inp} />
-            <label style={s.label}>Gemini API Key (AIza...)</label>
-            <input type="password" value={tmpKeys.gemini} onChange={e=>setTmpKeys(k=>({...k,gemini:e.target.value}))} placeholder="AIzaxxxxxxxxxx" style={s.inp} />
-            <label style={s.label}>Google APIs Key — PageSpeed + GSC + GA4</label>
-            <input type="password" value={tmpKeys.google} onChange={e=>setTmpKeys(k=>({...k,google:e.target.value}))} placeholder="AIzaxxxxxxxxxx" style={s.inp} />
-            <label style={s.label}>OpenRouter Key — DeepSeek + Mistral (Free)</label>
-            <input type="password" value={tmpKeys.openrouter} onChange={e=>setTmpKeys(k=>({...k,openrouter:e.target.value}))} placeholder="sk-or-xxxxxxxxxxxx" style={s.inp} />
-            <label style={s.label}>GA Property ID — Google Analytics Data API</label>
-            <input type="text" value={tmpKeys.gaPropertyId} onChange={e=>setTmpKeys(k=>({...k,gaPropertyId:e.target.value}))} placeholder="properties/123456789" style={s.inp} />
-            <div style={{ borderTop:`1px solid ${dark?"#222":"#e5e5e5"}`, margin:"14px 0 10px", paddingTop:10 }}>
-              <div style={{ fontSize:12, fontWeight:700, color:txt, marginBottom:6 }}>📍 Rank Tracker Keys</div>
-              <div style={{ fontSize:11, color:txt2, marginBottom:8 }}>Required for live Google position checking</div>
+
+            {/* ── Sticky Header ── */}
+            <div style={{ padding:"20px 24px 16px", borderBottom:`1px solid ${bdr}`, flexShrink:0 }}>
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+                <div>
+                  <div style={{ fontWeight:700, fontSize:16, color:txt }}>⚙️ Settings & API Keys</div>
+                  <div style={{ fontSize:11, color:txt2, marginTop:2 }}>Keys saved to your account securely</div>
+                </div>
+                <button onClick={()=>setShowSettings(false)}
+                  style={{ background:"none", border:`1px solid ${bdr}`, borderRadius:6, color:txt2, fontSize:16, cursor:"pointer", padding:"2px 8px", lineHeight:1 }}>×</button>
+              </div>
             </div>
-            <label style={s.label}>SerpAPI Key — Live rank checking (100 free/month · serpapi.com)</label>
-            <input type="password" value={tmpKeys.serpapi} onChange={e=>setTmpKeys(k=>({...k,serpapi:e.target.value}))} placeholder="Paste your SerpAPI key" style={s.inp} />
-            <label style={s.label}>SE Ranking API Key — Keyword metrics: volume, KD, CPC (seranking.com)</label>
-            <input type="password" value={tmpKeys.seranking} onChange={e=>setTmpKeys(k=>({...k,seranking:e.target.value}))} placeholder="Paste your SE Ranking API key" style={s.inp} />
-            <label style={s.label}>Semrush API Key — Keyword research + competitor analysis (semrush.com)</label>
-            <input type="password" value={tmpKeys.semrush} onChange={e=>setTmpKeys(k=>({...k,semrush:e.target.value}))} placeholder="Paste your Semrush API key" style={s.inp} />
-            <label style={s.label}>DataForSEO — login:password (bulk SERP · ~$0.001/keyword · dataforseo.com)</label>
-            <input type="text" value={tmpKeys.dataforseo} onChange={e=>setTmpKeys(k=>({...k,dataforseo:e.target.value}))} placeholder="yourlogin@email.com:password" style={s.inp} />
-            <div style={{ borderTop:`1px solid ${dark?"#222":"#e5e5e5"}`, margin:"16px 0 12px", paddingTop:12 }}>
-              <div style={{ fontSize:12, fontWeight:700, color:txt, marginBottom:6 }}>📧 Email Notifications</div>
-              <div style={{ fontSize:11, color:txt2, marginBottom:8, lineHeight:1.5 }}>Set these in <strong>Render Environment Variables</strong>. Pipeline complete + ranking drop alerts will be emailed automatically.</div>
-              <div style={{ background:dark?"#1a1a1a":"#f0f0ea", borderRadius:8, padding:"10px 12px", fontSize:11, color:txt2, fontFamily:"monospace", lineHeight:2 }}>
+
+            {/* ── Scrollable Body ── */}
+            <div style={{ overflowY:"auto", padding:"16px 24px", flex:1 }}>
+
+              {/* AI Models */}
+              <div style={{ fontSize:11, fontWeight:700, color:"#443DCB", textTransform:"uppercase", letterSpacing:0.8, marginBottom:10 }}>AI Models</div>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"0 16px" }}>
+                <div>
+                  <label style={s.label}>Groq API Key</label>
+                  <input type="password" value={tmpKeys.groq} onChange={e=>setTmpKeys(k=>({...k,groq:e.target.value}))} placeholder="gsk_xxxxxxxxxxxx" style={s.inp} />
+                </div>
+                <div>
+                  <label style={s.label}>Gemini API Key</label>
+                  <input type="password" value={tmpKeys.gemini} onChange={e=>setTmpKeys(k=>({...k,gemini:e.target.value}))} placeholder="AIzaxxxxxxxxxx" style={s.inp} />
+                </div>
+                <div>
+                  <label style={s.label}>OpenRouter Key</label>
+                  <input type="password" value={tmpKeys.openrouter} onChange={e=>setTmpKeys(k=>({...k,openrouter:e.target.value}))} placeholder="sk-or-xxxxxxxxxxxx" style={s.inp} />
+                </div>
+                <div>
+                  <label style={s.label}>Google APIs Key</label>
+                  <input type="password" value={tmpKeys.google} onChange={e=>setTmpKeys(k=>({...k,google:e.target.value}))} placeholder="AIzaxxxxxxxxxx" style={s.inp} />
+                </div>
+              </div>
+              <div style={{ marginTop:10 }}>
+                <label style={s.label}>GA Property ID</label>
+                <input type="text" value={tmpKeys.gaPropertyId} onChange={e=>setTmpKeys(k=>({...k,gaPropertyId:e.target.value}))} placeholder="properties/123456789" style={s.inp} />
+              </div>
+
+              {/* Rank Tracker */}
+              <div style={{ borderTop:`1px solid ${bdr}`, margin:"18px 0 12px" }} />
+              <div style={{ fontSize:11, fontWeight:700, color:"#059669", textTransform:"uppercase", letterSpacing:0.8, marginBottom:10 }}>📍 Rank Tracker & SEO Data</div>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"0 16px" }}>
+                <div>
+                  <label style={s.label}>SerpAPI Key <span style={{ color:"#059669" }}>(100 free/mo)</span></label>
+                  <input type="password" value={tmpKeys.serpapi} onChange={e=>setTmpKeys(k=>({...k,serpapi:e.target.value}))} placeholder="serpapi.com → API Key" style={s.inp} />
+                </div>
+                <div>
+                  <label style={s.label}>SE Ranking Key</label>
+                  <input type="password" value={tmpKeys.seranking} onChange={e=>setTmpKeys(k=>({...k,seranking:e.target.value}))} placeholder="seranking.com → API" style={s.inp} />
+                </div>
+                <div>
+                  <label style={s.label}>Semrush API Key</label>
+                  <input type="password" value={tmpKeys.semrush} onChange={e=>setTmpKeys(k=>({...k,semrush:e.target.value}))} placeholder="semrush.com → API" style={s.inp} />
+                </div>
+                <div>
+                  <label style={s.label}>DataForSEO <span style={{ color:txt2 }}>(login:password)</span></label>
+                  <input type="text" value={tmpKeys.dataforseo} onChange={e=>setTmpKeys(k=>({...k,dataforseo:e.target.value}))} placeholder="email@x.com:password" style={s.inp} />
+                </div>
+              </div>
+
+              {/* Email */}
+              <div style={{ borderTop:`1px solid ${bdr}`, margin:"18px 0 12px" }} />
+              <div style={{ fontSize:11, fontWeight:700, color:txt2, textTransform:"uppercase", letterSpacing:0.8, marginBottom:10 }}>📧 Email Notifications</div>
+              <div style={{ background:bg3, borderRadius:8, padding:"10px 12px", fontSize:11, color:txt2, fontFamily:"monospace", lineHeight:2, border:`1px solid ${bdr}` }}>
                 GMAIL_USER=you@gmail.com<br/>
                 GMAIL_PASS=xxxx-xxxx-xxxx-xxxx<br/>
                 APP_URL=https://your-app.onrender.com
               </div>
-              <div style={{ fontSize:11, color:"#D97706", marginTop:6 }}>Gmail: use App Password — Google Account → Security → App Passwords</div>
+              <div style={{ fontSize:11, color:"#D97706", marginTop:6 }}>Set in Render Environment Variables. Gmail: use App Password.</div>
             </div>
-            <button onClick={saveKeys} style={s.saveBtn}>💾 Save Keys</button>
-            <div style={{ fontSize:11, color:txt3, marginTop:10, textAlign:"center" }}>
-              Groq: console.groq.com · Gemini: aistudio.google.com · OpenRouter: openrouter.ai
+
+            {/* ── Sticky Footer ── */}
+            <div style={{ padding:"14px 24px", borderTop:`1px solid ${bdr}`, flexShrink:0, display:"flex", gap:10, alignItems:"center" }}>
+              <button onClick={saveKeys} style={s.saveBtn}>💾 Save Keys</button>
+              <button onClick={()=>setShowSettings(false)}
+                style={{ padding:"10px 16px", borderRadius:8, border:`1px solid ${bdr}`, background:"transparent", color:txt2, fontSize:13, cursor:"pointer", whiteSpace:"nowrap" }}>
+                Cancel
+              </button>
             </div>
+
           </div>
         </div>
       )}
