@@ -126,59 +126,101 @@ async function getDomainCompetitors(domain, apiKey, countryCode = "US") {
 }
 
 /**
- * Bulk position check — fetches all domain rankings (up to 500) and matches
- * against user's tracked keywords. One API call per country.
+ * Check position of a domain for a single keyword via SERP lookup.
+ * Fetches the top 100 organic results for the keyword and finds the domain.
+ *
+ * @param {string} keyword
+ * @param {string} domain      — e.g. "www.imagophotography.co.uk"
+ * @param {string} apiKey
+ * @param {string} countryCode
+ * @returns {{ position, url, volume, difficulty }}
+ */
+async function checkSingleKeywordPosition(keyword, domain, apiKey, countryCode = "US") {
+  const cleanDomain = domain.replace(/^https?:\/\//, "").replace(/\/$/, "").toLowerCase();
+
+  // Try SE Ranking SERP organic results endpoint
+  const serpEndpoints = [
+    `${SE_BASE}/research/keyword/organic?keyword=${encodeURIComponent(keyword)}&country=${countryCode}&limit=100`,
+    `${SE_BASE}/research/keywords/organic?keyword=${encodeURIComponent(keyword)}&country=${countryCode}&limit=100`,
+    `${SE_BASE}/serp?keyword=${encodeURIComponent(keyword)}&country=${countryCode}`,
+  ];
+
+  for (const url of serpEndpoints) {
+    try {
+      const res = await fetch(url, {
+        headers: { "Authorization": `Token ${apiKey}` },
+        signal: AbortSignal.timeout(12000),
+      });
+      if (!res.ok) continue;
+
+      const data  = await res.json();
+      const items = Array.isArray(data) ? data : (data.results || data.organic || data.data || []);
+
+      if (!items.length) continue;
+
+      // Find our domain in the SERP results
+      for (const item of items) {
+        const itemUrl = (item.url || item.link || item.domain || "").toLowerCase();
+        if (itemUrl.includes(cleanDomain)) {
+          return {
+            position:   item.pos || item.position || item.rank || null,
+            url:        item.url || item.link || null,
+            foundInSerp: true,
+          };
+        }
+      }
+
+      // Domain not found in top 100 = not ranking
+      return { position: null, url: null, foundInSerp: true, notRanking: true };
+    } catch { continue; }
+  }
+
+  // All SERP endpoints failed — fall back to null
+  return { position: null, url: null, foundInSerp: false };
+}
+
+/**
+ * Bulk position check — checks each keyword via SERP (per-keyword API call).
+ * More accurate than domain-level lookup — works for any domain size.
  *
  * @param {string}   domain
- * @param {string[]} keywords  — keywords to check
+ * @param {string[]} keywords
  * @param {string}   apiKey
- * @param {string}   countryCode — e.g. "US", "IN", "AE"
+ * @param {string}   countryCode
  * @returns {object}  { "keyword lower": { position, url, volume, difficulty } }
  */
 async function checkBulkPositions(domain, keywords, apiKey, countryCode = "US") {
   if (!apiKey || !domain || !keywords.length) return {};
-  const cleanDomain = domain.replace(/^https?:\/\//, "").replace(/\/$/, "");
 
-  try {
-    const res = await fetch(
-      `${SE_BASE}/research/domain/organic/keywords?domain=${encodeURIComponent(cleanDomain)}&country=${countryCode}&limit=500&sort_by=traffic&sort_order=desc`,
-      {
-        headers: { "Authorization": `Token ${apiKey}` },
-        signal: AbortSignal.timeout(25000),
-      }
-    );
-    if (!res.ok) {
-      console.warn("[seranking] bulk positions error:", res.status);
-      return {};
-    }
-    const data  = await res.json();
-    const items = Array.isArray(data) ? data : (data.data || []);
+  // Phase 1: Get keyword metrics (volume + KD) for all keywords in one call
+  const metrics = await getKeywordMetrics(keywords, apiKey, countryCode);
 
-    // Build lookup map from domain's organic keywords
-    const rankMap = {};
-    for (const k of items) {
-      if (k.keyword) {
-        rankMap[k.keyword.toLowerCase()] = {
-          position:   k.pos      || k.position   || null,
-          url:        k.url      || null,
-          volume:     k.vol      || k.volume     || 0,
-          difficulty: k.kd       || k.difficulty || 0,
-          traffic:    k.traffic  || 0,
-        };
-      }
-    }
+  // Phase 2: Check position via SERP for each keyword
+  // Process in batches of 5 with 500ms delay to respect rate limits
+  const results = {};
+  const BATCH   = 5;
 
-    // Match against tracked keywords
-    const results = {};
-    for (const kw of keywords) {
-      const key  = kw.toLowerCase();
-      results[key] = rankMap[key] || { position: null, url: null, volume: 0, difficulty: 0 };
+  for (let i = 0; i < keywords.length; i += BATCH) {
+    const batch = keywords.slice(i, i + BATCH);
+    await Promise.all(batch.map(async (kw) => {
+      const key    = kw.toLowerCase();
+      const serp   = await checkSingleKeywordPosition(kw, domain, apiKey, countryCode);
+      const metric = metrics[key] || {};
+      results[key] = {
+        position:   serp.position,
+        url:        serp.url,
+        volume:     metric.volume     || 0,
+        difficulty: metric.difficulty || 0,
+      };
+    }));
+
+    // Small delay between batches to avoid rate limiting
+    if (i + BATCH < keywords.length) {
+      await new Promise(r => setTimeout(r, 600));
     }
-    return results;
-  } catch (e) {
-    console.warn("[seranking] checkBulkPositions failed:", e.message);
-    return {};
   }
+
+  return results;
 }
 
 module.exports = { getKeywordMetrics, getDomainKeywords, getDomainCompetitors, checkBulkPositions };
