@@ -13,6 +13,7 @@ const adminRoutes        = require("./routes/admin");
 const portalRoutes       = require("./routes/portal");
 const integrationsRoutes = require("./routes/integrations");
 const gscRoutes          = require("./routes/gsc");
+const ga4Routes          = require("./routes/ga4");
 
 const app  = express();
 const PORT = process.env.PORT || 5000;
@@ -75,6 +76,7 @@ app.use("/api/admin",        adminRoutes);
 app.use("/api/portal",       portalRoutes);
 app.use("/api/integrations", integrationsRoutes);
 app.use("/api/gsc",          gscRoutes);
+app.use("/api/ga4",          ga4Routes);
 
 // ── Daily alert monitoring ─────────────────────────
 // Runs A9.checkAlerts for every active client — detects new technical issues,

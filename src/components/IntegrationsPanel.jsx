@@ -12,6 +12,9 @@ const B = "#443DCB";
 export default function IntegrationsPanel({ dark, clientId, getToken, API }) {
   const [wpStatus,      setWpStatus]      = useState(null);
   const [gscStatus,     setGscStatus]     = useState(null);   // null | { connected, email, sites[] }
+  const [ga4Status,     setGa4Status]     = useState(null);   // null | { connected, email, propertyId, properties[] }
+  const [ga4Connecting, setGa4Connecting] = useState(false);
+  const [ga4Disconnecting, setGa4Disconnecting] = useState(false);
   const [loading,       setLoading]       = useState(true);
   const [testing,       setTesting]       = useState(false);
   const [connecting,    setConnecting]    = useState(false);
@@ -38,14 +41,17 @@ export default function IntegrationsPanel({ dark, clientId, getToken, API }) {
     setLoading(true);
     try {
       const token = await getToken();
-      const [wpRes, gscRes] = await Promise.all([
+      const [wpRes, gscRes, ga4Res] = await Promise.all([
         fetch(`${API}/api/integrations/${clientId}`, { headers: { Authorization: `Bearer ${token}` } }),
         fetch(`${API}/api/gsc/${clientId}/status`,   { headers: { Authorization: `Bearer ${token}` } }).catch(() => null),
+        fetch(`${API}/api/ga4/${clientId}/status`,   { headers: { Authorization: `Bearer ${token}` } }).catch(() => null),
       ]);
       const wpData  = await wpRes.json();
       const gscData = gscRes ? await gscRes.json().catch(() => null) : null;
+      const ga4Data = ga4Res ? await ga4Res.json().catch(() => null) : null;
       setWpStatus(wpData.wordpress || null);
       setGscStatus(gscData?.connected ? gscData : null);
+      setGa4Status(ga4Data?.connected ? ga4Data : null);
     } catch { setWpStatus(null); }
     setLoading(false);
   }
@@ -79,6 +85,36 @@ export default function IntegrationsPanel({ dark, clientId, getToken, API }) {
       setSuccess("Search Console disconnected");
     } catch (e) { setError(e.message); }
     setGscDisconnecting(false);
+  }
+
+  async function connectGA4() {
+    setGa4Connecting(true); setError(""); setSuccess("");
+    try {
+      const token = await getToken();
+      const res   = await fetch(`${API}/api/ga4/auth-url/${clientId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Could not get auth URL");
+      window.open(data.authUrl, "_blank", "noopener");
+      setSuccess("Google OAuth window opened — sign in with the CLIENT's Google account that has Analytics access, then come back and refresh.");
+    } catch (e) { setError(e.message); }
+    setGa4Connecting(false);
+  }
+
+  async function disconnectGA4() {
+    if (!confirm("Disconnect Google Analytics 4? Client's access token will be removed.")) return;
+    setGa4Disconnecting(true);
+    try {
+      const token = await getToken();
+      const res   = await fetch(`${API}/api/ga4/${clientId}`, {
+        method: "DELETE", headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error("Disconnect failed");
+      setGa4Status(null);
+      setSuccess("Google Analytics 4 disconnected");
+    } catch (e) { setError(e.message); }
+    setGa4Disconnecting(false);
   }
 
   async function connect(e) {
@@ -422,6 +458,87 @@ export default function IntegrationsPanel({ dark, clientId, getToken, API }) {
               <button onClick={connectGSC} disabled={gscConnecting}
                 style={{ padding:"10px 24px", borderRadius:8, background: gscConnecting ? "#666" : "#EA4335", color:"#fff", fontWeight:700, fontSize:13, cursor: gscConnecting ? "not-allowed" : "pointer", border:"none" }}>
                 {gscConnecting ? "Opening…" : "🔗 Connect Search Console"}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* ── Google Analytics 4 Integration ── */}
+      <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:14, overflow:"hidden", marginBottom:20 }}>
+        {/* Header */}
+        <div style={{ padding:"16px 20px", borderBottom:`1px solid ${bdr}`, display:"flex", alignItems:"center", gap:12 }}>
+          <div style={{ width:36, height:36, background:"#F9AB00", borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18 }}>📊</div>
+          <div style={{ flex:1 }}>
+            <div style={{ fontSize:15, fontWeight:700, color:txt }}>Google Analytics 4</div>
+            <div style={{ fontSize:12, color:txt2 }}>Per-client OAuth — live multi-page analytics, traffic sources, user journeys</div>
+          </div>
+          {ga4Status?.connected
+            ? <div style={{ display:"flex", alignItems:"center", gap:6, padding:"5px 12px", borderRadius:20, background:"#05966915", border:"1px solid #05966940" }}>
+                <div style={{ width:7, height:7, borderRadius:"50%", background:"#059669" }}/>
+                <span style={{ fontSize:12, fontWeight:600, color:"#059669" }}>Connected</span>
+              </div>
+            : <div style={{ padding:"5px 12px", borderRadius:20, background:bg3, border:`1px solid ${bdr}`, fontSize:12, color:txt2 }}>Not connected</div>
+          }
+        </div>
+
+        <div style={{ padding:"18px 20px" }}>
+          {ga4Status?.connected ? (
+            <>
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))", gap:10, marginBottom:16 }}>
+                {[
+                  { label:"Google Account", value: ga4Status.email || "—" },
+                  { label:"Properties",     value: ga4Status.properties?.length ?? "—" },
+                  { label:"Active Property", value: ga4Status.propertyId || "Not selected" },
+                  { label:"Connected",      value: ga4Status.connectedAt ? new Date(ga4Status.connectedAt).toLocaleDateString() : "—" },
+                ].map(i => (
+                  <div key={i.label} style={{ padding:"10px 12px", borderRadius:8, background:bg3, border:`1px solid ${bdr}` }}>
+                    <div style={{ fontSize:10, fontWeight:700, color:txt2, marginBottom:3 }}>{i.label.toUpperCase()}</div>
+                    <div style={{ fontSize:13, fontWeight:600, color: i.label==="Active Property" && !ga4Status.propertyId ? "#D97706" : txt, wordBreak:"break-all" }}>{i.value}</div>
+                  </div>
+                ))}
+              </div>
+
+              {!ga4Status.propertyId && (
+                <div style={{ padding:"10px 14px", borderRadius:8, background:"#D9770611", border:"1px solid #D9770633", fontSize:12, color:"#D97706", marginBottom:14 }}>
+                  <strong>Select a GA4 property</strong> — go to the Analytics tab and choose which property to use for this client.
+                </div>
+              )}
+
+              <div style={{ display:"flex", gap:8 }}>
+                <button onClick={connectGA4} disabled={ga4Connecting}
+                  style={{ padding:"7px 16px", borderRadius:8, border:`1px solid ${bdr}`, background:"transparent", color:txt2, fontSize:12, cursor:"pointer" }}>
+                  🔄 Reconnect
+                </button>
+                <button onClick={disconnectGA4} disabled={ga4Disconnecting}
+                  style={{ padding:"7px 16px", borderRadius:8, border:"1px solid #DC262633", background:"#DC262611", color:"#DC2626", fontSize:12, cursor:"pointer" }}>
+                  {ga4Disconnecting ? "Disconnecting…" : "Disconnect"}
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div style={{ padding:"14px 16px", borderRadius:10, background:"#F9AB0011", border:"1px solid #F9AB0033", marginBottom:16 }}>
+                <div style={{ fontSize:12, fontWeight:700, color:"#8B6914", marginBottom:6 }}>What you get with GA4 connected</div>
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))", gap:8 }}>
+                  {[
+                    { icon:"📊", t:"Live multi-page analytics", d:"Sessions, users, and views across every page" },
+                    { icon:"🔗", t:"Traffic source breakdown", d:"Organic, direct, referral, social — per channel" },
+                    { icon:"🗺", t:"User journey tracking", d:"Where users enter, navigate, and exit" },
+                    { icon:"🟢", t:"Real-time active users", d:"See who's on the site right now" },
+                  ].map(f => (
+                    <div key={f.t} style={{ padding:"8px 10px", borderRadius:8, background:bg2, border:`1px solid ${bdr}` }}>
+                      <div style={{ fontSize:16, marginBottom:3 }}>{f.icon}</div>
+                      <div style={{ fontSize:11, fontWeight:700, color:txt, marginBottom:2 }}>{f.t}</div>
+                      <div style={{ fontSize:10, color:txt2 }}>{f.d}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <button onClick={connectGA4} disabled={ga4Connecting}
+                style={{ padding:"10px 24px", borderRadius:8, background: ga4Connecting ? "#666" : "#F9AB00", color:"#1a1a00", fontWeight:700, fontSize:13, cursor: ga4Connecting ? "not-allowed" : "pointer", border:"none" }}>
+                {ga4Connecting ? "Opening…" : "📊 Connect Google Analytics 4"}
               </button>
             </>
           )}

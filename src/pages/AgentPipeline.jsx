@@ -7,6 +7,8 @@ import AIChatBot from "../components/AIChatBot";
 import IntegrationsPanel from "../components/IntegrationsPanel";
 import ContentAutopilotPanel from "../components/ContentAutopilotPanel";
 import ROIDashboard from "../components/ROIDashboard";
+import GA4Panel from "../components/GA4Panel";
+import TrackingVerifier from "../components/TrackingVerifier";
 
 const ALL_AGENTS = [
   { id:"A1",  label:"Client Brief",       icon:"📋", phase:1 },
@@ -329,6 +331,8 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
         <div style={s.tab(activeTab==="integrations")} onClick={()=>setActiveTab("integrations")}>🔌 Integrations</div>
         {isComplete("A3") && <div style={s.tab(activeTab==="autopilot")} onClick={()=>setActiveTab("autopilot")}>📝 Autopilot</div>}
         {isComplete("A10") && <div style={s.tab(activeTab==="roi")} onClick={()=>setActiveTab("roi")}>💰 ROI</div>}
+        <div style={s.tab(activeTab==="analytics")} onClick={()=>setActiveTab("analytics")}>📊 Analytics</div>
+        <div style={s.tab(activeTab==="tracking")} onClick={()=>setActiveTab("tracking")}>🔍 Tracking</div>
       </div>
 
       {/* Pipeline Tab */}
@@ -581,6 +585,16 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
       {/* ── Level 4: ROI Dashboard Tab ── */}
       {activeTab==="roi" && (
         <ROIDashboard dark={dark} clientId={clientId} getToken={getToken} API={API} />
+      )}
+
+      {/* ── Analytics: Live GA4 Dashboard ── */}
+      {activeTab==="analytics" && (
+        <GA4Panel dark={dark} clientId={clientId} getToken={getToken} API={API} />
+      )}
+
+      {/* ── Tracking: Verifier + GTM Snippet Generator ── */}
+      {activeTab==="tracking" && (
+        <TrackingVerifier dark={dark} clientId={clientId} getToken={getToken} API={API} clientWebsite={client?.website} />
       )}
 
       <AIChatBot dark={dark} clientId={clientId} getToken={getToken} API={API} />

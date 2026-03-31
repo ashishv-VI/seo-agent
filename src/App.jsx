@@ -35,6 +35,8 @@ const _params      = new URLSearchParams(window.location.search);
 const portalToken  = _params.get("portal");
 const gscConnected = _params.get("gsc_connected"); // clientId returned after GSC OAuth
 const gscError     = _params.get("gsc_error");
+const ga4Connected = _params.get("ga4_connected"); // clientId returned after GA4 OAuth
+const ga4Error     = _params.get("ga4_error");
 
 // ── Main App wrapped with Auth ─────────────────────
 export default function App() {
@@ -68,6 +70,9 @@ function MainApp({ onLogout }) {
   const [page, setPage]       = useState("dashboard");
   const [gscBanner, setGscBanner] = useState(
     gscConnected ? "success" : gscError ? "error" : null
+  );
+  const [ga4Banner, setGa4Banner] = useState(
+    ga4Connected ? "success" : ga4Error ? "error" : null
   );
   const [input, setInput]     = useState("");
   const [msgs, setMsgs]       = useState({});
@@ -325,6 +330,19 @@ function MainApp({ onLogout }) {
         <div style={{ position:"fixed", top:16, left:"50%", transform:"translateX(-50%)", zIndex:9999, padding:"12px 24px", borderRadius:10, background:"#DC2626", color:"#fff", fontWeight:600, fontSize:13, boxShadow:"0 4px 20px #0005", display:"flex", gap:12, alignItems:"center" }}>
           ❌ Search Console connection failed: {decodeURIComponent(gscError || "unknown error")}
           <button onClick={() => { setGscBanner(null); window.history.replaceState({}, "", window.location.pathname); }} style={{ background:"none", border:"none", color:"#fff", fontSize:16, cursor:"pointer", lineHeight:1 }}>×</button>
+        </div>
+      )}
+      {/* ── GA4 OAuth return banner ── */}
+      {ga4Banner === "success" && (
+        <div style={{ position:"fixed", top:ga4Banner&&gscBanner?56:16, left:"50%", transform:"translateX(-50%)", zIndex:9999, padding:"12px 24px", borderRadius:10, background:"#059669", color:"#fff", fontWeight:600, fontSize:13, boxShadow:"0 4px 20px #0005", display:"flex", gap:12, alignItems:"center" }}>
+          ✅ Google Analytics 4 connected! Go to the client's 📊 Analytics tab to select your property.
+          <button onClick={() => { setGa4Banner(null); window.history.replaceState({}, "", window.location.pathname); }} style={{ background:"none", border:"none", color:"#fff", fontSize:16, cursor:"pointer", lineHeight:1 }}>×</button>
+        </div>
+      )}
+      {ga4Banner === "error" && (
+        <div style={{ position:"fixed", top:ga4Banner&&gscBanner?56:16, left:"50%", transform:"translateX(-50%)", zIndex:9999, padding:"12px 24px", borderRadius:10, background:"#DC2626", color:"#fff", fontWeight:600, fontSize:13, boxShadow:"0 4px 20px #0005", display:"flex", gap:12, alignItems:"center" }}>
+          ❌ GA4 connection failed: {decodeURIComponent(ga4Error || "unknown error")}
+          <button onClick={() => { setGa4Banner(null); window.history.replaceState({}, "", window.location.pathname); }} style={{ background:"none", border:"none", color:"#fff", fontSize:16, cursor:"pointer", lineHeight:1 }}>×</button>
         </div>
       )}
       {/* ── Sidebar ── */}
