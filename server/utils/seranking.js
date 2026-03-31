@@ -125,4 +125,60 @@ async function getDomainCompetitors(domain, apiKey, countryCode = "US") {
   }
 }
 
-module.exports = { getKeywordMetrics, getDomainKeywords, getDomainCompetitors };
+/**
+ * Bulk position check — fetches all domain rankings (up to 500) and matches
+ * against user's tracked keywords. One API call per country.
+ *
+ * @param {string}   domain
+ * @param {string[]} keywords  — keywords to check
+ * @param {string}   apiKey
+ * @param {string}   countryCode — e.g. "US", "IN", "AE"
+ * @returns {object}  { "keyword lower": { position, url, volume, difficulty } }
+ */
+async function checkBulkPositions(domain, keywords, apiKey, countryCode = "US") {
+  if (!apiKey || !domain || !keywords.length) return {};
+  const cleanDomain = domain.replace(/^https?:\/\//, "").replace(/\/$/, "");
+
+  try {
+    const res = await fetch(
+      `${SE_BASE}/research/domain/organic/keywords?domain=${encodeURIComponent(cleanDomain)}&country=${countryCode}&limit=500&sort_by=traffic&sort_order=desc`,
+      {
+        headers: { "Authorization": `Token ${apiKey}` },
+        signal: AbortSignal.timeout(25000),
+      }
+    );
+    if (!res.ok) {
+      console.warn("[seranking] bulk positions error:", res.status);
+      return {};
+    }
+    const data  = await res.json();
+    const items = Array.isArray(data) ? data : (data.data || []);
+
+    // Build lookup map from domain's organic keywords
+    const rankMap = {};
+    for (const k of items) {
+      if (k.keyword) {
+        rankMap[k.keyword.toLowerCase()] = {
+          position:   k.pos      || k.position   || null,
+          url:        k.url      || null,
+          volume:     k.vol      || k.volume     || 0,
+          difficulty: k.kd       || k.difficulty || 0,
+          traffic:    k.traffic  || 0,
+        };
+      }
+    }
+
+    // Match against tracked keywords
+    const results = {};
+    for (const kw of keywords) {
+      const key  = kw.toLowerCase();
+      results[key] = rankMap[key] || { position: null, url: null, volume: 0, difficulty: 0 };
+    }
+    return results;
+  } catch (e) {
+    console.warn("[seranking] checkBulkPositions failed:", e.message);
+    return {};
+  }
+}
+
+module.exports = { getKeywordMetrics, getDomainKeywords, getDomainCompetitors, checkBulkPositions };

@@ -9,6 +9,7 @@ import ContentAutopilotPanel from "../components/ContentAutopilotPanel";
 import ROIDashboard from "../components/ROIDashboard";
 import GA4Panel from "../components/GA4Panel";
 import TrackingVerifier from "../components/TrackingVerifier";
+import RankTrackerPanel from "../components/RankTrackerPanel";
 
 const ALL_AGENTS = [
   { id:"A1",  label:"Client Brief",       icon:"📋", phase:1 },
@@ -326,8 +327,8 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
         {isComplete("A2") && <div style={s.tab(activeTab==="tasks")} onClick={()=>setActiveTab("tasks")}>📋 Tasks</div>}
         {isComplete("A2") && <div style={s.tab(activeTab==="pages")} onClick={()=>setActiveTab("pages")}>📄 Pages</div>}
         {isComplete("A5") && <div style={s.tab(activeTab==="briefs")} onClick={()=>setActiveTab("briefs")}>📝 Briefs</div>}
-        {isComplete("A10") && <div style={s.tab(activeTab==="rankings")} onClick={()=>setActiveTab("rankings")}>📈 Rankings</div>}
         {isComplete("A10") && <div style={s.tab(activeTab==="comparison")} onClick={()=>setActiveTab("comparison")}>📊 Before/After</div>}
+        <div style={s.tab(activeTab==="ranktracker")} onClick={()=>setActiveTab("ranktracker")}>📍 Rank Tracker</div>
         <div style={s.tab(activeTab==="integrations")} onClick={()=>setActiveTab("integrations")}>🔌 Integrations</div>
         {isComplete("A3") && <div style={s.tab(activeTab==="autopilot")} onClick={()=>setActiveTab("autopilot")}>📝 Autopilot</div>}
         {isComplete("A10") && <div style={s.tab(activeTab==="roi")} onClick={()=>setActiveTab("roi")}>💰 ROI</div>}
@@ -585,6 +586,11 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
       {/* ── Level 4: ROI Dashboard Tab ── */}
       {activeTab==="roi" && (
         <ROIDashboard dark={dark} clientId={clientId} getToken={getToken} API={API} />
+      )}
+
+      {/* ── Rank Tracker: Geo-specific keyword tracking ── */}
+      {activeTab==="ranktracker" && (
+        <RankTrackerPanel dark={dark} clientId={clientId} getToken={getToken} API={API} />
       )}
 
       {/* ── Analytics: Live GA4 Dashboard ── */}
