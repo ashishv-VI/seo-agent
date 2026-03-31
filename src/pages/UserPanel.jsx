@@ -365,6 +365,7 @@ export default function UserPanel({ dark }) {
   const [confirm,    setConfirm]    = useState(null);
   const [resetLink,  setResetLink]  = useState(null);
   const [notAdmin,   setNotAdmin]   = useState(false);
+  const [apiError,   setApiError]   = useState("");
   const [selected,   setSelected]   = useState(new Set());    // bulk select
   const [bulkAction, setBulkAction] = useState("block");
   const [bulkPlan,   setBulkPlan]   = useState("pro");
@@ -387,17 +388,33 @@ export default function UserPanel({ dark }) {
 
   async function load(silent = false) {
     if (!silent) setLoading(true);
+    setApiError("");
     try {
       const token = await getToken();
       const [usersRes, statsRes] = await Promise.all([
-        fetch(`${API}/api/admin/users`,  { headers: { Authorization: `Bearer ${token}` } }),
-        fetch(`${API}/api/admin/stats`,  { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${API}/api/admin/users`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${API}/api/admin/stats`, { headers: { Authorization: `Bearer ${token}` } }),
       ]);
+
       if (usersRes.status === 403) { setNotAdmin(true); setLoading(false); return; }
-      const [usersData, statsData] = await Promise.all([usersRes.json(), statsRes.json()]);
+
+      const [usersData, statsData] = await Promise.all([
+        usersRes.json(),
+        statsRes.json(),
+      ]);
+
+      // Any non-200 from users endpoint — show the actual server error
+      if (!usersRes.ok) {
+        setApiError(usersData.error || `Server error ${usersRes.status}`);
+        if (!silent) setLoading(false);
+        return;
+      }
+
       setUsers(usersData.users || []);
-      setStats(statsData);
-    } catch (e) { showToast("Failed to load users: " + e.message, "error"); }
+      setStats(statsData.error ? null : statsData);
+    } catch (e) {
+      setApiError("Network error: " + e.message);
+    }
     if (!silent) setLoading(false);
   }
 
@@ -552,6 +569,31 @@ export default function UserPanel({ dark }) {
         <div style={{ fontSize:13, color:txt2, maxWidth:340 }}>
           Set <code style={{ background:bg3, padding:"1px 6px", borderRadius:4, fontSize:12 }}>ADMIN_UID</code> to your Firebase UID in Render → Environment Variables.
         </div>
+      </div>
+    </div>
+  );
+
+  // ── API / config error ────────────────────────────
+  if (apiError) return (
+    <div style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", background:bg }}>
+      <div style={{ textAlign:"center", padding:48, maxWidth:480 }}>
+        <div style={{ fontSize:48, marginBottom:16 }}>⚠️</div>
+        <div style={{ fontSize:16, fontWeight:700, color:"#DC2626", marginBottom:10 }}>Admin API Error</div>
+        <div style={{ fontSize:13, color:txt, background:bg2, border:"1px solid #DC262633", borderRadius:10, padding:"14px 18px", marginBottom:18, textAlign:"left", lineHeight:1.7 }}>
+          {apiError}
+        </div>
+        {apiError.includes("ADMIN_UID") && (
+          <div style={{ fontSize:13, color:txt2, background:bg2, border:`1px solid ${bdr}`, borderRadius:10, padding:"14px 18px", textAlign:"left", lineHeight:1.8 }}>
+            <strong style={{ color:txt }}>Fix:</strong><br/>
+            1. Go to <strong>Render → your backend service → Environment</strong><br/>
+            2. Add variable: <code style={{ background:bg3, padding:"2px 6px", borderRadius:4, fontSize:12 }}>ADMIN_UID</code><br/>
+            3. Value = your Firebase UID (find it in Firebase Console → Authentication → your email row)<br/>
+            4. Redeploy the service
+          </div>
+        )}
+        <button onClick={() => load()} style={{ marginTop:16, padding:"10px 24px", borderRadius:8, border:"none", background:B, color:"#fff", fontWeight:700, cursor:"pointer" }}>
+          🔄 Retry
+        </button>
       </div>
     </div>
   );
