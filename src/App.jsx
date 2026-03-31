@@ -110,12 +110,18 @@ function MainApp({ onLogout }) {
       });
       const data = await res.json();
       const k    = data.keys || {};
+      const MASK = "••••••••";
       setTmpKeys(prev => ({
         ...prev,
-        seranking:  k.seranking  ? "••••••••" : "",
-        serpapi:    k.serpapi    ? "••••••••" : "",
-        semrush:    k.semrush    ? "••••••••" : "",
-        dataforseo: k.dataforseo ? "••••••••" : "",
+        groq:        k.groq        ? MASK : prev.groq,
+        gemini:      k.gemini      ? MASK : prev.gemini,
+        google:      k.google      ? MASK : prev.google,
+        openrouter:  k.openrouter  ? MASK : prev.openrouter,
+        gaPropertyId:k.gaPropertyId|| prev.gaPropertyId,
+        seranking:   k.seranking   ? MASK : "",
+        serpapi:     k.serpapi     ? MASK : "",
+        semrush:     k.semrush     ? MASK : "",
+        dataforseo:  k.dataforseo  ? MASK : "",
       }));
     } catch { /* silent */ }
   }
@@ -124,6 +130,12 @@ function MainApp({ onLogout }) {
     document.body.style.background = dark ? "#0a0a0a" : "#f5f5f0";
     document.body.style.color = dark ? "#e8e8e8" : "#1a1a18";
   }, [dark]);
+
+  useEffect(() => {
+    const handler = () => setShowSettings(true);
+    window.addEventListener("seo:openSettings", handler);
+    return () => window.removeEventListener("seo:openSettings", handler);
+  }, []);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -150,14 +162,13 @@ function MainApp({ onLogout }) {
   async function saveKeys() {
     localStorage.setItem("seo_keys", JSON.stringify(tmpKeys));
     setKeys(tmpKeys);
-    // Also save backend-specific keys to Firestore
+    // Save ALL keys to Firestore so backend agents can use them
     try {
       const token   = await user.getIdToken();
+      const MASK    = "••••••••";
       const payload = {};
-      if (tmpKeys.seranking  && tmpKeys.seranking  !== "••••••••") payload.seranking  = tmpKeys.seranking;
-      if (tmpKeys.serpapi    && tmpKeys.serpapi    !== "••••••••") payload.serpapi    = tmpKeys.serpapi;
-      if (tmpKeys.semrush    && tmpKeys.semrush    !== "••••••••") payload.semrush    = tmpKeys.semrush;
-      if (tmpKeys.dataforseo && tmpKeys.dataforseo !== "••••••••") payload.dataforseo = tmpKeys.dataforseo;
+      const fields  = ["groq","gemini","google","openrouter","gaPropertyId","seranking","serpapi","semrush","dataforseo"];
+      fields.forEach(k => { if (tmpKeys[k] && tmpKeys[k] !== MASK) payload[k] = tmpKeys[k]; });
       if (Object.keys(payload).length > 0) {
         await fetch("https://seo-agent-backend-8m1z.onrender.com/api/keys/save", {
           method:  "POST",
@@ -165,7 +176,7 @@ function MainApp({ onLogout }) {
           body:    JSON.stringify(payload),
         });
       }
-    } catch { /* silent — localStorage save already done */ }
+    } catch { /* silent */ }
     setShowSettings(false);
   }
 

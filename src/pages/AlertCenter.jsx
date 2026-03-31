@@ -88,12 +88,15 @@ const TIER_CONFIG = {
   P3: { color: "#6B7280", bg: "#6B728008", border: "#6B728033", label: "P3 · Minor",     dot: "#6B7280", badge: "#6B728022" },
 };
 
+function openSettingsModal() { window.dispatchEvent(new CustomEvent("seo:openSettings")); }
+
 export default function AlertCenter({ dark, clientId }) {
   const { user, API } = useAuth();
-  const [alerts,    setAlerts]    = useState([]);
-  const [loading,   setLoading]   = useState(true);
-  const [resolving, setResolving] = useState(null);
-  const [expanded,  setExpanded]  = useState(null);
+  const [alerts,      setAlerts]      = useState([]);
+  const [loading,     setLoading]     = useState(true);
+  const [resolving,   setResolving]   = useState(null);
+  const [expanded,    setExpanded]    = useState(null);
+  const [dismissingAll, setDismissingAll] = useState(false);
 
   const bg   = dark ? "#0a0a0a" : "#f5f5f0";
   const bg2  = dark ? "#111"    : "#ffffff";
@@ -129,6 +132,19 @@ export default function AlertCenter({ dark, clientId }) {
     setResolving(null);
   }
 
+  async function dismissAll() {
+    setDismissingAll(true);
+    const token = await getToken();
+    const open  = alerts.filter(a => !a.resolved);
+    await Promise.all(open.map(a =>
+      fetch(`${API}/api/agents/${clientId}/alerts/${a.id}/resolve`, {
+        method: "POST", headers: { Authorization: `Bearer ${token}` },
+      })
+    ));
+    await load();
+    setDismissingAll(false);
+  }
+
   const open     = alerts.filter(a => !a.resolved);
   const resolved = alerts.filter(a => a.resolved);
 
@@ -142,12 +158,36 @@ export default function AlertCenter({ dark, clientId }) {
     <div style={{ padding: 24, background: bg }}>
 
       {/* Header */}
-      <div style={{ marginBottom: 20 }}>
-        <div style={{ fontSize: 15, fontWeight: 700, color: txt, marginBottom: 4 }}>🚨 Alert Center</div>
-        <div style={{ fontSize: 12, color: txt2 }}>
-          P1 = fix immediately · P2 = next business day · P3 = weekly review
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
+        <div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: txt, marginBottom: 2 }}>🚨 Alert Center</div>
+          <div style={{ fontSize: 11, color: txt2 }}>P1 = fix immediately · P2 = next business day · P3 = weekly review</div>
         </div>
+        {open.length > 1 && (
+          <button onClick={dismissAll} disabled={dismissingAll}
+            style={{ padding: "7px 16px", borderRadius: 8, border: `1px solid ${bdr}`, background: bg2, color: txt2, fontSize: 12, cursor: "pointer", fontWeight: 600 }}>
+            {dismissingAll ? "Dismissing…" : `Dismiss All (${open.length})`}
+          </button>
+        )}
       </div>
+
+      {/* Root-cause banner: LLM key missing */}
+      {open.filter(a => (a.message||"").toLowerCase().includes("llm") || (a.message||"").toLowerCase().includes("no llm")).length > 0 && (
+        <div style={{ background: "#443DCB11", border: "1px solid #443DCB44", borderRadius: 12, padding: "14px 18px", marginBottom: 16, display: "flex", alignItems: "center", gap: 14 }}>
+          <span style={{ fontSize: 24 }}>🔑</span>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#443DCB", marginBottom: 3 }}>Root Cause: AI keys not saved to backend</div>
+            <div style={{ fontSize: 12, color: txt2, lineHeight: 1.6 }}>
+              Your Groq / Gemini keys are in localStorage (browser only) — the backend agents can&apos;t see them.
+              Open Settings, re-enter your keys, and click Save. All LLM alerts will stop.
+            </div>
+          </div>
+          <button onClick={openSettingsModal}
+            style={{ padding: "9px 20px", borderRadius: 8, border: "none", background: "#443DCB", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>
+            ⚙️ Open Settings
+          </button>
+        </div>
+      )}
 
       {/* Empty state */}
       {open.length === 0 && resolved.length === 0 && (

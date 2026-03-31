@@ -8,6 +8,7 @@ async function getUserKeys(uid) {
   return {
     groq:         userKeys.groq         || process.env.GROQ_API_KEY       || null,
     gemini:       userKeys.gemini       || process.env.GEMINI_API_KEY     || null,
+    openrouter:   userKeys.openrouter   || process.env.OPENROUTER_API_KEY || null,
     serp:         userKeys.serp         || userKeys.serpapi || process.env.SERP_API_KEY || null,
     seranking:    userKeys.seranking    || process.env.SERANKING_API_KEY  || null,
     dataforseo:   userKeys.dataforseo   || process.env.DATAFORSEO_KEY     || null,
