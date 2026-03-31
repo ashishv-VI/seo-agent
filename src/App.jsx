@@ -83,8 +83,8 @@ function MainApp({ onLogout }) {
   const [showSettings, setShowSettings] = useState(false);
   const [count, setCount]     = useState(0);
   const [dark, setDark]       = useState(true);
-  const [keys, setKeys]       = useState({ groq:"", gemini:"", google:"", openrouter:"", gaPropertyId:"" });
-  const [tmpKeys, setTmpKeys] = useState({ groq:"", gemini:"", google:"", openrouter:"", gaPropertyId:"" });
+  const [keys, setKeys]       = useState({ groq:"", gemini:"", google:"", openrouter:"", gaPropertyId:"", seranking:"", serpapi:"" });
+  const [tmpKeys, setTmpKeys] = useState({ groq:"", gemini:"", google:"", openrouter:"", gaPropertyId:"", seranking:"", serpapi:"" });
   const [copied, setCopied]   = useState(null);
   const [bulkInput, setBulkInput]     = useState("");
   const [bulkResults, setBulkResults] = useState([]);
@@ -98,7 +98,25 @@ function MainApp({ onLogout }) {
     if (savedCount) setCount(parseInt(savedCount));
     const savedDark = localStorage.getItem("seo_dark");
     if (savedDark !== null) setDark(savedDark === "true");
+    // Load backend keys (seranking, serpapi, etc.) into settings
+    if (user) loadBackendKeys();
   }, []);
+
+  async function loadBackendKeys() {
+    try {
+      const token = await user.getIdToken();
+      const res   = await fetch("https://seo-agent-backend-8m1z.onrender.com/api/keys/get", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      const k    = data.keys || {};
+      setTmpKeys(prev => ({
+        ...prev,
+        seranking: k.seranking ? "••••••••" : "",
+        serpapi:   k.serpapi   ? "••••••••" : "",
+      }));
+    } catch { /* silent */ }
+  }
 
   useEffect(() => {
     document.body.style.background = dark ? "#0a0a0a" : "#f5f5f0";
@@ -127,9 +145,24 @@ function MainApp({ onLogout }) {
     localStorage.setItem("seo_dark", nd);
   }
 
-  function saveKeys() {
+  async function saveKeys() {
     localStorage.setItem("seo_keys", JSON.stringify(tmpKeys));
-    setKeys(tmpKeys); setShowSettings(false);
+    setKeys(tmpKeys);
+    // Also save backend-specific keys to Firestore
+    try {
+      const token   = await user.getIdToken();
+      const payload = {};
+      if (tmpKeys.seranking && tmpKeys.seranking !== "••••••••") payload.seranking = tmpKeys.seranking;
+      if (tmpKeys.serpapi   && tmpKeys.serpapi   !== "••••••••") payload.serpapi   = tmpKeys.serpapi;
+      if (Object.keys(payload).length > 0) {
+        await fetch("https://seo-agent-backend-8m1z.onrender.com/api/keys/save", {
+          method:  "POST",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body:    JSON.stringify(payload),
+        });
+      }
+    } catch { /* silent — localStorage save already done */ }
+    setShowSettings(false);
   }
 
   function copyText(text, id) {
@@ -606,6 +639,14 @@ function MainApp({ onLogout }) {
             <input type="password" value={tmpKeys.openrouter} onChange={e=>setTmpKeys(k=>({...k,openrouter:e.target.value}))} placeholder="sk-or-xxxxxxxxxxxx" style={s.inp} />
             <label style={s.label}>GA Property ID — Google Analytics Data API</label>
             <input type="text" value={tmpKeys.gaPropertyId} onChange={e=>setTmpKeys(k=>({...k,gaPropertyId:e.target.value}))} placeholder="properties/123456789" style={s.inp} />
+            <div style={{ borderTop:`1px solid ${dark?"#222":"#e5e5e5"}`, margin:"14px 0 10px", paddingTop:10 }}>
+              <div style={{ fontSize:12, fontWeight:700, color:txt, marginBottom:6 }}>📍 Rank Tracker Keys</div>
+              <div style={{ fontSize:11, color:txt2, marginBottom:8 }}>Required for live Google position checking</div>
+            </div>
+            <label style={s.label}>SerpAPI Key — Live rank checking (100 free/month · serpapi.com)</label>
+            <input type="password" value={tmpKeys.serpapi} onChange={e=>setTmpKeys(k=>({...k,serpapi:e.target.value}))} placeholder="Paste your SerpAPI key" style={s.inp} />
+            <label style={s.label}>SE Ranking API Key — Keyword volume + difficulty (seranking.com)</label>
+            <input type="password" value={tmpKeys.seranking} onChange={e=>setTmpKeys(k=>({...k,seranking:e.target.value}))} placeholder="Paste your SE Ranking API key" style={s.inp} />
             <div style={{ borderTop:`1px solid ${dark?"#222":"#e5e5e5"}`, margin:"16px 0 12px", paddingTop:12 }}>
               <div style={{ fontSize:12, fontWeight:700, color:txt, marginBottom:6 }}>📧 Email Notifications</div>
               <div style={{ fontSize:11, color:txt2, marginBottom:8, lineHeight:1.5 }}>Set these in <strong>Render Environment Variables</strong>. Pipeline complete + ranking drop alerts will be emailed automatically.</div>
