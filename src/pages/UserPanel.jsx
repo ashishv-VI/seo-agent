@@ -197,10 +197,14 @@ function UserDrawer({ uid, API, getToken, dark, onClose, onSaved, showToast }) {
                 <div style={{ marginBottom:14 }}>
                   <div style={{ fontSize:11, fontWeight:700, color:txt2, textTransform:"uppercase", letterSpacing:0.5, marginBottom:8 }}>API Keys Connected</div>
                   <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-                    <ApiDot ok={detail.apiKeys?.groq}      label="Groq AI"/>
-                    <ApiDot ok={detail.apiKeys?.serpapi}   label="SerpAPI"/>
-                    <ApiDot ok={detail.apiKeys?.seranking} label="SE Ranking"/>
-                    <ApiDot ok={detail.apiKeys?.google}    label="Google"/>
+                    <ApiDot ok={detail.apiKeys?.groq}       label="Groq AI"/>
+                    <ApiDot ok={detail.apiKeys?.gemini}     label="Gemini"/>
+                    <ApiDot ok={detail.apiKeys?.google}     label="Google"/>
+                    <ApiDot ok={detail.apiKeys?.openrouter} label="OpenRouter"/>
+                    <ApiDot ok={detail.apiKeys?.serpapi}    label="SerpAPI"/>
+                    <ApiDot ok={detail.apiKeys?.seranking}  label="SE Ranking"/>
+                    <ApiDot ok={detail.apiKeys?.semrush}    label="Semrush"/>
+                    <ApiDot ok={detail.apiKeys?.dataforseo} label="DataForSEO"/>
                   </div>
                 </div>
 

@@ -57,7 +57,13 @@ export default function Dashboard({ onToolSelect, count, keys, dark, onPageSelec
   const hasGemini     = !!keys?.gemini;
   const hasGoogle     = !!keys?.google;
   const hasOpenRouter = !!keys?.openrouter;
-  const apiCount      = [hasGroq, hasGemini, hasGoogle, hasOpenRouter].filter(Boolean).length;
+  const hasSerpApi    = !!keys?.serpapi;
+  const hasSeRanking  = !!keys?.seranking;
+  const hasSemrush    = !!keys?.semrush;
+  const hasDataForSEO = !!keys?.dataforseo;
+  const allApis       = [hasGroq, hasGemini, hasGoogle, hasOpenRouter, hasSerpApi, hasSeRanking, hasSemrush, hasDataForSEO];
+  const apiCount      = allApis.filter(Boolean).length;
+  const apiTotal      = allApis.length;
 
   const filtered = TOOLS.filter(t => {
     const matchCat    = activeCat === "All" || t.cat === activeCat;
@@ -71,10 +77,14 @@ export default function Dashboard({ onToolSelect, count, keys, dark, onPageSelec
   }));
 
   const apis = [
-    { name:"Groq",       desc:"Llama 3.1 — Fast",         ok:hasGroq,       color:"#F97316" },
-    { name:"Gemini",     desc:"Google AI — Smart",         ok:hasGemini,     color:"#2563EB" },
-    { name:"Google API", desc:"PageSpeed + GSC + GA4",     ok:hasGoogle,     color:"#059669" },
-    { name:"OpenRouter", desc:"DeepSeek + Mistral — Free", ok:hasOpenRouter, color:"#A855F7" },
+    { name:"Groq",        desc:"Llama 3.1 — Fast AI",        ok:hasGroq,       color:"#F97316" },
+    { name:"Gemini",      desc:"Google AI — Smart",           ok:hasGemini,     color:"#2563EB" },
+    { name:"Google API",  desc:"PageSpeed + GSC + GA4",       ok:hasGoogle,     color:"#059669" },
+    { name:"OpenRouter",  desc:"DeepSeek + Mistral",          ok:hasOpenRouter, color:"#A855F7" },
+    { name:"SerpAPI",     desc:"Live rank checking",          ok:hasSerpApi,    color:"#0891B2" },
+    { name:"SE Ranking",  desc:"Keyword volume + KD + CPC",   ok:hasSeRanking,  color:"#443DCB" },
+    { name:"Semrush",     desc:"Keyword + competitor data",   ok:hasSemrush,    color:"#FF6B35" },
+    { name:"DataForSEO",  desc:"Bulk SERP positions",         ok:hasDataForSEO, color:"#059669" },
   ];
 
   return (
@@ -109,7 +119,7 @@ export default function Dashboard({ onToolSelect, count, keys, dark, onPageSelec
               { label:"Total Tools",    value:TOOLS.length,    color:"#443DCB", icon:"🛠️" },
               { label:"Analyses Done",  value:count,           color:"#059669", icon:"📊" },
               { label:"Categories",     value:CATS.length-1,   color:"#0891B2", icon:"📂" },
-              { label:"APIs Connected", value:`${apiCount}/4`, color:apiCount>=3?"#059669":apiCount>=2?"#D97706":"#DC2626", icon:"🔑" },
+              { label:"APIs Connected", value:`${apiCount}/${apiTotal}`, color:apiCount>=6?"#059669":apiCount>=3?"#D97706":"#DC2626", icon:"🔑" },
             ].map(s => (
               <div key={s.label} style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:12, padding:"14px 16px", display:"flex", alignItems:"center", gap:12 }}>
                 <div style={{ width:40, height:40, borderRadius:10, background:s.color+"18", display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, flexShrink:0 }}>{s.icon}</div>
