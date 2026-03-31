@@ -135,17 +135,22 @@ async function getDomainCompetitors(domain, apiKey, countryCode = "US") {
  * @param {string} countryCode
  * @returns {{ position, url, volume, difficulty }}
  */
+/**
+ * Check position of a domain for a keyword using SE Ranking's keyword competitors
+ * endpoint — returns all domains ranking for a keyword (the SERP).
+ * We find our domain in those results to get its position.
+ */
 async function checkSingleKeywordPosition(keyword, domain, apiKey, countryCode = "US") {
   const cleanDomain = domain.replace(/^https?:\/\//, "").replace(/\/$/, "").toLowerCase();
 
-  // Try SE Ranking SERP organic results endpoint
-  const serpEndpoints = [
-    `${SE_BASE}/research/keyword/organic?keyword=${encodeURIComponent(keyword)}&country=${countryCode}&limit=100`,
-    `${SE_BASE}/research/keywords/organic?keyword=${encodeURIComponent(keyword)}&country=${countryCode}&limit=100`,
-    `${SE_BASE}/serp?keyword=${encodeURIComponent(keyword)}&country=${countryCode}`,
+  // SE Ranking keyword competitors = who ranks for this keyword (the SERP)
+  const endpoints = [
+    `${SE_BASE}/research/keywords/competitors?keyword=${encodeURIComponent(keyword)}&country=${countryCode}&limit=100`,
+    `${SE_BASE}/research/keyword/competitors?keyword=${encodeURIComponent(keyword)}&country=${countryCode}&limit=100`,
+    `${SE_BASE}/research/keywords?keywords[]=${encodeURIComponent(keyword)}&country=${countryCode}`,
   ];
 
-  for (const url of serpEndpoints) {
+  for (const url of endpoints) {
     try {
       const res = await fetch(url, {
         headers: { "Authorization": `Token ${apiKey}` },
@@ -154,29 +159,25 @@ async function checkSingleKeywordPosition(keyword, domain, apiKey, countryCode =
       if (!res.ok) continue;
 
       const data  = await res.json();
-      const items = Array.isArray(data) ? data : (data.results || data.organic || data.data || []);
-
+      const items = Array.isArray(data) ? data : (data.results || data.organic || data.competitors || data.data || []);
       if (!items.length) continue;
 
-      // Find our domain in the SERP results
       for (const item of items) {
-        const itemUrl = (item.url || item.link || item.domain || "").toLowerCase();
-        if (itemUrl.includes(cleanDomain)) {
+        const itemDomain = (item.domain || item.url || item.link || "").toLowerCase();
+        if (itemDomain.includes(cleanDomain)) {
           return {
-            position:   item.pos || item.position || item.rank || null,
-            url:        item.url || item.link || null,
-            foundInSerp: true,
+            position: item.pos || item.position || item.rank || null,
+            url:      item.url || item.domain   || null,
           };
         }
       }
 
-      // Domain not found in top 100 = not ranking
-      return { position: null, url: null, foundInSerp: true, notRanking: true };
+      // Response worked but domain not in top 100
+      return { position: null, url: null };
     } catch { continue; }
   }
 
-  // All SERP endpoints failed — fall back to null
-  return { position: null, url: null, foundInSerp: false };
+  return { position: null, url: null };
 }
 
 /**

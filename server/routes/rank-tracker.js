@@ -22,10 +22,11 @@ router.get("/debug-seranking", verifyToken, async (req, res) => {
     const SE_BASE = "https://api4.seranking.com";
 
     const endpoints = [
+      `${SE_BASE}/research/keywords/competitors?keyword=${encodeURIComponent(keyword)}&country=${country}&limit=10`,
+      `${SE_BASE}/research/keyword/competitors?keyword=${encodeURIComponent(keyword)}&country=${country}&limit=10`,
       `${SE_BASE}/research/keyword/organic?keyword=${encodeURIComponent(keyword)}&country=${country}&limit=10`,
       `${SE_BASE}/research/keywords/organic?keyword=${encodeURIComponent(keyword)}&country=${country}&limit=10`,
-      `${SE_BASE}/research/domain/organic/keywords?domain=${encodeURIComponent(domain)}&country=${country}&limit=10`,
-      `${SE_BASE}/research/keywords?country=${country}`,
+      `${SE_BASE}/research/domain/organic/keywords?domain=${encodeURIComponent(domain)}&country=${country}&limit=5`,
     ];
 
     const results = [];
