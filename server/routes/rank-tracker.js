@@ -8,6 +8,7 @@ const { verifyToken }   = require("../middleware/auth");
 const { getUserKeys }   = require("../utils/getUserKeys");
 const { getDomainKeywords, getKeywordMetrics, checkBulkPositions } = require("../utils/seranking");
 const { checkBulkPositionsDFS, verifyDFSCredentials }              = require("../utils/dataforseo");
+const { checkBulkPositionsSerp }                                   = require("../utils/serprank");
 const { getState }      = require("../shared-state/stateManager");
 
 // ── DEBUG: Test SE Ranking API endpoints (temporary) ─────────────────────────
@@ -295,9 +296,9 @@ router.post("/:clientId/check-positions", verifyToken, async (req, res) => {
     const brief  = await getState(req.params.clientId, "A1_brief") || {};
     const domain = brief.websiteUrl || doc.data().website || "";
 
-    if (!keys.dataforseo && !keys.seranking) {
+    if (!keys.dataforseo && !keys.serp && !keys.seranking) {
       return res.status(400).json({
-        error: "No rank checking API configured. Add a DataForSEO key (login:password) in Rank Tracker settings for live position checks.",
+        error: "No rank checking API configured. Add a DataForSEO key or SerpAPI key in settings for live position checks.",
       });
     }
     if (!domain) {
@@ -322,17 +323,20 @@ router.post("/:clientId/check-positions", verifyToken, async (req, res) => {
     const today  = now.split("T")[0];
     let   checked = 0;
     const batch   = db.batch();
-    const useDataForSEO = !!keys.dataforseo;
+
+    // Engine priority: DataForSEO (best) → SerpAPI (good, 100 free/mo) → SE Ranking DB (fallback)
+    const engine = keys.dataforseo ? "dataforseo" : keys.serp ? "serpapi" : "seranking";
 
     for (const [country, kwGroup] of Object.entries(byCountry)) {
       const keywordStrings = kwGroup.map(k => k.keyword);
       let   positions      = {};
 
-      if (useDataForSEO) {
-        // ── DataForSEO: live Google SERP — works for any domain/keyword ──────
+      if (engine === "dataforseo") {
         positions = await checkBulkPositionsDFS(domain, keywordStrings, keys.dataforseo, country);
+      } else if (engine === "serpapi") {
+        positions = await checkBulkPositionsSerp(domain, keywordStrings, keys.serp, country);
       } else {
-        // ── SE Ranking fallback: Research DB — may not have small domains ────
+        // SE Ranking Research DB — works only for well-indexed domains
         positions = await checkBulkPositions(domain, keywordStrings, keys.seranking, country);
       }
 
@@ -381,7 +385,7 @@ router.post("/:clientId/check-positions", verifyToken, async (req, res) => {
       success: true,
       checked,
       domain,
-      engine:    useDataForSEO ? "dataforseo" : "seranking",
+      engine,
       countries: Object.keys(byCountry),
     });
   } catch (e) {

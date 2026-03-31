@@ -56,8 +56,8 @@ export default function RankTrackerPanel({ dark, clientId, getToken, API }) {
   const [editingId,    setEditingId]    = useState(null);
   const [editCategory, setEditCategory] = useState("");
 
-  // DataForSEO key management
-  const [dfsConfigured, setDfsConfigured] = useState(false);
+  // API key status for rank checking
+  const [activeEngine,  setActiveEngine]  = useState(null); // "dataforseo" | "serpapi" | "seranking" | null
   const [dfsBalance,    setDfsBalance]    = useState(null);
   const [showDfsSetup,  setShowDfsSetup]  = useState(false);
   const [dfsInput,      setDfsInput]      = useState("");
@@ -99,7 +99,11 @@ export default function RankTrackerPanel({ dark, clientId, getToken, API }) {
       const token = await getToken();
       const res   = await fetch(`${API}/api/keys/get`, { headers: { Authorization: `Bearer ${token}` } });
       const data  = await res.json();
-      setDfsConfigured(!!data.keys?.dataforseo);
+      const keys  = data.keys || {};
+      if (keys.dataforseo)          setActiveEngine("dataforseo");
+      else if (keys.serpapi || keys.serp) setActiveEngine("serpapi");
+      else if (keys.seranking)      setActiveEngine("seranking");
+      else                          setActiveEngine(null);
     } catch { /* silent */ }
   }
 
@@ -125,14 +129,13 @@ export default function RankTrackerPanel({ dark, clientId, getToken, API }) {
         return;
       }
 
-      // Save key
       await fetch(`${API}/api/keys/save`, {
         method:  "POST",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
         body:    JSON.stringify({ dataforseo: dfsInput }),
       });
 
-      setDfsConfigured(true);
+      setActiveEngine("dataforseo");
       setDfsBalance(verifyData.balance);
       setShowDfsSetup(false);
       setDfsInput("");
@@ -257,27 +260,40 @@ export default function RankTrackerPanel({ dark, clientId, getToken, API }) {
       {error   && <div style={{ padding: "10px 14px", borderRadius: 8, background: "#DC262611", color: "#DC2626", fontSize: 12, marginBottom: 12 }}>{error}<button onClick={() => setError("")} style={{ marginLeft: 8, background: "none", border: "none", color: "#DC2626", cursor: "pointer" }}>×</button></div>}
       {success && <div style={{ padding: "10px 14px", borderRadius: 8, background: "#05966911", color: "#059669", fontSize: 12, marginBottom: 12 }}>{success}<button onClick={() => setSuccess("")} style={{ marginLeft: 8, background: "none", border: "none", color: "#059669", cursor: "pointer" }}>×</button></div>}
 
-      {/* ── DataForSEO Key Setup ── */}
-      {!dfsConfigured && !showDfsSetup && (
-        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderRadius: 8, background: "#D9770611", border: "1px solid #D9770633", marginBottom: 12 }}>
-          <span style={{ fontSize: 16 }}>⚠️</span>
-          <div style={{ flex: 1, fontSize: 12, color: "#D97706" }}>
-            <strong>DataForSEO key required</strong> for live position checking.
-            SE Ranking Research API doesn&apos;t support live SERP lookups for small domains.
+      {/* ── Rank Engine Status ── */}
+      {!activeEngine && !showDfsSetup && (
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderRadius: 8, background: "#DC262611", border: "1px solid #DC262633", marginBottom: 12 }}>
+          <span style={{ fontSize: 15 }}>⚠️</span>
+          <div style={{ flex: 1, fontSize: 12, color: "#DC2626" }}>
+            <strong>No rank checking API found.</strong> Add a SerpAPI or DataForSEO key to check live positions.
           </div>
           <button onClick={() => setShowDfsSetup(true)}
-            style={{ padding: "6px 14px", borderRadius: 6, border: "none", background: "#D97706", color: "#fff", fontWeight: 700, fontSize: 12, cursor: "pointer", whiteSpace: "nowrap" }}>
-            Setup DataForSEO
+            style={{ padding: "6px 14px", borderRadius: 6, border: "none", background: "#DC2626", color: "#fff", fontWeight: 700, fontSize: 12, cursor: "pointer", whiteSpace: "nowrap" }}>
+            Add API Key
           </button>
         </div>
       )}
 
-      {dfsConfigured && !showDfsSetup && (
+      {activeEngine === "seranking" && !showDfsSetup && (
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderRadius: 8, background: "#D9770611", border: "1px solid #D9770633", marginBottom: 12 }}>
+          <span style={{ fontSize: 15 }}>⚠️</span>
+          <div style={{ flex: 1, fontSize: 12, color: "#D97706" }}>
+            Using <strong>SE Ranking</strong> (research DB only — may show null for small domains).
+            Add a <strong>SerpAPI</strong> or <strong>DataForSEO</strong> key for live Google positions.
+          </div>
+          <button onClick={() => setShowDfsSetup(true)}
+            style={{ padding: "6px 14px", borderRadius: 6, border: "none", background: "#D97706", color: "#fff", fontWeight: 700, fontSize: 12, cursor: "pointer", whiteSpace: "nowrap" }}>
+            Upgrade Engine
+          </button>
+        </div>
+      )}
+
+      {(activeEngine === "serpapi" || activeEngine === "dataforseo") && !showDfsSetup && (
         <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 14px", borderRadius: 8, background: "#05966911", border: "1px solid #05966933", marginBottom: 12 }}>
-          <span style={{ fontSize: 14 }}>✓</span>
+          <span style={{ fontSize: 13, color: "#059669" }}>✓</span>
           <div style={{ flex: 1, fontSize: 12, color: "#059669" }}>
-            <strong>DataForSEO connected</strong> — live Google SERP position checking active
-            {dfsBalance !== null && <span style={{ marginLeft: 6, color: "#059669" }}>(Balance: ${dfsBalance?.toFixed(2)})</span>}
+            <strong>{activeEngine === "dataforseo" ? "DataForSEO" : "SerpAPI"} connected</strong> — live Google SERP position checking active
+            {dfsBalance !== null && <span style={{ marginLeft: 6 }}>(Balance: ${dfsBalance?.toFixed(2)})</span>}
           </div>
           <button onClick={() => setShowDfsSetup(true)}
             style={{ padding: "4px 10px", borderRadius: 6, border: `1px solid #05966944`, background: "transparent", color: "#059669", fontSize: 11, cursor: "pointer" }}>
@@ -288,15 +304,31 @@ export default function RankTrackerPanel({ dark, clientId, getToken, API }) {
 
       {showDfsSetup && (
         <div style={{ background: bg2, border: `1px solid ${B}44`, borderRadius: 12, padding: "16px 18px", marginBottom: 14 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: txt, marginBottom: 4 }}>DataForSEO API Setup</div>
-          <div style={{ fontSize: 11, color: txt2, marginBottom: 12, lineHeight: 1.6 }}>
-            Sign up free at <strong style={{ color: txt }}>dataforseo.com</strong> → Dashboard → API Access → copy your Login + Password.
-            Enter them below as <code style={{ background: bg3, padding: "1px 5px", borderRadius: 3 }}>login:password</code>.
-            ~$0.001 per keyword check.
+          <div style={{ fontSize: 13, fontWeight: 700, color: txt, marginBottom: 10 }}>Live Rank Checking Setup</div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
+            <div style={{ padding: "12px 14px", borderRadius: 8, border: `1px solid ${bdr}`, background: bg3 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: txt, marginBottom: 4 }}>Option 1: SerpAPI <span style={{ color: "#059669", fontWeight: 400 }}>(100 free/month)</span></div>
+              <div style={{ fontSize: 11, color: txt2, lineHeight: 1.6 }}>
+                Sign up free at <strong style={{ color: txt }}>serpapi.com</strong><br />
+                Dashboard → API Key → copy the key<br />
+                Save it in <strong style={{ color: txt }}>Settings → SE Ranking / SerpAPI</strong>
+              </div>
+            </div>
+            <div style={{ padding: "12px 14px", borderRadius: 8, border: `1px solid ${bdr}`, background: bg3 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: txt, marginBottom: 4 }}>Option 2: DataForSEO <span style={{ color: txt2, fontWeight: 400 }}>(~$0.001/keyword)</span></div>
+              <div style={{ fontSize: 11, color: txt2, lineHeight: 1.6 }}>
+                Sign up at <strong style={{ color: txt }}>dataforseo.com</strong><br />
+                Dashboard → API Access → copy Login + Password<br />
+                Enter below as <code style={{ background: bg2, padding: "1px 4px", borderRadius: 3 }}>login:password</code>
+              </div>
+            </div>
           </div>
+
+          <div style={{ fontSize: 11, fontWeight: 600, color: txt2, marginBottom: 6 }}>DataForSEO credentials (login:password)</div>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             <input
-              type="password"
+              type="text"
               placeholder="yourlogin@email.com:your_api_password"
               value={dfsInput}
               onChange={e => setDfsInput(e.target.value)}
@@ -310,6 +342,9 @@ export default function RankTrackerPanel({ dark, clientId, getToken, API }) {
               style={{ padding: "8px 12px", borderRadius: 8, border: `1px solid ${bdr}`, background: "transparent", color: txt2, fontSize: 12, cursor: "pointer" }}>
               Cancel
             </button>
+          </div>
+          <div style={{ fontSize: 11, color: txt2, marginTop: 8 }}>
+            For SerpAPI: go to Settings (gear icon) and add your SerpAPI key there — it will be auto-detected.
           </div>
         </div>
       )}
