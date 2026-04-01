@@ -52,7 +52,7 @@ async function checkBulkPositionsDFS(domain, keywords, auth, countryCode = "US")
       keyword:       kw,
       location_code: locationCode,
       language_code: languageCode,
-      depth:         100,
+      depth:         200,
       device:        "desktop",
     }));
 
