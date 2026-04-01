@@ -674,18 +674,21 @@ function GscKeywordsTab({ dark, clientId, getToken, API, clientWebsite, onGoToIn
         const d     = await res.json();
         if (d.connected) {
           setStatus(d);
-          // Pick best siteUrl: prefer sc-domain or https, fallback to first site
-          const sites = d.sites || [];
-          let best = sites.find(s => s.startsWith("sc-domain:")) ||
-                     sites.find(s => s.startsWith("https://")) ||
-                     sites[0] || "";
-          // Also try matching client website
-          if (clientWebsite) {
-            const ws = clientWebsite.replace(/^https?:\/\//, "").replace(/\/$/, "");
-            const match = sites.find(s => s.includes(ws));
-            if (match) best = match;
+          // Use saved selectedSiteUrl first, then auto-detect
+          if (d.selectedSiteUrl) {
+            setSiteUrl(d.selectedSiteUrl);
+          } else {
+            const sites = d.sites || [];
+            let best = sites.find(s => s.startsWith("sc-domain:")) ||
+                       sites.find(s => s.startsWith("https://")) ||
+                       sites[0] || "";
+            if (clientWebsite) {
+              const ws = clientWebsite.replace(/^https?:\/\//, "").replace(/\/$/, "");
+              const match = sites.find(s => s.includes(ws));
+              if (match) best = match;
+            }
+            setSiteUrl(best);
           }
-          setSiteUrl(best);
         } else {
           setStatus({ connected: false });
         }

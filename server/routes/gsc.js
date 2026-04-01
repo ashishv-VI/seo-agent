@@ -139,11 +139,27 @@ router.get("/:clientId/status", verifyToken, async (req, res) => {
     }
 
     return res.json({
-      connected:   true,
-      email:       gscInt.email       || null,
-      connectedAt: gscInt.connectedAt || null,
-      sites:       gscInt.sites       || [],
+      connected:        true,
+      email:            gscInt.email            || null,
+      connectedAt:      gscInt.connectedAt      || null,
+      sites:            gscInt.sites            || [],
+      selectedSiteUrl:  gscInt.selectedSiteUrl  || null,
     });
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
+// ── PUT: Save selected site URL for a client ──────────────────────────────
+router.put("/:clientId/select-site", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const { siteUrl } = req.body;
+    if (!siteUrl) return res.status(400).json({ error: "siteUrl is required" });
+    await db.collection("clients").doc(req.params.clientId).update({
+      "gscIntegration.selectedSiteUrl": siteUrl,
+    });
+    return res.json({ saved: true, selectedSiteUrl: siteUrl });
   } catch (e) {
     return res.status(e.code || 500).json({ error: e.message });
   }

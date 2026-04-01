@@ -21,6 +21,8 @@ export default function IntegrationsPanel({ dark, clientId, getToken, API }) {
   const [disconnecting, setDisconnecting] = useState(false);
   const [gscConnecting, setGscConnecting] = useState(false);
   const [gscDisconnecting, setGscDisconnecting] = useState(false);
+  const [savingSite, setSavingSite] = useState(false);
+  const [selectedSite, setSelectedSite] = useState("");
   const [showForm,      setShowForm]      = useState(false);
   const [wpPages,       setWpPages]       = useState(null);
   const [loadingPages,  setLoadingPages]  = useState(false);
@@ -51,6 +53,7 @@ export default function IntegrationsPanel({ dark, clientId, getToken, API }) {
       const ga4Data = ga4Res ? await ga4Res.json().catch(() => null) : null;
       setWpStatus(wpData.wordpress || null);
       setGscStatus(gscData?.connected ? gscData : null);
+      if (gscData?.connected && gscData?.selectedSiteUrl) setSelectedSite(gscData.selectedSiteUrl);
       setGa4Status(ga4Data?.connected ? ga4Data : null);
     } catch { setWpStatus(null); }
     setLoading(false);
@@ -85,6 +88,23 @@ export default function IntegrationsPanel({ dark, clientId, getToken, API }) {
       setSuccess("Search Console disconnected");
     } catch (e) { setError(e.message); }
     setGscDisconnecting(false);
+  }
+
+  async function saveSiteSelection(siteUrl) {
+    setSavingSite(true); setError(""); setSuccess("");
+    try {
+      const token = await getToken();
+      const res   = await fetch(`${API}/api/gsc/${clientId}/select-site`, {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ siteUrl }),
+      });
+      if (!res.ok) throw new Error("Failed to save site selection");
+      setSelectedSite(siteUrl);
+      setGscStatus(s => ({ ...s, selectedSiteUrl: siteUrl }));
+      setSuccess(`Site set to: ${siteUrl}`);
+    } catch (e) { setError(e.message); }
+    setSavingSite(false);
   }
 
   async function connectGA4() {
@@ -409,17 +429,38 @@ export default function IntegrationsPanel({ dark, clientId, getToken, API }) {
                 ))}
               </div>
 
-              {/* Accessible sites list */}
+              {/* Site selector for this client */}
               {gscStatus.sites?.length > 0 && (
-                <div style={{ marginBottom:14 }}>
-                  <div style={{ fontSize:12, fontWeight:600, color:txt2, marginBottom:6 }}>ACCESSIBLE SITES IN SEARCH CONSOLE</div>
-                  <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
-                    {gscStatus.sites.map(s => (
-                      <div key={s.url} style={{ padding:"4px 10px", borderRadius:6, background:`${B}11`, border:`1px solid ${B}33`, fontSize:11, color:B }}>
-                        {s.url}
-                        <span style={{ color:txt2, marginLeft:6 }}>({s.permissionLevel})</span>
-                      </div>
-                    ))}
+                <div style={{ marginBottom:16, padding:"14px 16px", borderRadius:10, background: selectedSite ? "#05966910" : "#D9770610", border:`1px solid ${selectedSite ? "#05966940" : "#D9770640"}` }}>
+                  <div style={{ fontSize:12, fontWeight:700, color: selectedSite ? "#059669" : "#D97706", marginBottom:8 }}>
+                    {selectedSite ? "✅ Site selected for this client" : "⚠️ Select which site belongs to this client"}
+                  </div>
+                  {selectedSite && (
+                    <div style={{ fontSize:12, color:txt, marginBottom:8, fontFamily:"monospace", background:"#05966915", padding:"4px 10px", borderRadius:6, display:"inline-block" }}>
+                      {selectedSite}
+                    </div>
+                  )}
+                  <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
+                    <select
+                      value={selectedSite}
+                      onChange={e => setSelectedSite(e.target.value)}
+                      style={{ flex:1, minWidth:200, padding:"8px 12px", borderRadius:8, border:`1px solid ${bdr}`, background:bg2, color:txt, fontSize:12, cursor:"pointer" }}
+                    >
+                      <option value="">— Select site —</option>
+                      {gscStatus.sites.map(s => (
+                        <option key={s.url || s} value={s.url || s}>{s.url || s}</option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={() => saveSiteSelection(selectedSite)}
+                      disabled={!selectedSite || savingSite}
+                      style={{ padding:"8px 18px", borderRadius:8, border:"none", background: selectedSite ? "#059669" : bdr, color: selectedSite ? "#fff" : txt2, fontWeight:700, fontSize:12, cursor: selectedSite ? "pointer" : "not-allowed" }}
+                    >
+                      {savingSite ? "Saving…" : "Save"}
+                    </button>
+                  </div>
+                  <div style={{ fontSize:11, color:txt2, marginTop:6 }}>
+                    GSC Keywords tab will fetch data for the selected site only.
                   </div>
                 </div>
               )}
