@@ -406,4 +406,55 @@ router.post("/:clientId/verify-dataforseo", verifyToken, async (req, res) => {
   }
 });
 
+// POST — keyword ideas / research via DataForSEO Labs
+router.post("/:clientId/keyword-ideas", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const keys = await getUserKeys(req.uid);
+
+    if (!keys.dataforseo) {
+      return res.status(400).json({ error: "DataForSEO key required for keyword research. Add login:password in Settings." });
+    }
+
+    const { keywords = [], country = "US", limit = 50 } = req.body;
+    if (!keywords.length) return res.status(400).json({ error: "keywords array required" });
+
+    const LOCATION_CODES = { US:2840, GB:2826, IN:2356, AU:2036, CA:2124, AE:9041334, SG:1062822, DE:2276, FR:2250 };
+    const locationCode = LOCATION_CODES[country] || 2840;
+
+    const authHeader = `Basic ${Buffer.from(keys.dataforseo).toString("base64")}`;
+    const apiRes = await fetch("https://api.dataforseo.com/v3/dataforseo_labs/google/keyword_ideas/live", {
+      method: "POST",
+      headers: { Authorization: authHeader, "Content-Type": "application/json" },
+      body: JSON.stringify([{
+        keywords,
+        language_name: "English",
+        location_code: locationCode,
+        limit,
+        include_serp_info: false,
+      }]),
+      signal: AbortSignal.timeout(30000),
+    });
+
+    const data = await apiRes.json();
+    const items = data?.tasks?.[0]?.result?.[0]?.items || [];
+
+    return res.json({
+      ideas: items.map(i => ({
+        keyword:    i.keyword,
+        volume:     i.keyword_info?.search_volume     || 0,
+        difficulty: i.keyword_properties?.keyword_difficulty || 0,
+        cpc:        +(i.keyword_info?.cpc             || 0).toFixed(2),
+        competition:i.keyword_info?.competition_level || "—",
+        intent:     i.search_intent_info?.main_intent || "informational",
+        trend:      (i.keyword_info?.monthly_searches || []).slice(-6).map(m => m?.search_volume || 0),
+      })),
+      total: items.length,
+      country,
+    });
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
+  }
+});
+
 module.exports = router;

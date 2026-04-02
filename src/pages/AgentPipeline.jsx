@@ -329,6 +329,8 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
         {isComplete("A5") && <div style={s.tab(activeTab==="briefs")} onClick={()=>setActiveTab("briefs")}>📝 Briefs</div>}
         {isComplete("A10") && <div style={s.tab(activeTab==="comparison")} onClick={()=>setActiveTab("comparison")}>📊 Before/After</div>}
         <div style={s.tab(activeTab==="ranktracker")} onClick={()=>setActiveTab("ranktracker")}>📍 Rank Tracker</div>
+        <div style={s.tab(activeTab==="backlinks")} onClick={()=>setActiveTab("backlinks")}>🔗 Backlinks</div>
+        <div style={s.tab(activeTab==="kwresearch")} onClick={()=>setActiveTab("kwresearch")}>🔎 KW Research</div>
         <div style={s.tab(activeTab==="integrations")} onClick={()=>setActiveTab("integrations")}>🔌 Integrations</div>
         {isComplete("A3") && <div style={s.tab(activeTab==="autopilot")} onClick={()=>setActiveTab("autopilot")}>📝 Autopilot</div>}
         {isComplete("A10") && <div style={s.tab(activeTab==="roi")} onClick={()=>setActiveTab("roi")}>💰 ROI</div>}
@@ -608,6 +610,16 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
       {/* ── GSC Keywords: Live ranking keywords from Search Console ── */}
       {activeTab==="gsckeys" && (
         <GscKeywordsTab dark={dark} clientId={clientId} getToken={getToken} API={API} clientWebsite={client?.website} onGoToIntegrations={()=>setActiveTab("integrations")} />
+      )}
+
+      {/* ── Backlinks: Real backlink data via DataForSEO ── */}
+      {activeTab==="backlinks" && (
+        <BacklinksTab dark={dark} clientId={clientId} getToken={getToken} API={API} />
+      )}
+
+      {/* ── Keyword Research: Find new keyword opportunities ── */}
+      {activeTab==="kwresearch" && (
+        <KwResearchTab dark={dark} clientId={clientId} getToken={getToken} API={API} state={state} />
       )}
 
       <AIChatBot dark={dark} clientId={clientId} getToken={getToken} API={API} />
@@ -4048,6 +4060,391 @@ function RankingsView({ clientId, dark, bg2, bg3, bdr, txt, txt2, getToken, API,
               </div>
             );
           })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BACKLINKS TAB — Real data via DataForSEO Backlinks API
+// ─────────────────────────────────────────────────────────────────────────────
+function BacklinksTab({ dark, clientId, getToken, API }) {
+  const [summary,   setSummary]   = useState(null);
+  const [domains,   setDomains]   = useState([]);
+  const [anchors,   setAnchors]   = useState([]);
+  const [loading,   setLoading]   = useState(false);
+  const [error,     setError]     = useState("");
+  const [activeTab, setActiveTab] = useState("overview");
+
+  const bg2 = dark ? "#111" : "#fff";
+  const bg3 = dark ? "#1a1a1a" : "#f5f5f0";
+  const bdr = dark ? "#2a2a2a" : "#e0e0d8";
+  const txt = dark ? "#e8e8e8" : "#1a1a18";
+  const txt2= dark ? "#777"   : "#888";
+  const B   = "#443DCB";
+
+  async function load() {
+    setLoading(true); setError("");
+    try {
+      const token = await getToken();
+      const headers = { Authorization: `Bearer ${token}` };
+      const [s, d, a] = await Promise.all([
+        fetch(`${API}/api/backlinks/${clientId}/summary`,            { headers }).then(r => r.json()),
+        fetch(`${API}/api/backlinks/${clientId}/referring-domains`,  { headers }).then(r => r.json()),
+        fetch(`${API}/api/backlinks/${clientId}/anchors`,            { headers }).then(r => r.json()),
+      ]);
+      if (s.error) throw new Error(s.error);
+      setSummary(s);
+      setDomains(d.items || []);
+      setAnchors(a.anchors || []);
+    } catch (e) { setError(e.message); }
+    setLoading(false);
+  }
+
+  useEffect(() => { load(); }, [clientId]);
+
+  const tab = (a) => ({
+    padding:"5px 14px", borderRadius:16, fontSize:12, cursor:"pointer",
+    fontWeight: a?600:400,
+    background: a ? `${B}22` : "transparent",
+    color:      a ? "#6B62E8" : txt2,
+    border:     `1px solid ${a ? `${B}44` : bdr}`,
+  });
+
+  if (loading) return <div style={{ padding:40, textAlign:"center", color:txt2 }}>Loading backlink data…</div>;
+
+  if (error) return (
+    <div style={{ background:"#DC262611", border:"1px solid #DC262633", borderRadius:10, padding:"16px 20px" }}>
+      <div style={{ fontSize:13, fontWeight:700, color:"#DC2626", marginBottom:6 }}>⚠️ {error}</div>
+      {error.includes("DataForSEO") && (
+        <div style={{ fontSize:12, color:txt2, lineHeight:1.7 }}>
+          <strong>How to fix:</strong><br/>
+          1. Go to <strong>dataforseo.com</strong> → sign up (free trial available)<br/>
+          2. Copy your <strong>login:password</strong> credentials<br/>
+          3. Go to <strong>Settings → API Keys</strong> → paste in <strong>DataForSEO</strong> field → Save<br/>
+          4. Come back and refresh this tab
+        </div>
+      )}
+      <button onClick={load} style={{ marginTop:12, padding:"8px 16px", borderRadius:8, border:"none", background:"#DC2626", color:"#fff", fontSize:12, fontWeight:700, cursor:"pointer" }}>
+        🔄 Retry
+      </button>
+    </div>
+  );
+
+  if (!summary) return (
+    <div style={{ textAlign:"center", padding:"40px 20px" }}>
+      <button onClick={load} style={{ padding:"12px 28px", borderRadius:10, border:"none", background:B, color:"#fff", fontSize:14, fontWeight:700, cursor:"pointer" }}>
+        🔗 Load Backlink Data
+      </button>
+    </div>
+  );
+
+  const drColor = summary.domainRank >= 60 ? "#059669" : summary.domainRank >= 30 ? "#D97706" : "#DC2626";
+
+  return (
+    <div>
+      {/* KPI Cards */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))", gap:10, marginBottom:20 }}>
+        {[
+          { label:"Domain Rank",        v: summary.domainRank,       color: drColor,   icon:"🏆" },
+          { label:"Total Backlinks",    v: (summary.backlinks||0).toLocaleString(),    color:"#443DCB", icon:"🔗" },
+          { label:"Referring Domains",  v: (summary.referringDomains||0).toLocaleString(), color:"#0891B2", icon:"🌐" },
+          { label:"New Backlinks",      v: `+${summary.newBacklinks||0}`, color:"#059669", icon:"📈" },
+          { label:"Lost Backlinks",     v: `-${summary.lostBacklinks||0}`, color:"#DC2626", icon:"📉" },
+          { label:"Spam Score",         v: `${summary.spamScore||0}%`, color: (summary.spamScore||0)>30?"#DC2626":"#059669", icon:"🛡️" },
+        ].map(k => (
+          <div key={k.label} style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, padding:"12px 14px", textAlign:"center" }}>
+            <div style={{ fontSize:20, marginBottom:4 }}>{k.icon}</div>
+            <div style={{ fontSize:18, fontWeight:800, color:k.color, lineHeight:1 }}>{k.v}</div>
+            <div style={{ fontSize:10, color:txt2, marginTop:4 }}>{k.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Follow vs Nofollow */}
+      {(summary.followLinks + summary.nofollowLinks) > 0 && (
+        <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, padding:"12px 16px", marginBottom:16 }}>
+          <div style={{ fontSize:11, fontWeight:700, color:txt, marginBottom:8 }}>Do-Follow vs No-Follow Ratio</div>
+          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+            <div style={{ flex:1, height:10, borderRadius:5, background:bdr, overflow:"hidden" }}>
+              <div style={{ height:"100%", width:`${Math.round((summary.followLinks/(summary.followLinks+summary.nofollowLinks))*100)}%`, background:"#059669", borderRadius:5 }} />
+            </div>
+            <span style={{ fontSize:11, color:"#059669", fontWeight:700, whiteSpace:"nowrap" }}>
+              {Math.round((summary.followLinks/(summary.followLinks+summary.nofollowLinks))*100)}% DoFollow
+            </span>
+          </div>
+          <div style={{ display:"flex", gap:16, marginTop:8 }}>
+            <span style={{ fontSize:11, color:txt2 }}>✅ DoFollow: <strong style={{ color:txt }}>{(summary.followLinks||0).toLocaleString()}</strong></span>
+            <span style={{ fontSize:11, color:txt2 }}>⚠️ NoFollow: <strong style={{ color:txt }}>{(summary.nofollowLinks||0).toLocaleString()}</strong></span>
+          </div>
+        </div>
+      )}
+
+      {/* Tabs */}
+      <div style={{ display:"flex", gap:6, marginBottom:14 }}>
+        <div style={tab(activeTab==="overview")} onClick={()=>setActiveTab("overview")}>🌐 Referring Domains</div>
+        <div style={tab(activeTab==="anchors")}  onClick={()=>setActiveTab("anchors")}>⚓ Anchor Texts</div>
+      </div>
+
+      {/* Referring Domains Table */}
+      {activeTab==="overview" && (
+        <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, overflow:"hidden" }}>
+          <div style={{ overflowX:"auto" }}>
+            <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
+              <thead>
+                <tr style={{ background:bg3 }}>
+                  {["Domain","Rank","Backlinks","DoFollow","First Seen","Spam"].map(h => (
+                    <th key={h} style={{ padding:"9px 12px", textAlign:"left", fontSize:11, fontWeight:700, color:txt2, whiteSpace:"nowrap" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {domains.length === 0 ? (
+                  <tr><td colSpan={6} style={{ padding:"24px", textAlign:"center", color:txt2 }}>No referring domain data</td></tr>
+                ) : domains.map((d, i) => (
+                  <tr key={d.domain} style={{ borderTop:`1px solid ${bdr}`, background:i%2===0?"transparent":bg3 }}>
+                    <td style={{ padding:"9px 12px", fontWeight:600, color:"#443DCB" }}>{d.domain}</td>
+                    <td style={{ padding:"9px 12px" }}>
+                      <span style={{ fontWeight:700, color: d.rank>=60?"#059669":d.rank>=30?"#D97706":"#DC2626" }}>{d.rank}</span>
+                    </td>
+                    <td style={{ padding:"9px 12px", color:txt }}>{(d.backlinks||0).toLocaleString()}</td>
+                    <td style={{ padding:"9px 12px" }}>
+                      <span style={{ padding:"2px 8px", borderRadius:8, background:d.dofollow?"#05966918":"#DC262618", color:d.dofollow?"#059669":"#DC2626", fontSize:11, fontWeight:700 }}>
+                        {d.dofollow ? "✓ DoFollow" : "NoFollow"}
+                      </span>
+                    </td>
+                    <td style={{ padding:"9px 12px", color:txt2, fontSize:11 }}>{d.firstSeen ? d.firstSeen.split("T")[0] : "—"}</td>
+                    <td style={{ padding:"9px 12px" }}>
+                      <span style={{ color:(d.spamScore||0)>30?"#DC2626":"#059669", fontWeight:700, fontSize:11 }}>{d.spamScore||0}%</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Anchor Text Table */}
+      {activeTab==="anchors" && (
+        <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, overflow:"hidden" }}>
+          <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
+            <thead>
+              <tr style={{ background:bg3 }}>
+                {["Anchor Text","Backlinks","Domains","DoFollow"].map(h => (
+                  <th key={h} style={{ padding:"9px 12px", textAlign:"left", fontSize:11, fontWeight:700, color:txt2 }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {anchors.length === 0 ? (
+                <tr><td colSpan={4} style={{ padding:"24px", textAlign:"center", color:txt2 }}>No anchor data</td></tr>
+              ) : anchors.map((a, i) => (
+                <tr key={i} style={{ borderTop:`1px solid ${bdr}`, background:i%2===0?"transparent":bg3 }}>
+                  <td style={{ padding:"9px 12px", fontWeight:600, color:txt }}>{a.anchor}</td>
+                  <td style={{ padding:"9px 12px", color:txt }}>{(a.backlinks||0).toLocaleString()}</td>
+                  <td style={{ padding:"9px 12px", color:txt2 }}>{a.domains||0}</td>
+                  <td style={{ padding:"9px 12px" }}>
+                    <span style={{ fontSize:11, color:a.dofollow?"#059669":"#888" }}>{a.dofollow ? "✓" : "—"}</span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <div style={{ textAlign:"right", marginTop:12 }}>
+        <button onClick={load} style={{ padding:"6px 14px", borderRadius:8, border:`1px solid ${bdr}`, background:bg2, color:txt2, fontSize:11, cursor:"pointer" }}>
+          🔄 Refresh
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// KEYWORD RESEARCH TAB — Find new keyword opportunities via DataForSEO
+// ─────────────────────────────────────────────────────────────────────────────
+function KwResearchTab({ dark, clientId, getToken, API, state }) {
+  const [seedInput, setSeedInput] = useState("");
+  const [country,   setCountry]   = useState("US");
+  const [ideas,     setIdeas]     = useState([]);
+  const [loading,   setLoading]   = useState(false);
+  const [error,     setError]     = useState("");
+  const [sortBy,    setSortBy]    = useState("volume");
+  const [filterInt, setFilterInt] = useState("all");
+
+  const bg2 = dark ? "#111" : "#fff";
+  const bg3 = dark ? "#1a1a1a" : "#f5f5f0";
+  const bdr = dark ? "#2a2a2a" : "#e0e0d8";
+  const txt = dark ? "#e8e8e8" : "#1a1a18";
+  const txt2= dark ? "#777"   : "#888";
+  const B   = "#443DCB";
+
+  // Pre-populate from A3 keywords if available
+  const suggestedSeeds = (state?.A3_keywords?.keywordMap || [])
+    .filter(k => k.priority === "high")
+    .slice(0, 5)
+    .map(k => k.keyword);
+
+  async function research() {
+    const seeds = seedInput.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
+    if (!seeds.length) { setError("Enter at least one seed keyword"); return; }
+    setLoading(true); setError(""); setIdeas([]);
+    try {
+      const token = await getToken();
+      const res = await fetch(`${API}/api/rank-tracker/${clientId}/keyword-ideas`, {
+        method: "POST",
+        headers: { Authorization:`Bearer ${token}`, "Content-Type":"application/json" },
+        body: JSON.stringify({ keywords: seeds, country, limit: 50 }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Request failed");
+      setIdeas(data.ideas || []);
+    } catch (e) { setError(e.message); }
+    setLoading(false);
+  }
+
+  const filtered = ideas
+    .filter(i => filterInt === "all" || i.intent === filterInt)
+    .sort((a, b) => {
+      if (sortBy === "volume")     return b.volume - a.volume;
+      if (sortBy === "difficulty") return a.difficulty - b.difficulty;
+      if (sortBy === "cpc")        return b.cpc - a.cpc;
+      return 0;
+    });
+
+  const intents    = [...new Set(ideas.map(i => i.intent).filter(Boolean))];
+  const COUNTRIES  = [["US","🇺🇸 USA"],["GB","🇬🇧 UK"],["IN","🇮🇳 India"],["AU","🇦🇺 Australia"],["CA","🇨🇦 Canada"],["AE","🇦🇪 UAE"],["DE","🇩🇪 Germany"],["SG","🇸🇬 Singapore"]];
+
+  return (
+    <div>
+      {/* Search Box */}
+      <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:12, padding:"16px 20px", marginBottom:16 }}>
+        <div style={{ fontSize:13, fontWeight:700, color:txt, marginBottom:10 }}>🔎 Keyword Research — Discover new keyword opportunities</div>
+        {suggestedSeeds.length > 0 && (
+          <div style={{ marginBottom:10 }}>
+            <div style={{ fontSize:11, color:txt2, marginBottom:6 }}>Suggested from your pipeline:</div>
+            <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+              {suggestedSeeds.map(s => (
+                <button key={s} onClick={() => setSeedInput(p => p ? `${p}, ${s}` : s)}
+                  style={{ padding:"3px 10px", borderRadius:10, border:`1px solid ${bdr}`, background:bg3, color:txt, fontSize:11, cursor:"pointer" }}>
+                  + {s}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
+          <textarea
+            value={seedInput} onChange={e => setSeedInput(e.target.value)}
+            placeholder={"Enter seed keywords (one per line or comma-separated)\ne.g. SEO services london, digital marketing agency"}
+            rows={3}
+            style={{ flex:1, minWidth:200, padding:"10px 12px", borderRadius:8, border:`1px solid ${bdr}`, background:bg3, color:txt, fontSize:12, resize:"vertical", fontFamily:"inherit" }}
+          />
+          <div style={{ display:"flex", flexDirection:"column", gap:8, minWidth:140 }}>
+            <select value={country} onChange={e => setCountry(e.target.value)}
+              style={{ padding:"8px 10px", borderRadius:8, border:`1px solid ${bdr}`, background:bg3, color:txt, fontSize:12 }}>
+              {COUNTRIES.map(([c,l]) => <option key={c} value={c}>{l}</option>)}
+            </select>
+            <button onClick={research} disabled={loading}
+              style={{ padding:"10px 16px", borderRadius:8, border:"none", background:B, color:"#fff", fontWeight:700, fontSize:13, cursor:loading?"not-allowed":"pointer", opacity:loading?0.6:1 }}>
+              {loading ? "Researching…" : "🔎 Find Keywords"}
+            </button>
+          </div>
+        </div>
+        {error && <div style={{ marginTop:10, fontSize:12, color:"#DC2626" }}>{error}</div>}
+      </div>
+
+      {/* Results */}
+      {ideas.length > 0 && (
+        <div>
+          {/* Summary bar */}
+          <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:12, flexWrap:"wrap" }}>
+            <span style={{ fontSize:12, color:txt2 }}>{filtered.length} of {ideas.length} keywords</span>
+            <select value={filterInt} onChange={e => setFilterInt(e.target.value)}
+              style={{ padding:"5px 10px", borderRadius:6, border:`1px solid ${bdr}`, background:bg2, color:txt, fontSize:11 }}>
+              <option value="all">All intents</option>
+              {intents.map(i => <option key={i} value={i}>{i}</option>)}
+            </select>
+            <select value={sortBy} onChange={e => setSortBy(e.target.value)}
+              style={{ padding:"5px 10px", borderRadius:6, border:`1px solid ${bdr}`, background:bg2, color:txt, fontSize:11 }}>
+              <option value="volume">Sort: Volume ↓</option>
+              <option value="difficulty">Sort: Difficulty ↑ (easiest first)</option>
+              <option value="cpc">Sort: CPC ↓</option>
+            </select>
+            {/* Quick wins shortcut */}
+            <button onClick={() => { setSortBy("difficulty"); setFilterInt("all"); }}
+              style={{ padding:"4px 12px", borderRadius:8, border:`1px solid #05966644`, background:"#05966611", color:"#059669", fontSize:11, fontWeight:700, cursor:"pointer" }}>
+              ⚡ Quick Wins (lowest difficulty)
+            </button>
+          </div>
+
+          {/* Table */}
+          <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, overflow:"hidden" }}>
+            <div style={{ overflowX:"auto" }}>
+              <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
+                <thead>
+                  <tr style={{ background:bg3 }}>
+                    {["Keyword","Volume","Difficulty","CPC","Competition","Intent","Trend (6mo)"].map(h => (
+                      <th key={h} style={{ padding:"9px 12px", textAlign:"left", fontSize:11, fontWeight:700, color:txt2, whiteSpace:"nowrap" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((kw, i) => {
+                    const diffColor = kw.difficulty > 70 ? "#DC2626" : kw.difficulty > 40 ? "#D97706" : "#059669";
+                    const intentColor = { informational:"#0891B2", commercial:"#7C3AED", transactional:"#059669", navigational:"#6B7280" }[kw.intent] || "#888";
+                    const maxTrend = Math.max(...(kw.trend||[1]), 1);
+                    return (
+                      <tr key={i} style={{ borderTop:`1px solid ${bdr}`, background:i%2===0?"transparent":bg3 }}>
+                        <td style={{ padding:"9px 12px", fontWeight:600, color:txt, maxWidth:220, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{kw.keyword}</td>
+                        <td style={{ padding:"9px 12px", fontWeight:700, color:"#443DCB" }}>{(kw.volume||0).toLocaleString()}</td>
+                        <td style={{ padding:"9px 12px" }}>
+                          <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                            <div style={{ width:40, height:5, borderRadius:3, background:bdr, overflow:"hidden" }}>
+                              <div style={{ height:"100%", width:`${kw.difficulty}%`, background:diffColor, borderRadius:3 }} />
+                            </div>
+                            <span style={{ fontSize:11, fontWeight:700, color:diffColor }}>{kw.difficulty}</span>
+                          </div>
+                        </td>
+                        <td style={{ padding:"9px 12px", color:txt2 }}>{kw.cpc ? `$${kw.cpc}` : "—"}</td>
+                        <td style={{ padding:"9px 12px", color:txt2, fontSize:11 }}>{kw.competition || "—"}</td>
+                        <td style={{ padding:"9px 12px" }}>
+                          <span style={{ padding:"2px 8px", borderRadius:8, background:`${intentColor}18`, color:intentColor, fontSize:10, fontWeight:700, textTransform:"capitalize" }}>
+                            {kw.intent || "—"}
+                          </span>
+                        </td>
+                        <td style={{ padding:"9px 12px" }}>
+                          {(kw.trend||[]).length > 0 ? (
+                            <svg width={60} height={18} viewBox="0 0 60 18">
+                              {(kw.trend||[]).map((v, ti, arr) => {
+                                if (ti === 0) return null;
+                                const x1 = ((ti-1)/(arr.length-1))*60, x2 = (ti/(arr.length-1))*60;
+                                const y1 = 18 - ((arr[ti-1]/maxTrend)*14) - 2;
+                                const y2 = 18 - ((v/maxTrend)*14) - 2;
+                                return <line key={ti} x1={x1} y1={y1} x2={x2} y2={y2} stroke="#443DCB" strokeWidth="1.5" strokeLinecap="round"/>;
+                              })}
+                            </svg>
+                          ) : <span style={{ color:txt2 }}>—</span>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {!loading && ideas.length === 0 && !error && (
+        <div style={{ textAlign:"center", padding:"40px 20px", color:txt2 }}>
+          <div style={{ fontSize:32, marginBottom:12 }}>🔎</div>
+          <div style={{ fontSize:13, fontWeight:700, color:txt, marginBottom:8 }}>Enter seed keywords to discover opportunities</div>
+          <div style={{ fontSize:12 }}>Get search volume, keyword difficulty, CPC, intent, and 6-month trends for any keyword.</div>
         </div>
       )}
     </div>

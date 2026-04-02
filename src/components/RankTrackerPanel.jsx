@@ -450,6 +450,7 @@ export default function RankTrackerPanel({ dark, clientId, getToken, API }) {
         <div style={tab(activeTab === "top10")}    onClick={() => setActiveTab("top10")}>🏆 Top 10</div>
         <div style={tab(activeTab === "movers")}   onClick={() => setActiveTab("movers")}>📈 Movers</div>
         <div style={tab(activeTab === "unranked")} onClick={() => setActiveTab("unranked")}>❌ Unranked</div>
+        <div style={tab(activeTab === "trends")}   onClick={() => setActiveTab("trends")}>📊 Trends</div>
       </div>
 
       {/* ── Filters ── */}
@@ -496,8 +497,13 @@ export default function RankTrackerPanel({ dark, clientId, getToken, API }) {
         </div>
       )}
 
-      {/* ── Keywords Table ── */}
-      {filtered.length > 0 && (
+      {/* ── Trends Tab ── */}
+      {activeTab === "trends" && (
+        <TrendsView keywords={filtered} dark={dark} bg2={bg2} bdr={bdr} txt={txt} txt2={txt2} />
+      )}
+
+      {/* ── Keywords Table (all other tabs) ── */}
+      {activeTab !== "trends" && filtered.length > 0 && (
         <KeywordsTable
           keywords={getTabKeywords(filtered, activeTab)}
           editingId={editingId} editCategory={editCategory}
@@ -507,6 +513,87 @@ export default function RankTrackerPanel({ dark, clientId, getToken, API }) {
           dark={dark} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2}
         />
       )}
+    </div>
+  );
+}
+
+// ── Sparkline SVG ─────────────────────────────────────────────────────────────
+function Sparkline({ history, width = 80, height = 28 }) {
+  const pts = (history || []).filter(h => h.position !== null && h.position > 0).slice(-30);
+  if (pts.length < 2) return <span style={{ fontSize: 10, color: "#888" }}>no data</span>;
+
+  const positions = pts.map(p => p.position);
+  const min = Math.min(...positions);
+  const max = Math.max(...positions);
+  const range = max - min || 1;
+
+  const x  = i  => (i / (pts.length - 1)) * width;
+  // Invert: lower position (better rank) = higher on chart
+  const y  = pos => height - ((pos - min) / range) * (height - 4) - 2;
+
+  const path = pts.map((p, i) => `${i === 0 ? "M" : "L"} ${x(i).toFixed(1)} ${y(p.position).toFixed(1)}`).join(" ");
+
+  const latest = positions[positions.length - 1];
+  const first  = positions[0];
+  const color  = latest < first ? "#059669" : latest > first ? "#DC2626" : "#6B7280";
+
+  return (
+    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ overflow: "visible", display: "block" }}>
+      <path d={path} fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx={x(pts.length - 1).toFixed(1)} cy={y(latest).toFixed(1)} r="2.5" fill={color} />
+    </svg>
+  );
+}
+
+// ── Trends Grid ───────────────────────────────────────────────────────────────
+function TrendsView({ keywords, dark, bg2, bdr, txt, txt2 }) {
+  const withHistory = keywords.filter(kw => (kw.history || []).filter(h => h.position).length >= 2);
+
+  if (!withHistory.length) {
+    return (
+      <div style={{ textAlign: "center", padding: "40px 20px", color: txt2, fontSize: 13 }}>
+        <div style={{ fontSize: 32, marginBottom: 12 }}>📊</div>
+        <div style={{ fontWeight: 700, color: txt, marginBottom: 8 }}>No trend data yet</div>
+        <div>Click <strong>Check Rankings</strong> at least twice to see position trends over time.</div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div style={{ fontSize: 11, color: txt2, marginBottom: 12 }}>
+        {withHistory.length} keyword{withHistory.length !== 1 ? "s" : ""} with history · last 30 data points shown · <span style={{ color: "#059669" }}>green = improving</span>, <span style={{ color: "#DC2626" }}>red = declining</span>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 10 }}>
+        {withHistory.map(kw => {
+          const pts     = (kw.history || []).filter(h => h.position).slice(-30);
+          const latest  = kw.currentPosition;
+          const oldest  = pts[0]?.position;
+          const delta   = oldest && latest ? oldest - latest : null;
+          const posColor = latest === null ? "#888" : latest <= 3 ? "#059669" : latest <= 10 ? "#2563EB" : latest <= 20 ? "#D97706" : "#DC2626";
+          return (
+            <div key={kw.id} style={{ background: bg2, border: `1px solid ${bdr}`, borderRadius: 10, padding: "12px 14px" }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: txt, marginBottom: 8, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={kw.keyword}>
+                {kw.keyword}
+              </div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                <Sparkline history={kw.history} />
+                <div style={{ textAlign: "right", flexShrink: 0 }}>
+                  <div style={{ fontSize: 20, fontWeight: 800, color: posColor, lineHeight: 1 }}>{latest ?? "—"}</div>
+                  {delta !== null && delta !== 0 && (
+                    <div style={{ fontSize: 10, fontWeight: 700, color: delta > 0 ? "#059669" : "#DC2626", marginTop: 2 }}>
+                      {delta > 0 ? `↑ ${delta}` : `↓ ${Math.abs(delta)}`}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div style={{ fontSize: 9, color: txt2, marginTop: 6 }}>
+                {kw.location?.countryName || kw.location?.country || ""} · {pts.length} checks
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
