@@ -187,13 +187,18 @@ router.get("/:clientId/analytics", verifyToken, async (req, res) => {
       return res.status(400).json({ error: "GA4 property not selected — go to Integrations and select a property" });
     }
 
-    const { days = 30 } = req.query;
-    const propId        = ga4Int.propertyId;
-    const accessToken   = await ga4.getValidToken(ga4Int, req.params.clientId, db);
+    const { days = 30, compare = "false" } = req.query;
+    const doCompare  = compare === "true";
+    const propId     = ga4Int.propertyId;
+    const accessToken = await ga4.getValidToken(ga4Int, req.params.clientId, db);
 
-    const startDate = `${days}daysAgo`;
-    const endDate   = "today";
-    const dateRange = [{ startDate, endDate }];
+    const startDate  = `${days}daysAgo`;
+    const endDate    = "today";
+    const prevStart  = `${Number(days) * 2}daysAgo`;
+    const prevEnd    = `${days}daysAgo`;
+    const dateRange  = doCompare
+      ? [{ startDate, endDate }, { startDate: prevStart, endDate: prevEnd }]
+      : [{ startDate, endDate }];
 
     // Fire all 5 reports in parallel
     const [overviewRaw, pagesRaw, sourcesRaw, devicesRaw, datesRaw] = await Promise.all([
@@ -259,23 +264,26 @@ router.get("/:clientId/analytics", verifyToken, async (req, res) => {
     ]);
 
     // Parse overview totals — use totals[] if available, fallback to rows[0]
-    const overviewMetrics = overviewRaw.totals?.[0]?.metricValues
-                         || overviewRaw.rows?.[0]?.metricValues
-                         || [];
-    const metricNames     = (overviewRaw.metricHeaders || []).map(h => h.name);
-    const overview        = {};
+    const metricNames      = (overviewRaw.metricHeaders || []).map(h => h.name);
+    const currentMetrics   = overviewRaw.totals?.[0]?.metricValues || overviewRaw.rows?.[0]?.metricValues || [];
+    const previousMetrics  = overviewRaw.totals?.[1]?.metricValues || [];
+    const overview         = {};
+    const overviewPrev     = {};
     metricNames.forEach((name, i) => {
-      overview[name] = parseFloat(overviewMetrics[i]?.value || 0);
+      overview[name]     = parseFloat(currentMetrics[i]?.value  || 0);
+      overviewPrev[name] = parseFloat(previousMetrics[i]?.value || 0);
     });
 
     return res.json({
       overview,
-      pages:   ga4.parseRows(pagesRaw),
-      sources: ga4.parseRows(sourcesRaw),
-      devices: ga4.parseRows(devicesRaw),
-      dates:   ga4.parseRows(datesRaw),
-      days:    Number(days),
-      propertyId: propId,
+      overviewPrev: doCompare ? overviewPrev : null,
+      pages:        ga4.parseRows(pagesRaw),
+      sources:      ga4.parseRows(sourcesRaw),
+      devices:      ga4.parseRows(devicesRaw),
+      dates:        ga4.parseRows(datesRaw),
+      days:         Number(days),
+      compare:      doCompare,
+      propertyId:   propId,
     });
   } catch (e) {
     return res.status(500).json({ error: e.message });

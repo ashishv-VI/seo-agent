@@ -17,6 +17,7 @@ export default function GA4Panel({ dark, clientId, getToken, API }) {
   const [dataLoading, setDataLoading] = useState(false);
   const [activeTab,   setActiveTab]   = useState("overview");
   const [days,        setDays]        = useState(30);
+  const [compare,     setCompare]     = useState(false);
   const [error,       setError]       = useState("");
   const [propIdInput, setPropIdInput] = useState("");
   const [savingProp,  setSavingProp]  = useState(false);
@@ -54,15 +55,15 @@ export default function GA4Panel({ dark, clientId, getToken, API }) {
   useEffect(() => { loadStatus(); }, [loadStatus]);
 
   // ── Load analytics data ──────────────────────────────────────────────────────
-  const loadData = useCallback(async (daysVal) => {
+  const loadData = useCallback(async (daysVal, cmp) => {
     if (!status?.connected || !status?.propertyId) return;
     setDataLoading(true); setError("");
     try {
       const token = await getToken();
       const [analyticsRes, journeyRes, realtimeRes] = await Promise.all([
-        fetch(`${API}/api/ga4/${clientId}/analytics?days=${daysVal}`, { headers: { Authorization: `Bearer ${token}` } }),
-        fetch(`${API}/api/ga4/${clientId}/journey?days=${daysVal}`,   { headers: { Authorization: `Bearer ${token}` } }),
-        fetch(`${API}/api/ga4/${clientId}/realtime`,                  { headers: { Authorization: `Bearer ${token}` } }).catch(() => null),
+        fetch(`${API}/api/ga4/${clientId}/analytics?days=${daysVal}&compare=${cmp}`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${API}/api/ga4/${clientId}/journey?days=${daysVal}`,                  { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${API}/api/ga4/${clientId}/realtime`,                                 { headers: { Authorization: `Bearer ${token}` } }).catch(() => null),
       ]);
       const analyticsData = await analyticsRes.json();
       const journeyData   = await journeyRes.json();
@@ -78,9 +79,9 @@ export default function GA4Panel({ dark, clientId, getToken, API }) {
 
   useEffect(() => {
     if (status?.connected && status?.propertyId) {
-      loadData(days);
+      loadData(days, compare);
     }
-  }, [status, days]);
+  }, [status, days, compare]);
 
   // ── Save property ID ─────────────────────────────────────────────────────────
   async function savePropertyId() {
@@ -198,7 +199,18 @@ export default function GA4Panel({ dark, clientId, getToken, API }) {
   );
 
   // ── Full dashboard ───────────────────────────────────────────────────────────
-  const ov = analytics?.overview || {};
+  const ov   = analytics?.overview     || {};
+  const prev = analytics?.overviewPrev || {};
+
+  function delta(key) {
+    if (!analytics?.compare || !prev[key]) return null;
+    const cur = ov[key] || 0;
+    const pre = prev[key] || 0;
+    if (pre === 0) return null;
+    const pct = ((cur - pre) / pre * 100).toFixed(1);
+    const up  = cur >= pre;
+    return { pct, up };
+  }
 
   return (
     <div style={{ padding: "0 0 24px" }}>
@@ -223,7 +235,16 @@ export default function GA4Panel({ dark, clientId, getToken, API }) {
           {[7, 14, 30, 60, 90].map(d => <option key={d} value={d}>Last {d} days</option>)}
         </select>
 
-        <button onClick={() => loadData(days)} disabled={dataLoading}
+        {/* Compare toggle */}
+        <button
+          onClick={() => setCompare(c => !c)}
+          style={{ padding: "6px 12px", borderRadius: 8, border: `1px solid ${compare ? "#443DCB" : bdr}`, background: compare ? "#443DCB11" : "transparent", color: compare ? "#443DCB" : txt2, fontSize: 12, cursor: "pointer", fontWeight: compare ? 700 : 400 }}
+        >
+          {compare ? "✓ Compare ON" : "Compare"}
+        </button>
+        {compare && <span style={{ fontSize: 11, color: txt2 }}>vs prev {days}d</span>}
+
+        <button onClick={() => loadData(days, compare)} disabled={dataLoading}
           style={{ padding: "6px 14px", borderRadius: 8, border: `1px solid ${bdr}`, background: bg3, color: txt2, fontSize: 12, cursor: "pointer" }}>
           {dataLoading ? "⏳" : "↻ Refresh"}
         </button>
@@ -252,19 +273,27 @@ export default function GA4Panel({ dark, clientId, getToken, API }) {
           {/* KPI grid */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(130px,1fr))", gap: 10, marginBottom: 16 }}>
             {[
-              { label: "Sessions",         value: fmt(ov.sessions),                  color: B },
-              { label: "Users",            value: fmt(ov.activeUsers),               color: "#059669" },
-              { label: "Page Views",       value: fmt(ov.screenPageViews),           color: "#D97706" },
-              { label: "New Users",        value: fmt(ov.newUsers),                  color: "#2563EB" },
-              { label: "Bounce Rate",      value: ov.bounceRate ? fmtPct(ov.bounceRate) : "—", color: "#DC2626" },
-              { label: "Avg Session",      value: fmtSec(ov.averageSessionDuration), color: "#7C3AED" },
-              { label: "Engagement Rate",  value: ov.engagementRate ? fmtPct(ov.engagementRate) : "—", color: "#0891B2" },
-            ].map(k => (
-              <div key={k.label} style={{ background: bg2, border: `1px solid ${bdr}`, borderRadius: 10, padding: "12px 14px" }}>
-                <div style={{ fontSize: 10, fontWeight: 700, color: txt2, marginBottom: 4 }}>{k.label.toUpperCase()}</div>
-                <div style={{ fontSize: 20, fontWeight: 800, color: k.color }}>{k.value}</div>
-              </div>
-            ))}
+              { label: "Sessions",        value: fmt(ov.sessions),                            color: B,         key: "sessions" },
+              { label: "Users",           value: fmt(ov.activeUsers),                         color: "#059669", key: "activeUsers" },
+              { label: "Page Views",      value: fmt(ov.screenPageViews),                     color: "#D97706", key: "screenPageViews" },
+              { label: "New Users",       value: fmt(ov.newUsers),                            color: "#2563EB", key: "newUsers" },
+              { label: "Bounce Rate",     value: ov.bounceRate ? fmtPct(ov.bounceRate) : "—", color: "#DC2626", key: null },
+              { label: "Avg Session",     value: fmtSec(ov.averageSessionDuration),           color: "#7C3AED", key: "averageSessionDuration" },
+              { label: "Engagement Rate", value: ov.engagementRate ? fmtPct(ov.engagementRate) : "—", color: "#0891B2", key: null },
+            ].map(k => {
+              const d = k.key ? delta(k.key) : null;
+              return (
+                <div key={k.label} style={{ background: bg2, border: `1px solid ${bdr}`, borderRadius: 10, padding: "12px 14px" }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: txt2, marginBottom: 4 }}>{k.label.toUpperCase()}</div>
+                  <div style={{ fontSize: 20, fontWeight: 800, color: k.color }}>{k.value}</div>
+                  {d && (
+                    <div style={{ fontSize: 11, marginTop: 4, color: d.up ? "#059669" : "#DC2626", fontWeight: 600 }}>
+                      {d.up ? "↑" : "↓"} {Math.abs(d.pct)}% vs prev {days}d
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
 
           {/* Date trend chart */}
