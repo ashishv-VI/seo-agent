@@ -214,7 +214,7 @@ router.get("/:clientId/analytics", verifyToken, async (req, res) => {
       return res.status(400).json({ error: "Search Console not connected for this client" });
     }
 
-    const { siteUrl, days = 28, device = "all" } = req.query;
+    const { siteUrl, days = 28, device = "all", country = "all" } = req.query;
     if (!siteUrl) return res.status(400).json({ error: "siteUrl query param required" });
 
     const accessToken = await gsc.getValidToken(gscInt, req.params.clientId, db);
@@ -222,20 +222,21 @@ router.get("/:clientId/analytics", verifyToken, async (req, res) => {
     const endDate   = new Date().toISOString().split("T")[0];
     const startDate = new Date(Date.now() - Number(days)*24*60*60*1000).toISOString().split("T")[0];
 
-    function makeBody(dimensions) {
-      const body = { startDate, endDate, dimensions, rowLimit: 25 };
-      if (device !== "all") {
-        body.dimensionFilterGroups = [{ filters:[{ dimension:"device", operator:"equals", expression: device }] }];
-      }
+    function makeBody(dimensions, limit = 1000) {
+      const body    = { startDate, endDate, dimensions, rowLimit: limit };
+      const filters = [];
+      if (device !== "all")  filters.push({ dimension:"device",  operator:"equals", expression: device });
+      if (country !== "all") filters.push({ dimension:"country", operator:"equals", expression: country });
+      if (filters.length > 0) body.dimensionFilterGroups = [{ filters }];
       return body;
     }
 
     const [queries, pages, countries, devices, dates] = await Promise.all([
-      gsc.querySearchConsole(siteUrl, accessToken, makeBody(["query"])),
-      gsc.querySearchConsole(siteUrl, accessToken, makeBody(["page"])),
-      gsc.querySearchConsole(siteUrl, accessToken, makeBody(["country"])),
-      gsc.querySearchConsole(siteUrl, accessToken, { startDate, endDate, dimensions:["device"], rowLimit:10 }),
-      gsc.querySearchConsole(siteUrl, accessToken, makeBody(["date"])),
+      gsc.querySearchConsole(siteUrl, accessToken, makeBody(["query"], 1000)),
+      gsc.querySearchConsole(siteUrl, accessToken, makeBody(["page"],  100)),
+      gsc.querySearchConsole(siteUrl, accessToken, { startDate, endDate, dimensions:["country"], rowLimit:50 }),
+      gsc.querySearchConsole(siteUrl, accessToken, { startDate, endDate, dimensions:["device"],  rowLimit:10 }),
+      gsc.querySearchConsole(siteUrl, accessToken, makeBody(["date"],  Number(days))),
     ]);
 
     const rows = queries.rows || [];
