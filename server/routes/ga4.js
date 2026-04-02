@@ -197,7 +197,7 @@ router.get("/:clientId/analytics", verifyToken, async (req, res) => {
 
     // Fire all 5 reports in parallel
     const [overviewRaw, pagesRaw, sourcesRaw, devicesRaw, datesRaw] = await Promise.all([
-      // Overview — totals
+      // Overview — totals (metricAggregations required so totals[] is populated)
       ga4.runReport(propId, accessToken, {
         dateRanges: dateRange,
         metrics: [
@@ -209,6 +209,7 @@ router.get("/:clientId/analytics", verifyToken, async (req, res) => {
           { name: "newUsers" },
           { name: "engagementRate" },
         ],
+        metricAggregations: ["TOTAL"],
       }),
 
       // Top pages breakdown
@@ -257,8 +258,10 @@ router.get("/:clientId/analytics", verifyToken, async (req, res) => {
       }),
     ]);
 
-    // Parse overview totals (no dimensions — just metric row totals)
-    const overviewMetrics = overviewRaw.totals?.[0]?.metricValues || [];
+    // Parse overview totals — use totals[] if available, fallback to rows[0]
+    const overviewMetrics = overviewRaw.totals?.[0]?.metricValues
+                         || overviewRaw.rows?.[0]?.metricValues
+                         || [];
     const metricNames     = (overviewRaw.metricHeaders || []).map(h => h.name);
     const overview        = {};
     metricNames.forEach((name, i) => {
