@@ -9,15 +9,22 @@ import { useState, useEffect, useCallback } from "react";
 const B = "#443DCB";
 
 export default function GA4Panel({ dark, clientId, getToken, API }) {
-  const [status,      setStatus]      = useState(null);   // { connected, propertyId, properties[] }
+  const [status,      setStatus]      = useState(null);
   const [analytics,   setAnalytics]   = useState(null);
   const [journey,     setJourney]     = useState(null);
   const [realtime,    setRealtime]    = useState(null);
+  const [geo,         setGeo]         = useState(null);
+  const [aiTraffic,   setAiTraffic]   = useState(null);
+  const [insights,    setInsights]    = useState(null);
   const [loading,     setLoading]     = useState(true);
   const [dataLoading, setDataLoading] = useState(false);
+  const [insightLoading, setInsightLoading] = useState(false);
   const [activeTab,   setActiveTab]   = useState("overview");
   const [days,        setDays]        = useState(30);
   const [compare,     setCompare]     = useState(false);
+  const [startDate,   setStartDate]   = useState("");
+  const [endDate,     setEndDate]     = useState("");
+  const [useCustom,   setUseCustom]   = useState(false);
   const [error,       setError]       = useState("");
   const [propIdInput, setPropIdInput] = useState("");
   const [savingProp,  setSavingProp]  = useState(false);
@@ -55,33 +62,40 @@ export default function GA4Panel({ dark, clientId, getToken, API }) {
   useEffect(() => { loadStatus(); }, [loadStatus]);
 
   // ── Load analytics data ──────────────────────────────────────────────────────
-  const loadData = useCallback(async (daysVal, cmp) => {
+  const loadData = useCallback(async (daysVal, cmp, sd, ed, custom) => {
     if (!status?.connected || !status?.propertyId) return;
-    setDataLoading(true); setError("");
+    setDataLoading(true); setError(""); setInsights(null);
+    const dateParams = custom && sd && ed ? `&startDate=${sd}&endDate=${ed}` : "";
     try {
       const token = await getToken();
-      const [analyticsRes, journeyRes, realtimeRes] = await Promise.all([
-        fetch(`${API}/api/ga4/${clientId}/analytics?days=${daysVal}&compare=${cmp}`, { headers: { Authorization: `Bearer ${token}` } }),
-        fetch(`${API}/api/ga4/${clientId}/journey?days=${daysVal}`,                  { headers: { Authorization: `Bearer ${token}` } }),
-        fetch(`${API}/api/ga4/${clientId}/realtime`,                                 { headers: { Authorization: `Bearer ${token}` } }).catch(() => null),
+      const [analyticsRes, journeyRes, realtimeRes, geoRes, aiRes] = await Promise.all([
+        fetch(`${API}/api/ga4/${clientId}/analytics?days=${daysVal}&compare=${cmp}${dateParams}`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${API}/api/ga4/${clientId}/journey?days=${daysVal}${dateParams}`,                   { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${API}/api/ga4/${clientId}/realtime`,                                               { headers: { Authorization: `Bearer ${token}` } }).catch(() => null),
+        fetch(`${API}/api/ga4/${clientId}/geo?days=${daysVal}${dateParams}`,                       { headers: { Authorization: `Bearer ${token}` } }).catch(() => null),
+        fetch(`${API}/api/ga4/${clientId}/ai-traffic?days=${daysVal}${dateParams}`,               { headers: { Authorization: `Bearer ${token}` } }).catch(() => null),
       ]);
       const analyticsData = await analyticsRes.json();
       const journeyData   = await journeyRes.json();
       const realtimeData  = realtimeRes ? await realtimeRes.json().catch(() => null) : null;
+      const geoData       = geoRes       ? await geoRes.json().catch(() => null)      : null;
+      const aiData        = aiRes        ? await aiRes.json().catch(() => null)        : null;
 
       if (!analyticsRes.ok) throw new Error(analyticsData.error || "Failed to load analytics");
       setAnalytics(analyticsData);
       setJourney(journeyData.error ? null : journeyData);
       setRealtime(realtimeData?.error ? null : realtimeData);
+      setGeo(geoData?.error ? null : geoData);
+      setAiTraffic(aiData?.error ? null : aiData);
     } catch (e) { setError(e.message); }
     setDataLoading(false);
   }, [status, clientId, getToken, API]);
 
   useEffect(() => {
     if (status?.connected && status?.propertyId) {
-      loadData(days, compare);
+      loadData(days, compare, startDate, endDate, useCustom);
     }
-  }, [status, days, compare]);
+  }, [status, days, compare, useCustom]);
 
   // ── Save property ID ─────────────────────────────────────────────────────────
   async function savePropertyId() {
@@ -99,6 +113,23 @@ export default function GA4Panel({ dark, clientId, getToken, API }) {
       await loadStatus();
     } catch (e) { setError(e.message); }
     setSavingProp(false);
+  }
+
+  async function loadInsights() {
+    if (!analytics) return;
+    setInsightLoading(true);
+    try {
+      const token = await getToken();
+      const res   = await fetch(`${API}/api/ga4/${clientId}/insights`, {
+        method:  "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body:    JSON.stringify({ analyticsData: analytics, days }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || "AI insight generation failed");
+      setInsights(d.insights || []);
+    } catch (e) { setError(e.message); }
+    setInsightLoading(false);
   }
 
   // ── Helper: format numbers ───────────────────────────────────────────────────
@@ -229,24 +260,40 @@ export default function GA4Panel({ dark, clientId, getToken, API }) {
           </div>
         )}
 
-        {/* Days selector */}
-        <select value={days} onChange={e => setDays(Number(e.target.value))}
-          style={{ padding: "6px 10px", borderRadius: 8, border: `1px solid ${bdr}`, background: bg2, color: txt, fontSize: 12, cursor: "pointer" }}>
-          {[7, 14, 30, 60, 90].map(d => <option key={d} value={d}>Last {d} days</option>)}
-        </select>
-
-        {/* Compare toggle */}
-        <button
-          onClick={() => setCompare(c => !c)}
-          style={{ padding: "6px 12px", borderRadius: 8, border: `1px solid ${compare ? "#443DCB" : bdr}`, background: compare ? "#443DCB11" : "transparent", color: compare ? "#443DCB" : txt2, fontSize: 12, cursor: "pointer", fontWeight: compare ? 700 : 400 }}
-        >
-          {compare ? "✓ Compare ON" : "Compare"}
+        {/* Custom date toggle */}
+        <button onClick={() => setUseCustom(c => !c)}
+          style={{ padding:"6px 10px", borderRadius:8, border:`1px solid ${useCustom?"#0891B2":bdr}`, background:useCustom?"#0891B211":"transparent", color:useCustom?"#0891B2":txt2, fontSize:11, cursor:"pointer" }}>
+          📅 Custom
         </button>
-        {compare && <span style={{ fontSize: 11, color: txt2 }}>vs prev {days}d</span>}
 
-        <button onClick={() => loadData(days, compare)} disabled={dataLoading}
-          style={{ padding: "6px 14px", borderRadius: 8, border: `1px solid ${bdr}`, background: bg3, color: txt2, fontSize: 12, cursor: "pointer" }}>
-          {dataLoading ? "⏳" : "↻ Refresh"}
+        {useCustom ? (
+          <>
+            <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
+              style={{ padding:"5px 8px", borderRadius:8, border:`1px solid ${bdr}`, background:bg2, color:txt, fontSize:11, cursor:"pointer" }} />
+            <span style={{ fontSize:11, color:txt2 }}>to</span>
+            <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)}
+              style={{ padding:"5px 8px", borderRadius:8, border:`1px solid ${bdr}`, background:bg2, color:txt, fontSize:11, cursor:"pointer" }} />
+            <button onClick={() => loadData(days, compare, startDate, endDate, true)} disabled={!startDate||!endDate||dataLoading}
+              style={{ padding:"6px 12px", borderRadius:8, border:"none", background:"#0891B2", color:"#fff", fontSize:11, cursor:"pointer", fontWeight:600 }}>
+              Apply
+            </button>
+          </>
+        ) : (
+          <>
+            <select value={days} onChange={e => setDays(Number(e.target.value))}
+              style={{ padding:"6px 10px", borderRadius:8, border:`1px solid ${bdr}`, background:bg2, color:txt, fontSize:12, cursor:"pointer" }}>
+              {[7,14,30,60,90,180].map(d => <option key={d} value={d}>Last {d} days</option>)}
+            </select>
+            <button onClick={() => setCompare(c => !c)}
+              style={{ padding:"6px 12px", borderRadius:8, border:`1px solid ${compare?"#443DCB":bdr}`, background:compare?"#443DCB11":"transparent", color:compare?"#443DCB":txt2, fontSize:12, cursor:"pointer", fontWeight:compare?700:400 }}>
+              {compare ? "✓ Compare" : "Compare"}
+            </button>
+          </>
+        )}
+
+        <button onClick={() => loadData(days, compare, startDate, endDate, useCustom)} disabled={dataLoading}
+          style={{ padding:"6px 14px", borderRadius:8, border:`1px solid ${bdr}`, background:bg3, color:txt2, fontSize:12, cursor:"pointer" }}>
+          {dataLoading ? "⏳" : "↻"}
         </button>
 
         {/* Change property */}
@@ -262,7 +309,11 @@ export default function GA4Panel({ dark, clientId, getToken, API }) {
 
       {/* Tabs */}
       <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
-        {[["overview","📊 Overview"],["pages","📄 Pages"],["sources","🔗 Traffic"],["journey","🗺 Journey"],["realtime","🟢 Real-time"]].map(([id,label]) => (
+        {[
+          ["overview","📊 Overview"],["pages","📄 Pages"],["sources","🔗 Traffic"],
+          ["journey","🗺 Journey"],["geo","🌍 GEO"],["aitraffic","🤖 AI Traffic"],
+          ["insights","✨ AI Insights"],["realtime","🟢 Real-time"],
+        ].map(([id,label]) => (
           <div key={id} style={tab(activeTab === id)} onClick={() => setActiveTab(id)}>{label}</div>
         ))}
       </div>
@@ -476,6 +527,172 @@ export default function GA4Panel({ dark, clientId, getToken, API }) {
                     ))}
                   </tbody>
                 </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── GEO Tab ── */}
+      {activeTab === "geo" && (
+        <div>
+          {!geo && <div style={{ padding:32, textAlign:"center", color:txt2, fontSize:13 }}>{dataLoading?"Loading GEO data…":"No GEO data available"}</div>}
+          {geo && (
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 }}>
+              {/* Countries */}
+              <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:12, overflow:"hidden" }}>
+                <div style={{ padding:"12px 16px", borderBottom:`1px solid ${bdr}`, fontSize:13, fontWeight:700, color:txt }}>🌍 Countries</div>
+                <div style={{ maxHeight:400, overflowY:"auto" }}>
+                  {(geo.countries||[]).map((c,i) => {
+                    const max = geo.countries[0]?.sessions || 1;
+                    const pct = Math.round((c.sessions/max)*100);
+                    return (
+                      <div key={i} style={{ padding:"8px 16px", borderBottom:`1px solid ${bdr}` }}>
+                        <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
+                          <span style={{ fontSize:12, color:txt, fontWeight:500 }}>{c.country}</span>
+                          <span style={{ fontSize:12, color:txt2 }}>{c.sessions?.toLocaleString()} sessions</span>
+                        </div>
+                        <div style={{ height:4, borderRadius:2, background:bdr }}>
+                          <div style={{ height:4, borderRadius:2, background:"#443DCB", width:`${pct}%` }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+              {/* Cities */}
+              <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:12, overflow:"hidden" }}>
+                <div style={{ padding:"12px 16px", borderBottom:`1px solid ${bdr}`, fontSize:13, fontWeight:700, color:txt }}>🏙 Cities</div>
+                <div style={{ maxHeight:400, overflowY:"auto" }}>
+                  {(geo.cities||[]).map((c,i) => {
+                    const max = geo.cities[0]?.sessions || 1;
+                    const pct = Math.round((c.sessions/max)*100);
+                    return (
+                      <div key={i} style={{ padding:"8px 16px", borderBottom:`1px solid ${bdr}` }}>
+                        <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
+                          <span style={{ fontSize:12, color:txt, fontWeight:500 }}>{c.city}</span>
+                          <span style={{ fontSize:12, color:txt2 }}>{c.sessions?.toLocaleString()}</span>
+                        </div>
+                        <div style={{ height:4, borderRadius:2, background:bdr }}>
+                          <div style={{ height:4, borderRadius:2, background:"#059669", width:`${pct}%` }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── AI Traffic Tab ── */}
+      {activeTab === "aitraffic" && (
+        <div>
+          {!aiTraffic && <div style={{ padding:32, textAlign:"center", color:txt2, fontSize:13 }}>{dataLoading?"Loading AI traffic data…":"No AI traffic data available"}</div>}
+          {aiTraffic && (
+            <>
+              {/* Summary banner */}
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:12, marginBottom:16 }}>
+                {[
+                  { label:"AI Sessions", value:aiTraffic.totalAiSessions?.toLocaleString()||"0", color:"#7C3AED" },
+                  { label:"AI Share of Traffic", value:`${aiTraffic.aiShare||0}%`, color:"#0891B2" },
+                  { label:"Total Sessions", value:aiTraffic.totalSessions?.toLocaleString()||"0", color:txt },
+                ].map(c => (
+                  <div key={c.label} style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, padding:"12px 16px" }}>
+                    <div style={{ fontSize:10, color:txt2, marginBottom:4 }}>{c.label.toUpperCase()}</div>
+                    <div style={{ fontSize:22, fontWeight:800, color:c.color }}>{c.value}</div>
+                  </div>
+                ))}
+              </div>
+
+              {aiTraffic.totalAiSessions === 0 ? (
+                <div style={{ padding:"24px", background:bg2, border:`1px solid ${bdr}`, borderRadius:12, textAlign:"center" }}>
+                  <div style={{ fontSize:32, marginBottom:8 }}>🤖</div>
+                  <div style={{ fontSize:14, fontWeight:700, color:txt, marginBottom:6 }}>No AI Traffic Detected Yet</div>
+                  <div style={{ fontSize:12, color:txt2, lineHeight:1.6 }}>
+                    Traffic from ChatGPT, Perplexity, Claude, Gemini and other AI tools will appear here.<br/>
+                    AI traffic is growing — this tab tracks it automatically.
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 }}>
+                  <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:12, overflow:"hidden" }}>
+                    <div style={{ padding:"12px 16px", borderBottom:`1px solid ${bdr}`, fontSize:13, fontWeight:700, color:txt }}>🤖 AI Sources</div>
+                    {(aiTraffic.sources||[]).map((s,i) => (
+                      <div key={i} style={{ padding:"10px 16px", borderBottom:`1px solid ${bdr}`, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                        <span style={{ fontSize:12, color:txt, fontWeight:500 }}>{s.sessionSource}</span>
+                        <span style={{ fontSize:12, color:"#7C3AED", fontWeight:700 }}>{s.sessions} sessions</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:12, overflow:"hidden" }}>
+                    <div style={{ padding:"12px 16px", borderBottom:`1px solid ${bdr}`, fontSize:13, fontWeight:700, color:txt }}>📄 Top AI-Referred Pages</div>
+                    {(aiTraffic.pages||[]).slice(0,10).map((p,i) => (
+                      <div key={i} style={{ padding:"8px 16px", borderBottom:`1px solid ${bdr}`, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                        <span style={{ fontSize:11, color:txt, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:"70%" }}>{p.pagePath}</span>
+                        <span style={{ fontSize:11, color:txt2 }}>{p.sessions}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ── AI Insights Tab ── */}
+      {activeTab === "insights" && (
+        <div>
+          {!insights && !insightLoading && (
+            <div style={{ padding:"40px 24px", background:bg2, border:`1px solid ${bdr}`, borderRadius:16, textAlign:"center", maxWidth:500, margin:"0 auto" }}>
+              <div style={{ fontSize:40, marginBottom:12 }}>✨</div>
+              <div style={{ fontSize:15, fontWeight:700, color:txt, marginBottom:8 }}>AI Analytics Insights</div>
+              <div style={{ fontSize:13, color:txt2, lineHeight:1.7, marginBottom:20 }}>
+                AI analyzes your GA4 data and identifies what&apos;s working, what needs improvement, and specific actions to take.
+              </div>
+              <button onClick={loadInsights} disabled={!analytics}
+                style={{ padding:"10px 28px", borderRadius:10, border:"none", background:"linear-gradient(135deg,#7C3AED,#443DCB)", color:"#fff", fontWeight:700, fontSize:13, cursor:"pointer" }}>
+                ✨ Generate AI Insights
+              </button>
+              {!analytics && <div style={{ fontSize:11, color:txt2, marginTop:8 }}>Load analytics data first</div>}
+            </div>
+          )}
+          {insightLoading && (
+            <div style={{ padding:40, textAlign:"center", color:txt2, fontSize:13 }}>
+              <div style={{ fontSize:32, marginBottom:12 }}>🤔</div>
+              AI is analyzing your data...
+            </div>
+          )}
+          {insights && (
+            <div>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
+                <div style={{ fontSize:14, fontWeight:700, color:txt }}>✨ AI Insights — Last {days} days</div>
+                <button onClick={loadInsights} disabled={insightLoading}
+                  style={{ padding:"6px 14px", borderRadius:8, border:`1px solid ${bdr}`, background:bg2, color:txt2, fontSize:11, cursor:"pointer" }}>
+                  ↺ Refresh
+                </button>
+              </div>
+              <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+                {insights.map((ins,i) => {
+                  const colors = { warning:"#D97706", success:"#059669", opportunity:"#443DCB", info:"#0891B2" };
+                  const bgs    = { warning:"#D9770611", success:"#05966911", opportunity:"#443DCB11", info:"#0891B211" };
+                  const icons  = { warning:"⚠️", success:"✅", opportunity:"🚀", info:"ℹ️" };
+                  const c = colors[ins.type] || "#443DCB";
+                  return (
+                    <div key={i} style={{ background:bgs[ins.type]||bg2, border:`1px solid ${c}33`, borderRadius:12, padding:"16px 18px", borderLeft:`4px solid ${c}` }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6 }}>
+                        <span>{icons[ins.type]||"💡"}</span>
+                        <span style={{ fontSize:13, fontWeight:700, color:c }}>{ins.title}</span>
+                      </div>
+                      <div style={{ fontSize:12, color:txt, lineHeight:1.6, marginBottom:8 }}>{ins.insight}</div>
+                      <div style={{ fontSize:12, color:txt2, padding:"8px 12px", background:dark?"#ffffff08":"#00000006", borderRadius:8, borderLeft:`2px solid ${c}` }}>
+                        <strong style={{ color:c }}>Action:</strong> {ins.action}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}

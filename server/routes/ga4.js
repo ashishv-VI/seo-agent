@@ -187,16 +187,20 @@ router.get("/:clientId/analytics", verifyToken, async (req, res) => {
       return res.status(400).json({ error: "GA4 property not selected — go to Integrations and select a property" });
     }
 
-    const { days = 30, compare = "false" } = req.query;
-    const doCompare  = compare === "true";
-    const propId     = ga4Int.propertyId;
+    const { days = 30, compare = "false", startDate: customStart, endDate: customEnd } = req.query;
+    const doCompare   = compare === "true";
+    const propId      = ga4Int.propertyId;
     const accessToken = await ga4.getValidToken(ga4Int, req.params.clientId, db);
 
-    const startDate  = `${days}daysAgo`;
-    const endDate    = "today";
-    const prevStart  = `${Number(days) * 2}daysAgo`;
-    const prevEnd    = `${days}daysAgo`;
-    const dateRange  = doCompare
+    const startDate = customStart || `${days}daysAgo`;
+    const endDate   = customEnd   || "today";
+    // Previous period: same duration shifted back
+    const daysNum   = Number(days);
+    const prevStart = customStart
+      ? (() => { const d = new Date(customStart); d.setDate(d.getDate() - daysNum); return d.toISOString().split("T")[0]; })()
+      : `${daysNum * 2}daysAgo`;
+    const prevEnd   = customStart ? customStart : `${daysNum}daysAgo`;
+    const dateRange = doCompare
       ? [{ startDate, endDate }, { startDate: prevStart, endDate: prevEnd }]
       : [{ startDate, endDate }];
 
@@ -314,7 +318,11 @@ router.get("/:clientId/realtime", verifyToken, async (req, res) => {
       }),
     ]);
 
-    const activeUsers  = parseFloat(activeUsersRaw.totals?.[0]?.metricValues?.[0]?.value || 0);
+    // Realtime: no dimensions → data in rows[0], not totals
+    const activeUsers  = parseFloat(
+      activeUsersRaw.rows?.[0]?.metricValues?.[0]?.value ||
+      activeUsersRaw.totals?.[0]?.metricValues?.[0]?.value || 0
+    );
     const activePages  = ga4.parseRows(activePagesRaw);
 
     return res.json({ activeUsers, activePages });
@@ -469,6 +477,207 @@ router.post("/:clientId/verify-tracking", verifyToken, async (req, res) => {
   } catch (e) {
     return res.status(e.code || 500).json({ error: e.message });
   }
+});
+
+// ── GET: GEO — Country + City breakdown ──────────────────────────────────────
+router.get("/:clientId/geo", verifyToken, async (req, res) => {
+  try {
+    const doc    = await getClientDoc(req.params.clientId, req.uid);
+    const ga4Int = doc.data().ga4Integration;
+    if (!ga4Int?.connected || !ga4Int?.propertyId) return res.status(400).json({ error: "GA4 not connected" });
+
+    const { days = 30, startDate: cs, endDate: ce } = req.query;
+    const startDate   = cs || `${days}daysAgo`;
+    const endDate     = ce || "today";
+    const accessToken = await ga4.getValidToken(ga4Int, req.params.clientId, db);
+    const dateRange   = [{ startDate, endDate }];
+
+    const [countriesRaw, citiesRaw, regionsRaw] = await Promise.all([
+      ga4.runReport(ga4Int.propertyId, accessToken, {
+        dateRanges: dateRange,
+        dimensions: [{ name: "country" }],
+        metrics:    [{ name: "sessions" }, { name: "activeUsers" }, { name: "screenPageViews" }, { name: "bounceRate" }],
+        orderBys:   [{ metric: { metricName: "sessions" }, desc: true }],
+        limit: 30,
+      }),
+      ga4.runReport(ga4Int.propertyId, accessToken, {
+        dateRanges: dateRange,
+        dimensions: [{ name: "city" }],
+        metrics:    [{ name: "sessions" }, { name: "activeUsers" }],
+        orderBys:   [{ metric: { metricName: "sessions" }, desc: true }],
+        limit: 20,
+      }),
+      ga4.runReport(ga4Int.propertyId, accessToken, {
+        dateRanges: dateRange,
+        dimensions: [{ name: "region" }],
+        metrics:    [{ name: "sessions" }, { name: "activeUsers" }],
+        orderBys:   [{ metric: { metricName: "sessions" }, desc: true }],
+        limit: 20,
+      }),
+    ]);
+
+    return res.json({
+      countries: ga4.parseRows(countriesRaw),
+      cities:    ga4.parseRows(citiesRaw),
+      regions:   ga4.parseRows(regionsRaw),
+    });
+  } catch (e) { return res.status(500).json({ error: e.message }); }
+});
+
+// ── GET: AI Traffic — referrals from AI tools ─────────────────────────────────
+const AI_SOURCES = [
+  "chatgpt.com","chat.openai.com","perplexity.ai","claude.ai",
+  "gemini.google.com","copilot.microsoft.com","bard.google.com",
+  "you.com","phind.com","bing.com","character.ai","poe.com",
+];
+
+router.get("/:clientId/ai-traffic", verifyToken, async (req, res) => {
+  try {
+    const doc    = await getClientDoc(req.params.clientId, req.uid);
+    const ga4Int = doc.data().ga4Integration;
+    if (!ga4Int?.connected || !ga4Int?.propertyId) return res.status(400).json({ error: "GA4 not connected" });
+
+    const { days = 30, startDate: cs, endDate: ce } = req.query;
+    const startDate   = cs || `${days}daysAgo`;
+    const endDate     = ce || "today";
+    const accessToken = await ga4.getValidToken(ga4Int, req.params.clientId, db);
+    const dateRange   = [{ startDate, endDate }];
+
+    // Get all referral sources
+    const [sourcesRaw, pagesRaw, trendRaw] = await Promise.all([
+      ga4.runReport(ga4Int.propertyId, accessToken, {
+        dateRanges: dateRange,
+        dimensions: [{ name: "sessionSource" }],
+        metrics:    [{ name: "sessions" }, { name: "activeUsers" }, { name: "screenPageViews" }, { name: "bounceRate" }],
+        orderBys:   [{ metric: { metricName: "sessions" }, desc: true }],
+        limit: 200,
+      }),
+      ga4.runReport(ga4Int.propertyId, accessToken, {
+        dateRanges: dateRange,
+        dimensions: [{ name: "sessionSource" }, { name: "pagePath" }],
+        metrics:    [{ name: "sessions" }],
+        orderBys:   [{ metric: { metricName: "sessions" }, desc: true }],
+        limit: 100,
+      }),
+      ga4.runReport(ga4Int.propertyId, accessToken, {
+        dateRanges: dateRange,
+        dimensions: [{ name: "date" }, { name: "sessionSource" }],
+        metrics:    [{ name: "sessions" }],
+        orderBys:   [{ dimension: { dimensionName: "date" } }],
+        limit: 500,
+      }),
+    ]);
+
+    const allSources = ga4.parseRows(sourcesRaw);
+    const aiSources  = allSources.filter(r => {
+      const src = (r.sessionSource || "").toLowerCase();
+      return AI_SOURCES.some(ai => src.includes(ai.replace("www.","")));
+    });
+
+    const allPages  = ga4.parseRows(pagesRaw);
+    const aiPages   = allPages.filter(r => {
+      const src = (r.sessionSource || "").toLowerCase();
+      return AI_SOURCES.some(ai => src.includes(ai.replace("www.","")));
+    });
+
+    const allTrend = ga4.parseRows(trendRaw);
+    const aiTrend  = {};
+    allTrend.forEach(r => {
+      const src = (r.sessionSource || "").toLowerCase();
+      if (AI_SOURCES.some(ai => src.includes(ai.replace("www.","")))) {
+        aiTrend[r.date] = (aiTrend[r.date] || 0) + (r.sessions || 0);
+      }
+    });
+
+    const totalAiSessions = aiSources.reduce((a,r) => a + (r.sessions||0), 0);
+    const totalSessions   = allSources.reduce((a,r) => a + (r.sessions||0), 0);
+
+    return res.json({
+      sources:         aiSources,
+      pages:           aiPages.slice(0, 20),
+      trend:           Object.entries(aiTrend).map(([date,sessions]) => ({ date, sessions })).sort((a,b)=>a.date.localeCompare(b.date)),
+      totalAiSessions,
+      aiShare:         totalSessions > 0 ? +((totalAiSessions/totalSessions)*100).toFixed(2) : 0,
+      totalSessions,
+    });
+  } catch (e) { return res.status(500).json({ error: e.message }); }
+});
+
+// ── POST: AI Insights — LLM analysis of GA4+GSC data ─────────────────────────
+router.post("/:clientId/insights", verifyToken, async (req, res) => {
+  try {
+    const doc    = await getClientDoc(req.params.clientId, req.uid);
+    const ga4Int = doc.data().ga4Integration;
+    if (!ga4Int?.connected || !ga4Int?.propertyId) return res.status(400).json({ error: "GA4 not connected" });
+
+    const { analyticsData, gscData, days = 30 } = req.body;
+    const { getUserKeys } = require("../utils/getUserKeys");
+    const keys = await getUserKeys(req.uid);
+
+    if (!keys.groq && !keys.gemini && !keys.openrouter) {
+      return res.status(400).json({ error: "No AI key configured. Add Groq or Gemini in Settings." });
+    }
+
+    const ov  = analyticsData?.overview || {};
+    const prev = analyticsData?.overviewPrev || {};
+
+    function pctChange(cur, pre) {
+      if (!pre || pre === 0) return null;
+      return ((cur - pre) / pre * 100).toFixed(1);
+    }
+
+    const prompt = `You are an expert SEO and digital analytics consultant. Analyze this Google Analytics 4 data for a client and provide exactly 5 actionable insights.
+
+PERIOD: Last ${days} days
+
+GA4 OVERVIEW:
+- Sessions: ${ov.sessions||0}${prev.sessions ? ` (prev: ${prev.sessions}, change: ${pctChange(ov.sessions,prev.sessions)}%)` : ""}
+- Users: ${ov.activeUsers||0}${prev.activeUsers ? ` (prev: ${prev.activeUsers}, change: ${pctChange(ov.activeUsers,prev.activeUsers)}%)` : ""}
+- Page Views: ${ov.screenPageViews||0}
+- Bounce Rate: ${ov.bounceRate ? (ov.bounceRate*100).toFixed(1)+"%" : "N/A"}
+- Avg Session: ${ov.averageSessionDuration ? Math.round(ov.averageSessionDuration)+"s" : "N/A"}
+- Engagement Rate: ${ov.engagementRate ? (ov.engagementRate*100).toFixed(1)+"%" : "N/A"}
+
+TOP PAGES: ${(analyticsData?.pages||[]).slice(0,5).map(p=>`${p.pagePath}(${p.screenPageViews} views)`).join(", ")||"N/A"}
+
+TRAFFIC SOURCES: ${(analyticsData?.sources||[]).slice(0,5).map(s=>`${s.sessionDefaultChannelGroup}(${s.sessions} sessions)`).join(", ")||"N/A"}
+
+${gscData ? `GSC KEYWORDS: Top keywords: ${(gscData.queries||[]).slice(0,5).map(q=>`"${q.keys?.[0]}"(pos:${q.position?.toFixed(1)},clicks:${q.clicks})`).join(", ")}
+Total GSC Clicks: ${gscData.totalClicks||0}, Avg Position: ${gscData.avgPosition||"N/A"}` : ""}
+
+Provide 5 specific, data-driven insights with clear actions. Format as JSON array:
+[{"type":"warning|success|opportunity|info","title":"short title","insight":"what the data shows","action":"specific thing to do"}]
+Return ONLY valid JSON, no markdown.`;
+
+    let result = null;
+
+    if (keys.groq) {
+      const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${keys.groq}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ model: "llama-3.1-8b-instant", messages: [{ role:"user", content: prompt }], temperature: 0.3, max_tokens: 1000 }),
+      });
+      const groqData = await groqRes.json();
+      result = groqData.choices?.[0]?.message?.content;
+    } else if (keys.gemini) {
+      const gemRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${keys.gemini}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+      });
+      const gemData = await gemRes.json();
+      result = gemData.candidates?.[0]?.content?.parts?.[0]?.text;
+    }
+
+    if (!result) return res.status(500).json({ error: "AI failed to generate insights" });
+
+    // Parse JSON from response
+    const jsonMatch = result.match(/\[[\s\S]*\]/);
+    if (!jsonMatch) return res.status(500).json({ error: "AI response was not valid JSON", raw: result.slice(0,200) });
+
+    const insights = JSON.parse(jsonMatch[0]);
+    return res.json({ insights, generatedAt: new Date().toISOString() });
+  } catch (e) { return res.status(500).json({ error: e.message }); }
 });
 
 // ── DELETE: Disconnect GA4 ────────────────────────────────────────────────────
