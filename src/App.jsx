@@ -344,7 +344,7 @@ function MainApp({ onLogout }) {
     gsc:"📈 Search Console", ga4:"📊 GA4 Analytics", audit:"🏥 Site Audit",
     compare:"⚔️ Compare Sites", report:"📄 Report Generator", ranktracker:"📡 Rank Tracker",
     calendar:"📅 Content Calendar", checklist:"✅ SEO Checklist", writer:"✍️ AI Writer",
-    brandtracker:"🔍 Brand Tracker", location:"🌍 Location Keywords",
+    brandtracker:"🔍 AI Brand Tracker", location:"🌍 Location Keywords",
     aeo:"🎯 AEO Optimizer", aimode:"🤖 AI Mode Optimizer",
     metapreview:"🏷️ Meta Tag Previewer", serpsimulator:"🔎 SERP Simulator",
     promptcontent:"⚡ Prompt-to-Content", competitorgap:"🕵️ Competitor Gap",
@@ -353,7 +353,7 @@ function MainApp({ onLogout }) {
   };
 
   const headerSubs = {
-    dashboard:`${TOOLS.length} tools · ${count} analyses`,
+    dashboard:`${TOOLS.length} tools · ${count} analyses run`,
     history:`${totalHistory} saved`,
     bulk:"10 keywords at once", gsc:"Last 28 days",
     ga4:"Sessions · Users · Traffic Sources",
@@ -363,7 +363,7 @@ function MainApp({ onLogout }) {
     ranktracker:"AI rank + Keyword Volume + CPC",
     calendar:"Plan your content", checklist:"48 items · 7 categories",
     writer:"12 templates + Image SEO",
-    brandtracker:"ChatGPT · Gemini · Perplexity · Claude",
+    brandtracker:"ChatGPT · Gemini · Perplexity · Claude · AI Overviews",
     location:"20 countries · AI keyword research",
     aeo:"Google AI Overview · ChatGPT · Perplexity",
     aimode:"AI Overview · AI Mode · Featured Snippets · PAA",
@@ -447,7 +447,7 @@ function MainApp({ onLogout }) {
           <div style={s.badge}>S</div>
           <div style={{ flex:1 }}>
             <div style={{ fontSize:15, fontWeight:800, color:txt, letterSpacing:"-0.3px" }}>SEO Agent</div>
-            <div style={{ fontSize:11, color:txt3, marginTop:1 }}>v16.0 · {TOOLS.length} tools</div>
+            <div style={{ fontSize:11, color:txt3, marginTop:1 }}>v17.0 · {TOOLS.length} tools</div>
           </div>
         </div>
 
@@ -482,7 +482,6 @@ function MainApp({ onLogout }) {
             <div onClick={()=>setPage("gsc")}           style={s.navItem(page==="gsc",           "#059669")}>📈 <span>Search Console</span></div>
             <div onClick={()=>setPage("ga4")}           style={s.navItem(page==="ga4",           "#DC2626")}>📊 <span>GA4 Analytics</span></div>
             <div onClick={()=>setPage("ranktracker")}   style={s.navItem(page==="ranktracker",   "#059669")}>📡 <span>Rank Tracker</span></div>
-            <div onClick={()=>setPage("brandtracker")}  style={s.navItem(page==="brandtracker",  "#10A37F")}>🔍 <span>Brand Tracker</span></div>
 
             <div style={s.secLabel}>SEO Tools</div>
             <div onClick={()=>setPage("audit")}         style={s.navItem(page==="audit",         "#DC2626")}>🏥 <span>Site Audit</span></div>
@@ -492,7 +491,8 @@ function MainApp({ onLogout }) {
             <div onClick={()=>setPage("readability")}   style={s.navItem(page==="readability",   "#059669")}>📖 <span>Readability Checker</span></div>
             <div onClick={()=>setPage("sitemap")}       style={s.navItem(page==="sitemap",       "#D97706")}>🗺️ <span>Sitemap Generator</span></div>
 
-            <div style={s.secLabel}>AI Optimization</div>
+            <div style={s.secLabel}>GEO & AI Search</div>
+            <div onClick={()=>setPage("brandtracker")}  style={s.navItem(page==="brandtracker",  "#10A37F")}>🔍 <span>AI Brand Tracker</span></div>
             <div onClick={()=>setPage("aeo")}           style={s.navItem(page==="aeo",           "#443DCB")}>🎯 <span>AEO Optimizer</span></div>
             <div onClick={()=>setPage("aimode")}        style={s.navItem(page==="aimode",        "#4285F4")}>🤖 <span>AI Mode Optimizer</span></div>
             <div onClick={()=>setPage("location")}      style={s.navItem(page==="location",      "#059669")}>🌍 <span>Location Keywords</span></div>

@@ -109,6 +109,21 @@ Format as ready-to-publish FAQ section.`},
 10. Step-by-step implementation plan
 Be specific and actionable.`},
 
+  { id:"topical", icon:"🏛️", label:"Topical Authority Builder", color:"#7C3AED", cat:"Content",
+    ph:"Enter your niche or domain...",
+    prompt:i=>`You are an expert in topical authority and semantic SEO for 2025. For: "${i}", provide:
+1. Topical authority score estimate vs top competitors (0-100)
+2. Core topic map — identify the 5-7 main topics you MUST own
+3. Content coverage gaps — what subtopics are missing
+4. Semantic coverage plan: 30 supporting article ideas
+5. Pillar page → cluster page architecture (full tree)
+6. Entity coverage: people, brands, concepts to mention
+7. Internal link architecture between all clusters
+8. Topic velocity — publishing order and cadence
+9. Cannibalization risks to fix first
+10. 90-day topical authority sprint plan
+Be structured, specific and ready to implement.`},
+
   // ── TECHNICAL ────────────────────────────────────────────
   { id:"meta", icon:"🏷️", label:"Meta Tags Generator", color:"#1D4ED8", cat:"Technical",
     ph:"Enter page topic or URL...",
@@ -175,6 +190,21 @@ Provide actual ready-to-use code.`},
 9. Hosting/CDN recommendations
 10. Priority order for fixes
 Be specific with code examples.`},
+
+  { id:"eeat", icon:"🎖️", label:"E-E-A-T Optimizer", color:"#0F4C81", cat:"Technical",
+    ph:"Enter your URL, business name or content...",
+    prompt:i=>`You are an expert in Google's E-E-A-T (Experience, Expertise, Authoritativeness, Trustworthiness) for 2025. For: "${i}":
+1. E-E-A-T score estimate (0-100) with category breakdown
+2. Experience signals — what first-hand experience content to add
+3. Expertise signals — author bio, credentials, about page fixes
+4. Authoritativeness signals — citations, mentions, links to build
+5. Trustworthiness signals — reviews, security, disclaimers, policies
+6. YMYL check — is this a Your-Money-Your-Life topic? (higher standards apply)
+7. Author schema markup (JSON-LD ready)
+8. About Us page template for maximum E-E-A-T
+9. Content review and update process to stay authoritative
+10. Top 10 E-E-A-T quick wins for this site
+Be specific with exact changes to make.`},
 
   { id:"pagespeed", icon:"⚡", label:"Page Speed Check", color:"#D97706", cat:"Technical",
     ph:"Enter full URL (https://...)...", isApi:true, apiType:"pagespeed"},
@@ -246,6 +276,21 @@ Be forward-thinking and specific.`},
 9. Exact content angle to win this SERP
 10. Title format that likely works
 Be specific and data-driven.`},
+
+  { id:"reddit", icon:"💬", label:"Reddit & Forum SEO", color:"#FF4500", cat:"Research",
+    ph:"Enter niche, keyword or brand name...",
+    prompt:i=>`You are an expert in Reddit SEO and community-driven search optimization for 2025. For: "${i}":
+1. Reddit opportunity analysis — is this niche active on Reddit?
+2. Top 10 subreddits to monitor and participate in
+3. Reddit SERP dominance — which queries does Reddit rank #1 for?
+4. Forum SEO strategy (Reddit, Quora, niche forums)
+5. 20 Reddit thread titles that rank on Google for this niche
+6. How to get cited in Reddit threads that rank
+7. Question formats people post about this topic
+8. Community content gap — questions no one answers well
+9. Brand mention strategy in forum discussions
+10. Content angles that get upvoted AND rank in Google
+Be specific with subreddit names and post angles.`},
 
   // ── GEO ──────────────────────────────────────────────────
   { id:"geo", icon:"🌐", label:"GEO — AI Visibility", color:"#0F766E", cat:"GEO",
@@ -455,9 +500,25 @@ Be specific and strategic.`},
 9. Priority fix order (P1/P2/P3)
 10. Estimated traffic impact of each fix
 Be comprehensive and specific.`},
+
+  { id:"aishopping", icon:"🛍️", label:"AI Shopping SEO", color:"#1A73E8", cat:"Tools",
+    ph:"Enter product name, category or store URL...",
+    prompt:i=>`You are an expert in Google AI Overviews Shopping and AI-powered product search optimization for 2025. For: "${i}":
+1. AI Shopping visibility score estimate (0-100)
+2. How Google AI picks products to recommend
+3. Product data feed optimization (title, description, attributes)
+4. Product schema markup (JSON-LD) ready to paste
+5. Review and rating signals Google AI weighs
+6. Price competitiveness signals
+7. How to appear in Google's AI-generated product summaries
+8. Merchant Center feed quality checklist
+9. Visual search optimization (image quality, alt text, angles)
+10. 30-day AI Shopping SEO action plan
+Be specific with product listing examples.`},
 ];
 
 export const CATS = ["All","Content","Technical","Research","GEO","Local","Backlinks","Tools"];
+// Tool count: 39 (35 original + Topical Authority, Reddit SEO, E-E-A-T Optimizer, AI Shopping SEO)
 
 // ── UPDATED: 4 models — Groq, Gemini, DeepSeek (free), Mistral (free) ──
 export const MODELS = {
