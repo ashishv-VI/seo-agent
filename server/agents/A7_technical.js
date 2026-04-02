@@ -19,12 +19,21 @@ async function runA7(clientId, keys) {
   // ── PageSpeed Insights API ─────────────────────────
   // Works without API key (rate-limited); key gives higher quota
   {
+    // Ensure URL has a protocol — PageSpeed API rejects bare domains
+    const normalizedUrl = /^https?:\/\//i.test(siteUrl) ? siteUrl : `https://${siteUrl}`;
     const apiKey = keys.google ? `&key=${keys.google}` : "";
     for (const strategy of ["mobile", "desktop"]) {
       try {
-        const apiUrl = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(siteUrl)}&strategy=${strategy}${apiKey}&category=performance&category=seo&category=accessibility`;
-        const res    = await fetch(apiUrl, { signal: AbortSignal.timeout(30000) });
+        const apiUrl = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(normalizedUrl)}&strategy=${strategy}${apiKey}&category=performance&category=seo&category=accessibility`;
+        const res    = await fetch(apiUrl, { signal: AbortSignal.timeout(60000) });
         const data   = await res.json();
+
+        // Surface API-level errors (rate limit, quota, bad key, etc.)
+        if (data.error) {
+          const msg = data.error?.message || data.error?.status || JSON.stringify(data.error);
+          cwvData[strategy] = { error: `Google API: ${msg}` };
+          continue;
+        }
 
         if (data.lighthouseResult) {
           const lh  = data.lighthouseResult;
@@ -150,7 +159,7 @@ Provide technical fix recommendations. Return ONLY valid JSON:
     status:       "complete",
     siteUrl,
     cwvData,
-    hasRealCWVData: !!keys.google && (!!cwvData.mobile?.scores || !!cwvData.desktop?.scores),
+    hasRealCWVData: !!(cwvData.mobile?.scores || cwvData.desktop?.scores),
     techRecs,
     summary: {
       mobileScore:     cwvData.mobile?.scores?.performance  ?? null,

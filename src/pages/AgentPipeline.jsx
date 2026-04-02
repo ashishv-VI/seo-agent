@@ -2261,35 +2261,47 @@ function FullTechnicalView({ tech, bg2, bg3, bdr, txt, txt2, onRefresh }) {
       {hasError && (
         <div style={{ background:"#DC262611", border:"1px solid #DC262633", borderRadius:10, padding:"12px 16px", marginBottom:12 }}>
           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:12 }}>
-            <div>
-              <div style={{ fontSize:12, fontWeight:700, color:"#DC2626", marginBottom:3 }}>PageSpeed API returned an error</div>
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:12, fontWeight:700, color:"#DC2626", marginBottom:3 }}>⚠️ PageSpeed API Error</div>
+              <div style={{ fontSize:11, color:txt2, marginBottom:4 }}>
+                <strong>{mobileError || desktopError}</strong>
+              </div>
               <div style={{ fontSize:11, color:txt2 }}>
-                {mobileError || desktopError} — Make sure <strong>PageSpeed Insights API</strong> is enabled in Google Cloud Console for your key.
+                Fix: Go to <strong>Settings → API Keys</strong> → add your Google API key, then refresh.
               </div>
             </div>
             <button onClick={doRefresh} disabled={refreshing} style={{ flexShrink:0, padding:"7px 14px", borderRadius:8, background:"#DC2626", color:"#fff", border:"none", fontSize:11, fontWeight:700, cursor:refreshing?"not-allowed":"pointer", opacity:refreshing?0.6:1 }}>
               {refreshing ? "Refreshing…" : "🔄 Retry"}
             </button>
           </div>
-          <div style={{ marginTop:8 }}>
-            <div style={{ fontSize:11, fontWeight:700, color:txt2, marginBottom:6 }}>Common solutions:</div>
+          <div style={{ marginTop:10, background:"#fff1f1", borderRadius:8, padding:"10px 14px" }}>
+            <div style={{ fontSize:11, fontWeight:700, color:"#DC2626", marginBottom:6 }}>How to fix:</div>
             <ol style={{ margin:0, paddingLeft:18, fontSize:11, color:txt2, lineHeight:2 }}>
-              <li><strong>Browser key restriction</strong> — Go to GCP → Credentials → Edit key → Set restrictions to "None"</li>
-              <li><strong>PageSpeed API not enabled</strong> — GCP → APIs & Services → Enable "PageSpeed Insights API"</li>
-              <li><strong>Wrong key</strong> — Verify key at Settings → API Keys matches your GCP project</li>
-              <li><strong>Free quota exceeded</strong> — Check GCP Console → APIs → PageSpeed → Quotas</li>
+              <li>Open <strong>console.cloud.google.com</strong> → APIs &amp; Services → Enable <strong>"PageSpeed Insights API"</strong></li>
+              <li>Create an API key → Credentials → Create Credentials → API key</li>
+              <li><strong>Set no restrictions</strong> on the key (or allow "PageSpeed Insights API")</li>
+              <li>Go to <strong>Settings → API Keys</strong> → paste the key in the <strong>Google</strong> field → Save</li>
+              <li>Click <strong>Retry</strong> above</li>
             </ol>
           </div>
         </div>
       )}
 
-      {/* Refresh button when data exists but scores are missing */}
+      {/* Refresh banner when data is missing but no error reported */}
       {!hasError && !hasAnyData && tech.cwvData && (
-        <div style={{ background:"#D9770611", border:"1px solid #D9770633", borderRadius:10, padding:"10px 16px", marginBottom:12, display:"flex", alignItems:"center", justifyContent:"space-between", gap:12 }}>
-          <div style={{ fontSize:12, color:"#D97706" }}>CWV data incomplete — click to refresh with your API key.</div>
-          <button onClick={doRefresh} disabled={refreshing} style={{ flexShrink:0, padding:"7px 14px", borderRadius:8, background:"#D97706", color:"#fff", border:"none", fontSize:11, fontWeight:700, cursor:refreshing?"not-allowed":"pointer", opacity:refreshing?0.6:1 }}>
-            {refreshing ? "Refreshing…" : "🔄 Refresh CWV"}
-          </button>
+        <div style={{ background:"#D9770611", border:"1px solid #D9770633", borderRadius:10, padding:"12px 16px", marginBottom:12 }}>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:12 }}>
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:12, fontWeight:700, color:"#D97706", marginBottom:3 }}>📡 PageSpeed data not loaded yet</div>
+              <div style={{ fontSize:11, color:txt2 }}>
+                Google PageSpeed Insights API may have been rate-limited (no API key) or timed out. Click <strong>Refresh CWV</strong> to try again.
+                For reliable data, add a <strong>Google API key</strong> in Settings → API Keys.
+              </div>
+            </div>
+            <button onClick={doRefresh} disabled={refreshing} style={{ flexShrink:0, padding:"7px 14px", borderRadius:8, background:"#D97706", color:"#fff", border:"none", fontSize:11, fontWeight:700, cursor:refreshing?"not-allowed":"pointer", opacity:refreshing?0.6:1 }}>
+              {refreshing ? "Refreshing…" : "🔄 Refresh CWV"}
+            </button>
+          </div>
         </div>
       )}
 

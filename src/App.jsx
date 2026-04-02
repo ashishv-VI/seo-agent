@@ -674,7 +674,7 @@ function MainApp({ onLogout }) {
                   <input type="password" value={tmpKeys.openrouter} onChange={e=>setTmpKeys(k=>({...k,openrouter:e.target.value}))} placeholder="sk-or-xxxxxxxxxxxx" style={s.inp} />
                 </div>
                 <div>
-                  <label style={s.label}>Google APIs Key</label>
+                  <label style={s.label}>Google APIs Key <span style={{ color:"#D97706", fontWeight:400 }}>(PageSpeed / CWV)</span></label>
                   <input type="password" value={tmpKeys.google} onChange={e=>setTmpKeys(k=>({...k,google:e.target.value}))} placeholder="AIzaxxxxxxxxxx" style={s.inp} />
                 </div>
               </div>
