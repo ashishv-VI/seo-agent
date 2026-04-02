@@ -678,7 +678,7 @@ function GscKeywordsTab({ dark, clientId, getToken, API, clientWebsite, onGoToIn
           if (d.selectedSiteUrl) {
             setSiteUrl(d.selectedSiteUrl);
           } else {
-            const sites = d.sites || [];
+            const sites = (d.sites || []).map(s => s?.url || s);
             let best = sites.find(s => s.startsWith("sc-domain:")) ||
                        sites.find(s => s.startsWith("https://")) ||
                        sites[0] || "";
@@ -765,7 +765,7 @@ function GscKeywordsTab({ dark, clientId, getToken, API, clientWebsite, onGoToIn
     return "#6B728018";
   }
 
-  const sites = status?.sites || [];
+  const sites = (status?.sites || []).map(s => s?.url || s);
 
   return (
     <div style={{ padding:24, background:bg }}>
