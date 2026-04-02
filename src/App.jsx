@@ -85,6 +85,8 @@ function MainApp({ onLogout }) {
   const [dark, setDark]       = useState(true);
   const [keys, setKeys]       = useState({ groq:"", gemini:"", google:"", openrouter:"", gaPropertyId:"", seranking:"", serpapi:"", semrush:"", dataforseo:"" });
   const [tmpKeys, setTmpKeys] = useState({ groq:"", gemini:"", google:"", openrouter:"", gaPropertyId:"", seranking:"", serpapi:"", semrush:"", dataforseo:"" });
+  const [brand, setBrand]     = useState({ agencyName:"", primaryColor:"#443DCB", logoUrl:"" });
+  const [tmpBrand, setTmpBrand] = useState({ agencyName:"", primaryColor:"#443DCB", logoUrl:"" });
   const [copied, setCopied]   = useState(null);
   const [bulkInput, setBulkInput]     = useState("");
   const [bulkResults, setBulkResults] = useState([]);
@@ -123,6 +125,10 @@ function MainApp({ onLogout }) {
         semrush:     k.semrush     ? MASK : "",
         dataforseo:  k.dataforseo  ? MASK : "",
       }));
+      if (data.brand) {
+        setBrand(data.brand);
+        setTmpBrand(data.brand);
+      }
     } catch { /* silent */ }
   }
 
@@ -162,13 +168,17 @@ function MainApp({ onLogout }) {
   async function saveKeys() {
     localStorage.setItem("seo_keys", JSON.stringify(tmpKeys));
     setKeys(tmpKeys);
-    // Save ALL keys to Firestore so backend agents can use them
+    setBrand(tmpBrand);
+    // Save ALL keys + branding to Firestore so backend agents can use them
     try {
       const token   = await user.getIdToken();
       const MASK    = "••••••••";
       const payload = {};
       const fields  = ["groq","gemini","google","openrouter","gaPropertyId","seranking","serpapi","semrush","dataforseo"];
       fields.forEach(k => { if (tmpKeys[k] && tmpKeys[k] !== MASK) payload[k] = tmpKeys[k]; });
+      if (tmpBrand.agencyName || tmpBrand.primaryColor || tmpBrand.logoUrl) {
+        payload._brand = tmpBrand;
+      }
       if (Object.keys(payload).length > 0) {
         await fetch("https://seo-agent-backend-8m1z.onrender.com/api/keys/save", {
           method:  "POST",
@@ -677,6 +687,29 @@ function MainApp({ onLogout }) {
                   <label style={s.label}>Google APIs Key <span style={{ color:"#D97706", fontWeight:400 }}>(PageSpeed / CWV)</span></label>
                   <input type="password" value={tmpKeys.google} onChange={e=>setTmpKeys(k=>({...k,google:e.target.value}))} placeholder="AIzaxxxxxxxxxx" style={s.inp} />
                 </div>
+              </div>
+
+              {/* Agency Branding */}
+              <div style={{ borderTop:`1px solid ${bdr}`, margin:"18px 0 12px" }} />
+              <div style={{ fontSize:11, fontWeight:700, color:"#443DCB", textTransform:"uppercase", letterSpacing:0.8, marginBottom:10 }}>🏢 Agency Branding (PDF Reports)</div>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"0 16px" }}>
+                <div>
+                  <label style={s.label}>Agency Name</label>
+                  <input type="text" value={tmpBrand.agencyName} onChange={e=>setTmpBrand(b=>({...b,agencyName:e.target.value}))} placeholder="Your Agency Name" style={s.inp} />
+                </div>
+                <div>
+                  <label style={s.label}>Brand Color</label>
+                  <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+                    <input type="color" value={tmpBrand.primaryColor||"#443DCB"} onChange={e=>setTmpBrand(b=>({...b,primaryColor:e.target.value}))} style={{ width:36, height:32, borderRadius:6, border:`1px solid ${bdr}`, cursor:"pointer", padding:2 }} />
+                    <input type="text" value={tmpBrand.primaryColor} onChange={e=>setTmpBrand(b=>({...b,primaryColor:e.target.value}))} placeholder="#443DCB" style={{...s.inp, flex:1}} />
+                  </div>
+                </div>
+                <div style={{ gridColumn:"1/-1", marginTop:6 }}>
+                  <label style={s.label}>Logo URL <span style={{ color:txt3, fontWeight:400 }}>(optional — appears on PDF cover)</span></label>
+                  <input type="text" value={tmpBrand.logoUrl} onChange={e=>setTmpBrand(b=>({...b,logoUrl:e.target.value}))} placeholder="https://youragency.com/logo.png" style={s.inp} />
+                </div>
+              </div>
+              <div style={{ display:"none" }}>
               </div>
               <div style={{ marginTop:10 }}>
                 <label style={s.label}>GA Property ID</label>

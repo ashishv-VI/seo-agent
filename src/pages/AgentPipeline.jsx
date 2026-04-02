@@ -43,6 +43,7 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
   const [portalUrl,     setPortalUrl]     = useState(null);
   const [showPortal,    setShowPortal]    = useState(false);
   const [portalLoading, setPortalLoading] = useState(false);
+  const [agencyBrand,   setAgencyBrand]   = useState({ agencyName:"", primaryColor:"#443DCB", logoUrl:"" });
   const pollRef     = useRef(null);
   const loadLatest  = useRef(null); // always points to the latest load fn for use in setInterval
 
@@ -99,16 +100,19 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
     setError("");
     try {
       const token = await getToken();
-      const [clientRes, pipelineRes, alertsRes, notifRes] = await Promise.all([
+      const [clientRes, pipelineRes, alertsRes, notifRes, keysRes] = await Promise.all([
         fetch(`${API}/api/clients/${clientId}`, { headers: { Authorization: `Bearer ${token}` } }),
         fetch(`${API}/api/agents/${clientId}/pipeline`, { headers: { Authorization: `Bearer ${token}` } }),
         fetch(`${API}/api/agents/${clientId}/alerts`, { headers: { Authorization: `Bearer ${token}` } }),
         fetch(`${API}/api/agents/notifications`, { headers: { Authorization: `Bearer ${token}` } }).catch(() => null),
+        fetch(`${API}/api/keys/get`, { headers: { Authorization: `Bearer ${token}` } }).catch(() => null),
       ]);
       const clientData   = await clientRes.json();
       const pipelineData = await pipelineRes.json();
       const alertsData   = await alertsRes.json();
       const notifData    = notifRes ? await notifRes.json().catch(() => ({})) : {};
+      const keysData     = keysRes  ? await keysRes.json().catch(() => ({})) : {};
+      if (keysData.brand) setAgencyBrand(b => ({ ...b, ...keysData.brand }));
       if (!clientRes.ok) throw new Error(clientData.error || "Failed to load client");
       setClient(clientData.client);
       setState(clientData.state || {});
@@ -252,7 +256,7 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
   // Print mode — show white-label report for browser print/save-as-PDF
   if (printMode) return (
     <div className="print-report" style={{ position:"fixed", inset:0, zIndex:9999, background:"#fff", overflowY:"auto" }}>
-      <PrintReport client={client} state={state} />
+      <PrintReport client={client} state={state} brand={agencyBrand} />
     </div>
   );
 
@@ -331,6 +335,7 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
         <div style={s.tab(activeTab==="ranktracker")} onClick={()=>setActiveTab("ranktracker")}>📍 Rank Tracker</div>
         <div style={s.tab(activeTab==="backlinks")} onClick={()=>setActiveTab("backlinks")}>🔗 Backlinks</div>
         <div style={s.tab(activeTab==="kwresearch")} onClick={()=>setActiveTab("kwresearch")}>🔎 KW Research</div>
+        <div style={s.tab(activeTab==="localseo")} onClick={()=>setActiveTab("localseo")}>🏪 Local SEO</div>
         <div style={s.tab(activeTab==="integrations")} onClick={()=>setActiveTab("integrations")}>🔌 Integrations</div>
         {isComplete("A3") && <div style={s.tab(activeTab==="autopilot")} onClick={()=>setActiveTab("autopilot")}>📝 Autopilot</div>}
         {isComplete("A10") && <div style={s.tab(activeTab==="roi")} onClick={()=>setActiveTab("roi")}>💰 ROI</div>}
@@ -610,6 +615,11 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
       {/* ── GSC Keywords: Live ranking keywords from Search Console ── */}
       {activeTab==="gsckeys" && (
         <GscKeywordsTab dark={dark} clientId={clientId} getToken={getToken} API={API} clientWebsite={client?.website} onGoToIntegrations={()=>setActiveTab("integrations")} />
+      )}
+
+      {/* ── Local SEO ── */}
+      {activeTab==="localseo" && (
+        <LocalSeoTab dark={dark} clientId={clientId} getToken={getToken} API={API} state={state} client={client} />
       )}
 
       {/* ── Backlinks: Real backlink data via DataForSEO ── */}
@@ -4447,6 +4457,157 @@ function KwResearchTab({ dark, clientId, getToken, API, state }) {
           <div style={{ fontSize:12 }}>Get search volume, keyword difficulty, CPC, intent, and 6-month trends for any keyword.</div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LOCAL SEO TAB — NAP Checker, Schema, GBP Signals
+// ─────────────────────────────────────────────────────────────────────────────
+function LocalSeoTab({ dark, state, client }) {
+  const bg2 = dark ? "#111" : "#fff";
+  const bg3 = dark ? "#1a1a1a" : "#f5f5f0";
+  const bdr = dark ? "#2a2a2a" : "#e0e0d8";
+  const txt = dark ? "#e8e8e8" : "#1a1a18";
+  const txt2= dark ? "#777"   : "#888";
+
+  const audit  = state?.A2_audit  || {};
+  const geo    = state?.A8_geo    || {};
+  const brief  = state?.A1_brief  || {};
+
+  const url  = client?.website || brief.websiteUrl || "";
+  const name = client?.name || brief.businessName || "";
+
+  // Extract signals from A2 audit
+  const allIssues = [
+    ...(audit.issues?.p1 || []),
+    ...(audit.issues?.p2 || []),
+    ...(audit.issues?.p3 || []),
+  ];
+  const hasSchema       = !allIssues.some(i => /schema|structured/i.test(i.type || ""));
+  const hasSSL          = audit.checks?.hasSSL !== false;
+  const hasMobile       = !allIssues.some(i => /mobile/i.test(i.type || ""));
+  const hasLocalSchema  = (audit.checks?.schemaTypes || []).some(t => /local|business|organization|restaurant|hotel/i.test(t));
+  const pageSpeed       = audit.checks?.responseTime ? audit.checks.responseTime < 1000 : null;
+  const hasSitemap      = audit.checks?.hasSitemap !== false;
+
+  // GBP / Local from A8
+  const hasGBP      = geo?.hasGBP      || false;
+  const localScore  = geo?.localPresenceScore || null;
+  const citations   = geo?.citations   || [];
+  const napStatus   = geo?.napConsistency || null;
+
+  const checks = [
+    { label:"HTTPS / SSL Certificate",         pass:hasSSL,         icon:"🔒", why:"Google requires HTTPS for all sites. Non-HTTPS sites get ranking penalty." },
+    { label:"Mobile-Friendly",                 pass:hasMobile,      icon:"📱", why:"60%+ of local searches happen on mobile. Google uses mobile-first indexing." },
+    { label:"Page Speed < 1 second",           pass:pageSpeed,      icon:"⚡", why:"53% of users leave if a page takes >3 seconds. Speed is a direct ranking factor." },
+    { label:"XML Sitemap",                     pass:hasSitemap,     icon:"🗺️", why:"Sitemap helps Google discover and index all your pages faster." },
+    { label:"Schema Markup (any)",             pass:hasSchema,      icon:"🏷️", why:"Schema tells Google what your business is, location, hours, and services." },
+    { label:"LocalBusiness Schema",            pass:hasLocalSchema, icon:"🏢", why:"LocalBusiness schema directly boosts Local Pack rankings and rich snippets." },
+    { label:"Google Business Profile",         pass:hasGBP,         icon:"📍", why:"GBP is the #1 factor for appearing in Google Maps and Local Pack results." },
+    { label:"NAP Consistency",                 pass:!!napStatus,    icon:"📋", why:"Name, Address, Phone must be identical across all directories and your website." },
+  ];
+
+  const passCount = checks.filter(c => c.pass === true).length;
+  const score     = Math.round((passCount / checks.length) * 100);
+  const scoreColor= score >= 70 ? "#059669" : score >= 40 ? "#D97706" : "#DC2626";
+
+  const LOCAL_DIRECTORIES = [
+    "Google Business Profile", "Bing Places", "Apple Maps",
+    "Yelp", "TripAdvisor", "Facebook Business", "Yell.com",
+    "Thomson Local", "Checkatrade", "Trustpilot",
+  ];
+
+  return (
+    <div>
+      {/* Score Overview */}
+      <div style={{ display:"grid", gridTemplateColumns:"auto 1fr", gap:20, background:bg2, border:`1px solid ${bdr}`, borderRadius:12, padding:"20px 24px", marginBottom:20, alignItems:"center" }}>
+        <div style={{ textAlign:"center" }}>
+          <div style={{ fontSize:52, fontWeight:900, color:scoreColor, lineHeight:1 }}>{score}</div>
+          <div style={{ fontSize:11, color:txt2, marginTop:4 }}>Local SEO Score</div>
+          <div style={{ fontSize:11, fontWeight:700, color:scoreColor, marginTop:2 }}>{score >= 70 ? "Good" : score >= 40 ? "Needs Work" : "Poor"}</div>
+        </div>
+        <div>
+          <div style={{ fontSize:14, fontWeight:700, color:txt, marginBottom:6 }}>
+            🏪 Local SEO Health Check — {name || url}
+          </div>
+          <div style={{ fontSize:12, color:txt2, lineHeight:1.7, marginBottom:10 }}>
+            {score >= 70
+              ? "Your local SEO foundation is strong. Focus on building more citations and reviews."
+              : score >= 40
+              ? "Several important local SEO signals are missing. Address the failed checks below to improve Local Pack rankings."
+              : "Critical local SEO issues detected. Without these basics, your site will struggle to appear in Google Maps or Local Pack results."}
+          </div>
+          <div style={{ display:"flex", gap:16 }}>
+            <span style={{ fontSize:12, color:"#059669", fontWeight:700 }}>✅ {passCount} passing</span>
+            <span style={{ fontSize:12, color:"#DC2626", fontWeight:700 }}>❌ {checks.length - passCount} failing</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Checks */}
+      <div style={{ marginBottom:20 }}>
+        <div style={{ fontSize:12, fontWeight:700, color:txt, marginBottom:10 }}>Local SEO Checks</div>
+        <div style={{ display:"grid", gap:8 }}>
+          {checks.map(c => {
+            const statusColor = c.pass === true ? "#059669" : c.pass === false ? "#DC2626" : "#6B7280";
+            const statusBg    = c.pass === true ? "#05966911" : c.pass === false ? "#DC262611" : "#6B728011";
+            return (
+              <div key={c.label} style={{ background:bg2, border:`1px solid ${bdr}`, borderLeft:`4px solid ${statusColor}`, borderRadius:8, padding:"10px 14px", display:"flex", alignItems:"center", gap:12 }}>
+                <span style={{ fontSize:16, flexShrink:0 }}>{c.icon}</span>
+                <div style={{ flex:1 }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                    <span style={{ fontSize:12, fontWeight:700, color:txt }}>{c.label}</span>
+                    <span style={{ padding:"2px 8px", borderRadius:8, background:statusBg, color:statusColor, fontSize:10, fontWeight:700 }}>
+                      {c.pass === true ? "✓ Pass" : c.pass === false ? "✗ Fail" : "? Unknown"}
+                    </span>
+                  </div>
+                  {c.pass !== true && (
+                    <div style={{ fontSize:11, color:txt2, marginTop:3 }}>{c.why}</div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Citation Checklist */}
+      <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, padding:"16px 20px", marginBottom:16 }}>
+        <div style={{ fontSize:12, fontWeight:700, color:txt, marginBottom:12 }}>📂 Local Directory Checklist</div>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(200px, 1fr))", gap:8 }}>
+          {LOCAL_DIRECTORIES.map(d => {
+            const found = citations.some(c => c.name?.toLowerCase().includes(d.toLowerCase()));
+            return (
+              <div key={d} style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 12px", borderRadius:8, background:found?"#05966911":bg3, border:`1px solid ${found?"#05966933":bdr}` }}>
+                <span style={{ color:found?"#059669":"#888", fontSize:14, flexShrink:0 }}>{found ? "✅" : "☐"}</span>
+                <span style={{ fontSize:12, color:found?"#059669":txt2, fontWeight:found?600:400 }}>{d}</span>
+              </div>
+            );
+          })}
+        </div>
+        {citations.length === 0 && (
+          <div style={{ fontSize:11, color:txt2, marginTop:10 }}>
+            Run the pipeline to detect your existing citations automatically. Then manually verify listings you haven't claimed yet.
+          </div>
+        )}
+      </div>
+
+      {/* Action Plan */}
+      <div style={{ background:"#443DCB11", border:"1px solid #443DCB33", borderRadius:10, padding:"14px 18px" }}>
+        <div style={{ fontSize:12, fontWeight:700, color:"#443DCB", marginBottom:10 }}>🎯 Local SEO Action Plan</div>
+        <ol style={{ margin:0, paddingLeft:18, fontSize:12, color:txt, lineHeight:2 }}>
+          {!hasGBP      && <li><strong>Create/claim Google Business Profile</strong> — go to business.google.com</li>}
+          {!hasLocalSchema && <li><strong>Add LocalBusiness schema markup</strong> — include name, address, phone, hours, geo-coordinates</li>}
+          {!hasSchema   && <li><strong>Add schema.org markup</strong> to your homepage</li>}
+          {!hasMobile   && <li><strong>Fix mobile usability</strong> — use Google Search Console Mobile Usability report</li>}
+          {!pageSpeed   && <li><strong>Improve page speed</strong> — aim for &lt;1 second TTFB</li>}
+          <li><strong>Build citations</strong> — list in all directories above that are unchecked</li>
+          <li><strong>Get reviews</strong> — ask every client to leave a Google review</li>
+          <li><strong>Add NAP to footer</strong> — identical Name, Address, Phone on every page</li>
+          <li><strong>Create location pages</strong> — one page per city/area you serve</li>
+        </ol>
+      </div>
     </div>
   );
 }

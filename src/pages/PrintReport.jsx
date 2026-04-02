@@ -172,7 +172,12 @@ function PageFooter({ url, page }) {
 /* ══════════════════════════════════════════════════════════════════════════
    MAIN COMPONENT
 ══════════════════════════════════════════════════════════════════════════ */
-export default function PrintReport({ client, state }) {
+export default function PrintReport({ client, state, brand = {} }) {
+  // Dynamic brand tokens — fallback to default palette
+  const B   = brand.primaryColor || "#1a3db5";
+  const BL  = brand.primaryColor ? `${brand.primaryColor}55` : "#c5d3f0";
+  const BLL = brand.primaryColor ? `${brand.primaryColor}18` : "#dce7f8";
+  const agencyName = brand.agencyName || "SEO AI Agent";
   const audit    = state.A2_audit    || {};
   const keywords = state.A3_keywords || {};
   const onpage   = state.A6_onpage   || {};
@@ -290,26 +295,18 @@ export default function PrintReport({ client, state }) {
               borderRadius:"50%",
               background:B,
             }}/>
-            {/* Brand name bottom-left */}
+            {/* Brand name / logo bottom-left */}
             <div style={{ position:"absolute", bottom:44, left:64 }}>
-              <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
-                  <circle cx="14" cy="14" r="13.5" fill={B}/>
-                  <circle cx="14" cy="14" r="5" fill="none" stroke="#fff" strokeWidth="2"/>
-                  {[0,60,120,180,240,300].map(deg => {
-                    const rad = (deg * Math.PI) / 180;
-                    const x1  = 14 + 7.5 * Math.cos(rad);
-                    const y1  = 14 + 7.5 * Math.sin(rad);
-                    const x2  = 14 + 10.5 * Math.cos(rad);
-                    const y2  = 14 + 10.5 * Math.sin(rad);
-                    return <line key={deg} x1={x1} y1={y1} x2={x2} y2={y2} stroke="#fff" strokeWidth="2" strokeLinecap="round"/>;
-                  })}
-                </svg>
-                <div style={{ fontSize:22, fontWeight:900, letterSpacing:-0.5 }}>
-                  <span style={{ color:"#fff" }}>SEO</span>
-                  <span style={{ color:"#fff", fontWeight:700 }}> AI Agent</span>
+              {brand.logoUrl ? (
+                <img src={brand.logoUrl} alt={agencyName} style={{ maxHeight:48, maxWidth:200, objectFit:"contain" }} />
+              ) : (
+                <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                  <div style={{ width:36, height:36, borderRadius:"50%", background:"rgba(255,255,255,0.25)", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                    <span style={{ color:"#fff", fontSize:18, fontWeight:900 }}>{agencyName.charAt(0)}</span>
+                  </div>
+                  <div style={{ fontSize:22, fontWeight:900, color:"#fff", letterSpacing:-0.5 }}>{agencyName}</div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
         </div>

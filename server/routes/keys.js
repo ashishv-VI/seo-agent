@@ -5,8 +5,8 @@ const { verifyToken }          = require("../middleware/auth");
 
 router.post("/save", verifyToken, async (req, res) => {
   try {
-    const { groq, gemini, google, openrouter, serpapi, perplexity, seranking, dataforseo, semrush, gaPropertyId } = req.body;
-    await db.collection("users").doc(req.uid).update({
+    const { groq, gemini, google, openrouter, serpapi, perplexity, seranking, dataforseo, semrush, gaPropertyId, _brand } = req.body;
+    const update = {
       apiKeys: {
         ...(groq         && { groq }),
         ...(gemini       && { gemini }),
@@ -20,7 +20,9 @@ router.post("/save", verifyToken, async (req, res) => {
         ...(gaPropertyId && { gaPropertyId }),
       },
       updatedAt: FieldValue.serverTimestamp(),
-    });
+    };
+    if (_brand) update.brand = _brand;
+    await db.collection("users").doc(req.uid).update(update);
     return res.json({ message: "API keys saved securely" });
   } catch (err) {
     return res.status(500).json({ error: err.message });
@@ -31,8 +33,8 @@ router.get("/get", verifyToken, async (req, res) => {
   try {
     const doc = await db.collection("users").doc(req.uid).get();
     if (!doc.exists) return res.status(404).json({ error: "User not found" });
-    const { apiKeys = {} } = doc.data();
-    return res.json({ keys: apiKeys });
+    const { apiKeys = {}, brand = {} } = doc.data();
+    return res.json({ keys: apiKeys, brand });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }

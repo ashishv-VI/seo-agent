@@ -192,7 +192,7 @@ async function runA2(clientId) {
           }
         } catch { /* skip malformed */ }
       }
-      const pagesToCrawl = [...foundLinks].slice(0, 4);
+      const pagesToCrawl = [...foundLinks].slice(0, 20);
       discoveredUrls = [...foundLinks];
       checks.internalLinksFound = pagesToCrawl.length;
 

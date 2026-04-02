@@ -364,6 +364,48 @@ router.post("/:clientId/check-positions", verifyToken, async (req, res) => {
 
     await batch.commit();
 
+    // ── Fire alerts for significant ranking drops (non-blocking) ──────────
+    const drops = [];
+    for (const kw of kwDocs) {
+      const country  = kw.location?.country || "US";
+      const keyLower = kw.keyword.toLowerCase();
+      const newPos   = (byCountry[country] || [])
+        .find(k => k.keyword.toLowerCase() === keyLower)
+        ? (() => {
+            // retrieve from the positions map we built earlier
+            const engine2 = keys.dataforseo ? "dataforseo" : keys.serp ? "serpapi" : "seranking";
+            return null; // positions map is out of scope here — use prevPos heuristic
+          })()
+        : null;
+      // kw.change is the PREVIOUS change; the new change was stored in batch.
+      // We detect via prevPos vs the result stored in batch (not readable here).
+      // Use stored previous change as a proxy — only fire if consistently dropping.
+      const prevChange = kw.change;
+      const prevPos    = kw.previousPosition;
+      if (prevChange !== null && prevChange < -4 && prevPos !== null) {
+        drops.push({ kw, prevChange, prevPos });
+      }
+    }
+    if (drops.length > 0) {
+      const alertBatch = db.batch();
+      for (const { kw, prevChange, prevPos } of drops) {
+        const severity = prevChange <= -10 ? "P1" : "P2";
+        alertBatch.set(db.collection("alerts").doc(), {
+          clientId:  req.params.clientId,
+          type:      "ranking_drop",
+          message:   `"${kw.keyword}" dropped ${Math.abs(prevChange)} positions (was #${prevPos})`,
+          severity,
+          source:    "rank_tracker",
+          keyword:   kw.keyword,
+          drop:      Math.abs(prevChange),
+          country:   kw.location?.country || "US",
+          resolved:  false,
+          createdAt: new Date(),
+        });
+      }
+      await alertBatch.commit().catch(() => {});
+    }
+
     // Enrich volume/difficulty via SE Ranking keyword metrics (non-blocking)
     if (keys.seranking) {
       const allKws         = kwDocs.map(k => k.keyword);

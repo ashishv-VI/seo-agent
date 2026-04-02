@@ -93,7 +93,7 @@ export default function ClientPortal({ token }) {
       <div style={{ textAlign:"center" }}>
         <div style={{ width:40, height:40, border:`3px solid ${B}33`, borderTop:`3px solid ${B}`, borderRadius:"50%", animation:"spin 0.8s linear infinite", margin:"0 auto 16px" }}/>
         <p style={{ color:"#6b7280", fontSize:14 }}>Loading your SEO report…</p>
-        <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+        <style>{`@keyframes spin{to{transform:rotate(360deg)}} .portal-no-print{display:none}`}</style>
       </div>
     </div>
   );
@@ -118,6 +118,15 @@ export default function ClientPortal({ token }) {
   return (
     <div style={{ minHeight:"100vh", background:"#f9fafb", fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif", color:"#111827" }}>
 
+      {/* ── Print styles ── */}
+      <style>{`
+        @media print {
+          .portal-no-print { display:none !important; }
+          body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        }
+        @keyframes spin { to { transform:rotate(360deg) } }
+      `}</style>
+
       {/* ── Header / Agency Brand ── */}
       <div style={{ background:`linear-gradient(135deg, ${B} 0%, #6B62E8 100%)`, padding:"24px 32px" }}>
         <div style={{ maxWidth:900, margin:"0 auto", display:"flex", alignItems:"center", justifyContent:"space-between", gap:16, flexWrap:"wrap" }}>
@@ -127,10 +136,19 @@ export default function ClientPortal({ token }) {
             </div>
             <div style={{ color:"#a5b4fc", fontSize:13, marginTop:3 }}>SEO Performance Report</div>
           </div>
-          <div style={{ textAlign:"right" }}>
-            <div style={{ color:"#fff", fontSize:18, fontWeight:700 }}>{client.name}</div>
-            <a href={client.website} target="_blank" rel="noreferrer"
-              style={{ color:"#c7d2fe", fontSize:12, textDecoration:"none" }}>{client.website}</a>
+          <div style={{ display:"flex", alignItems:"center", gap:16, flexWrap:"wrap" }}>
+            <div style={{ textAlign:"right" }}>
+              <div style={{ color:"#fff", fontSize:18, fontWeight:700 }}>{client.name}</div>
+              <a href={client.website} target="_blank" rel="noreferrer"
+                style={{ color:"#c7d2fe", fontSize:12, textDecoration:"none" }}>{client.website}</a>
+            </div>
+            <button
+              className="portal-no-print"
+              onClick={() => window.print()}
+              style={{ background:"rgba(255,255,255,0.15)", border:"1.5px solid rgba(255,255,255,0.4)", color:"#fff", fontSize:13, fontWeight:600, padding:"9px 18px", borderRadius:8, cursor:"pointer", backdropFilter:"blur(4px)", whiteSpace:"nowrap" }}
+            >
+              ⬇ Download PDF
+            </button>
           </div>
         </div>
       </div>
