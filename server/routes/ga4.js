@@ -327,22 +327,22 @@ router.get("/:clientId/journey", verifyToken, async (req, res) => {
     const propId        = ga4Int.propertyId;
     const dateRange     = [{ startDate: `${days}daysAgo`, endDate: "today" }];
 
-    const [landingRaw, exitRaw, sourcePageRaw] = await Promise.all([
+    const [landingRaw, pageRaw, sourcePageRaw] = await Promise.all([
       // Landing pages (entry points)
       ga4.runReport(propId, accessToken, {
         dateRanges: dateRange,
         dimensions: [{ name: "landingPage" }],
-        metrics:    [{ name: "sessions" }, { name: "bounceRate" }, { name: "conversions" }],
+        metrics:    [{ name: "sessions" }, { name: "bounceRate" }, { name: "screenPageViews" }],
         orderBys:   [{ metric: { metricName: "sessions" }, desc: true }],
         limit: 25,
       }),
 
-      // Exit pages
+      // Most visited pages
       ga4.runReport(propId, accessToken, {
         dateRanges: dateRange,
-        dimensions: [{ name: "exitPage" }],
-        metrics:    [{ name: "sessions" }],
-        orderBys:   [{ metric: { metricName: "sessions" }, desc: true }],
+        dimensions: [{ name: "pagePath" }],
+        metrics:    [{ name: "screenPageViews" }, { name: "activeUsers" }],
+        orderBys:   [{ metric: { metricName: "screenPageViews" }, desc: true }],
         limit: 25,
       }),
 
@@ -357,8 +357,8 @@ router.get("/:clientId/journey", verifyToken, async (req, res) => {
     ]);
 
     return res.json({
-      landingPages: ga4.parseRows(landingRaw),
-      exitPages:    ga4.parseRows(exitRaw),
+      landingPages:  ga4.parseRows(landingRaw),
+      exitPages:     ga4.parseRows(pageRaw),
       sourceJourney: ga4.parseRows(sourcePageRaw),
     });
   } catch (e) {
