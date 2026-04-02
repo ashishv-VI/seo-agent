@@ -25,13 +25,18 @@ function ScoreRing({ score, size = 100 }) {
   );
 }
 
-function MetricCard({ label, value, unit, color, icon }) {
+function MetricCard({ label, value, unit, color, icon, delta }) {
   return (
     <div style={{ background:"#fff", border:"1px solid #e5e7eb", borderRadius:12, padding:"16px 18px", textAlign:"center" }}>
       {icon && <div style={{ fontSize:22, marginBottom:6 }}>{icon}</div>}
       <div style={{ fontSize:24, fontWeight:800, color: color || "#111827" }}>
         {value ?? "–"}{unit && <span style={{ fontSize:14, fontWeight:500, color:"#9ca3af" }}> {unit}</span>}
       </div>
+      {delta !== null && delta !== undefined && (
+        <div style={{ fontSize:11, fontWeight:600, color: delta >= 0 ? "#059669" : "#DC2626", marginTop:2 }}>
+          {delta > 0 ? "▲" : "▼"} {Math.abs(delta)} vs last month
+        </div>
+      )}
       <div style={{ fontSize:12, color:"#6b7280", marginTop:2 }}>{label}</div>
     </div>
   );
@@ -177,12 +182,29 @@ export default function ClientPortal({ token }) {
           </div>
         </div>
 
+        {/* ── Month-over-Month Banner ── */}
+        {d.scoreDelta !== null && d.scoreDelta !== undefined && (
+          <div style={{ background: d.scoreDelta >= 0 ? "#ECFDF5" : "#FEF2F2", border:`1px solid ${d.scoreDelta >= 0 ? "#059669" : "#DC2626"}33`, borderRadius:12, padding:"12px 20px", marginBottom:16, display:"flex", alignItems:"center", gap:12 }}>
+            <span style={{ fontSize:22 }}>{d.scoreDelta >= 0 ? "📈" : "📉"}</span>
+            <div>
+              <div style={{ fontSize:14, fontWeight:700, color: d.scoreDelta >= 0 ? "#059669" : "#DC2626" }}>
+                {d.scoreDelta > 0 ? "+" : ""}{d.scoreDelta} points vs last month
+              </div>
+              <div style={{ fontSize:12, color:"#6b7280" }}>
+                Score moved from <strong>{d.prevScore}</strong> → <strong>{score}</strong>{d.prevDate ? ` (since ${d.prevDate})` : ""}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* ── Key Metrics ── */}
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))", gap:12, marginBottom:24 }}>
           <MetricCard label="Tech Score"      value={d.techScore}    unit="/100" color={d.techScore >= 70 ? "#059669" : d.techScore >= 40 ? "#D97706" : "#DC2626"} icon="🔧"/>
-          <MetricCard label="Mobile Score"    value={d.mobileScore}  unit="/100" color={d.mobileScore >= 70 ? "#059669" : "#D97706"} icon="📱"/>
-          <MetricCard label="Desktop Score"   value={d.desktopScore} unit="/100" color={d.desktopScore >= 70 ? "#059669" : "#D97706"} icon="🖥️"/>
-          <MetricCard label="Keywords Found"  value={d.totalKeywords} icon="🔑"/>
+          <MetricCard label="Mobile Score"    value={d.mobileScore}  unit="/100" color={d.mobileScore >= 70 ? "#059669" : "#D97706"} icon="📱"
+            delta={d.mobileScoreDelta}/>
+          <MetricCard label="Desktop Score"   value={d.desktopScore} unit="/100" color={d.desktopScore >= 70 ? "#059669" : "#D97706"} icon="🖥️"
+            delta={d.desktopScoreDelta}/>
+          <MetricCard label="Keywords Found"  value={d.totalKeywords} icon="🔑" delta={d.kwCountDelta}/>
           <MetricCard label="Top 10 Rankings" value={d.top10Count}    icon="📈"/>
           <MetricCard label="Pages Crawled"   value={d.crawledPages}  icon="🌐"/>
         </div>

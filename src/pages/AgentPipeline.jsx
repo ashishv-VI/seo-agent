@@ -1961,12 +1961,12 @@ function FullKeywordsView({ kw, bg2, bg3, bdr, txt, txt2 }) {
       )}
 
       {/* Cannibalization alerts */}
-      {(kw.cannibalizationRisk||[]).length > 0 && (
+      {((kw.cannibalization||kw.cannibalizationRisk)||[]).length > 0 && (
         <div style={{ marginTop:20 }}>
           <div style={{ fontSize:11, fontWeight:700, color:"#D97706", textTransform:"uppercase", marginBottom:10 }}>
-            ⚠️ Keyword Cannibalization Risks ({kw.cannibalizationRisk.length})
+            ⚠️ Keyword Cannibalization Risks ({(kw.cannibalization||kw.cannibalizationRisk).length})
           </div>
-          {kw.cannibalizationRisk.map((c,i)=>(
+          {(kw.cannibalization||kw.cannibalizationRisk).map((c,i)=>(
             <div key={i} style={{ background:"#D9770611", border:"1px solid #D9770633", borderRadius:10, padding:"12px 14px", marginBottom:8 }}>
               <div style={{ fontSize:12, color:txt, fontWeight:600, marginBottom:4 }}>Page: {c.page}</div>
               <div style={{ fontSize:11, color:txt2, marginBottom:4 }}>{c.keywordCount} keywords targeting the same page: {(c.keywords||[]).slice(0,3).join(", ")}{c.keywords?.length > 3 ? "..." : ""}</div>
@@ -2208,6 +2208,30 @@ function FullOnPageView({ op, bg2, bg3, bdr, txt, txt2 }) {
                   {s.jsonLd}
                 </div>
               )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Internal Link Recommendations */}
+      {(op.internalLinks||[]).length > 0 && (
+        <div style={{ marginBottom:12 }}>
+          <div style={{ fontSize:11, fontWeight:700, color:txt2, textTransform:"uppercase", letterSpacing:1, marginBottom:8 }}>🔗 Internal Link Recommendations</div>
+          <div style={{ background:"#443DCB08", border:"1px solid #443DCB22", borderRadius:8, padding:"8px 12px", marginBottom:8, fontSize:11, color:txt2 }}>
+            Internal links pass PageRank between pages and help Google understand your site structure. Add these links to improve rankings across all pages.
+          </div>
+          {(op.internalLinks||[]).slice(0,8).map((lk,i) => (
+            <div key={i} style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:8, padding:"10px 14px", marginBottom:6, display:"flex", gap:10, alignItems:"flex-start" }}>
+              <div style={{ width:22, height:22, borderRadius:"50%", background:"#443DCB22", color:"#443DCB", fontSize:10, fontWeight:700, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, marginTop:1 }}>{i+1}</div>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:12, color:txt, marginBottom:3 }}>
+                  <span style={{ fontWeight:600, color:"#443DCB" }}>{lk.fromPage}</span>
+                  <span style={{ color:txt2 }}> → </span>
+                  <span style={{ fontWeight:600, color:"#059669" }}>{lk.toPage}</span>
+                </div>
+                <div style={{ fontSize:11, color:"#0891B2" }}>Anchor: "<em>{lk.anchorText}</em>"</div>
+                {(lk.why||lk.placement) && <div style={{ fontSize:10, color:txt2, marginTop:3 }}>{lk.placement ? `Placement: ${lk.placement} · ` : ""}{lk.why}</div>}
+              </div>
             </div>
           ))}
         </div>

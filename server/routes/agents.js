@@ -1217,4 +1217,23 @@ router.get("/:clientId/wp-push-log", verifyToken, async (req, res) => {
   }
 });
 
+// GET: CWV performance history (for trend charts in Technical tab)
+router.get("/:clientId/cwv-history", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const snap = await db.collection("cwv_history")
+      .where("clientId", "==", req.params.clientId)
+      .orderBy("createdAt", "asc")
+      .limit(24)
+      .get();
+    const history = snap.docs.map(d => {
+      const data = d.data();
+      return { id: d.id, ...data, createdAt: data.createdAt?.toDate?.()?.toISOString() };
+    });
+    return res.json({ history, total: history.length });
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
 module.exports = router;

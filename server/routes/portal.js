@@ -96,6 +96,24 @@ router.get("/:token", async (req, res) => {
     const technical = state.A7_technical || null;
     const geo       = state.A8_geo      || null;
 
+    // ── Month-over-month snapshot comparison ────────────────────────────
+    let prevSnapshot = null;
+    try {
+      const snapSnap = await db.collection("portal_snapshots")
+        .where("clientId", "==", clientId)
+        .orderBy("createdAt", "desc")
+        .limit(5)
+        .get();
+      // Get second-most-recent (skip current run snapshot)
+      const snaps = snapSnap.docs.map(d => d.data());
+      if (snaps.length >= 2) prevSnapshot = snaps[1];
+      else if (snaps.length === 1) prevSnapshot = null;
+    } catch { /* index may not exist yet */ }
+
+    const currentScore = report?.healthScore || client.seoScore || null;
+    const prevScore    = prevSnapshot?.seoScore || null;
+    const scoreDelta   = (currentScore !== null && prevScore !== null) ? currentScore - prevScore : null;
+
     return res.json({
       client: {
         name:                client.name,
@@ -152,6 +170,14 @@ router.get("/:token", async (req, res) => {
         hasGBP:        geo?.hasGBP             || false,
 
         reportDate: report?.generatedAt || client.pipelineCompletedAt || null,
+
+        // Month-over-month
+        scoreDelta,
+        prevScore,
+        prevDate:         prevSnapshot?.date || null,
+        mobileScoreDelta: (technical?.summary?.mobileScore  != null && prevSnapshot?.mobileScore  != null) ? technical.summary.mobileScore  - prevSnapshot.mobileScore  : null,
+        desktopScoreDelta:(technical?.summary?.desktopScore != null && prevSnapshot?.desktopScore != null) ? technical.summary.desktopScore - prevSnapshot.desktopScore : null,
+        kwCountDelta:     (keywords?.keywordMap?.length != null && prevSnapshot?.totalKeywords != null) ? keywords.keywordMap.length - prevSnapshot.totalKeywords : null,
       },
     });
   } catch (err) {

@@ -89,19 +89,42 @@ async function checkBulkPositionsDFS(domain, keywords, auth, countryCode = "US")
         const items   = task.result?.[0]?.items || [];
         const organic = items.filter(i => i.type === "organic");
 
+        // Detect SERP features present for this keyword
+        const serpFeatures = [];
+        const itemTypes = items.map(i => i.type);
+        if (itemTypes.includes("featured_snippet"))        serpFeatures.push("featured_snippet");
+        if (itemTypes.includes("people_also_ask"))         serpFeatures.push("people_also_ask");
+        if (itemTypes.includes("local_pack"))              serpFeatures.push("local_pack");
+        if (itemTypes.includes("knowledge_graph"))         serpFeatures.push("knowledge_graph");
+        if (itemTypes.includes("image_pack"))              serpFeatures.push("image_pack");
+        if (itemTypes.includes("video"))                   serpFeatures.push("video");
+        if (itemTypes.includes("news_box"))                serpFeatures.push("news");
+        if (itemTypes.includes("shopping"))                serpFeatures.push("shopping");
+        if (itemTypes.includes("answer_box"))              serpFeatures.push("answer_box");
+
+        // Check if WE own the featured snippet
+        let ownsFeaturedSnippet = false;
+        const snippetItem = items.find(i => i.type === "featured_snippet");
+        if (snippetItem) {
+          const snipDomain = (snippetItem.domain || snippetItem.url || "").toLowerCase();
+          if (snipDomain.includes(cleanDomain)) ownsFeaturedSnippet = true;
+        }
+
         let found = null;
         for (const item of organic) {
           const itemDomain = (item.domain || item.url || "").toLowerCase();
           if (itemDomain.includes(cleanDomain)) {
             found = {
-              position: item.rank_group || item.rank_absolute || null,
-              url:      item.url        || null,
+              position:            item.rank_group || item.rank_absolute || null,
+              url:                 item.url        || null,
+              serpFeatures,
+              ownsFeaturedSnippet,
             };
             break;
           }
         }
 
-        results[keyword] = found || { position: null, url: null };
+        results[keyword] = found || { position: null, url: null, serpFeatures, ownsFeaturedSnippet };
       }
     } catch (e) {
       console.warn("[dataforseo] batch request failed:", e.message);

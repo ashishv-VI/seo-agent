@@ -10,6 +10,7 @@ const { getDomainKeywords, getKeywordMetrics, checkBulkPositions } = require("..
 const { checkBulkPositionsDFS, verifyDFSCredentials }              = require("../utils/dataforseo");
 const { checkBulkPositionsSerp }                                   = require("../utils/serprank");
 const { getState }      = require("../shared-state/stateManager");
+const { sendRankingAlert } = require("../utils/emailer");
 
 // ── DEBUG: Test SE Ranking API endpoints (temporary) ─────────────────────────
 router.get("/debug-seranking", verifyToken, async (req, res) => {
@@ -357,6 +358,8 @@ router.post("/:clientId/check-positions", verifyToken, async (req, res) => {
           rankingUrl:       result.url || null,
           lastChecked:      now,
           history,
+          serpFeatures:          result.serpFeatures          || [],
+          ownsFeaturedSnippet:   result.ownsFeaturedSnippet   || false,
         });
         checked++;
       }
@@ -404,6 +407,30 @@ router.post("/:clientId/check-positions", verifyToken, async (req, res) => {
         });
       }
       await alertBatch.commit().catch(() => {});
+
+      // ── Send email alert (non-blocking) ────────────────────────────────
+      try {
+        const ownerDoc  = await db.collection("users").doc(req.uid).get();
+        const ownerData = ownerDoc.data() || {};
+        const toEmail   = ownerData.email || null;
+        const clientDoc = await db.collection("clients").doc(req.params.clientId).get();
+        const clientData = clientDoc.data() || {};
+        const brief = await getState(req.params.clientId, "A1_brief") || {};
+        if (toEmail) {
+          sendRankingAlert({
+            to:          toEmail,
+            clientName:  clientData.name || brief.businessName || "Client",
+            websiteUrl:  domain,
+            drops:       drops.map(({ kw, prevChange, prevPos }) => ({
+              keyword:          kw.keyword,
+              drop:             Math.abs(prevChange),
+              previousPosition: prevPos,
+              position:         prevPos + prevChange,
+            })),
+            agentUrl: process.env.APP_URL || "https://seo-agent-6jrv.onrender.com",
+          });
+        }
+      } catch { /* email failure must not break the response */ }
     }
 
     // Enrich volume/difficulty via SE Ranking keyword metrics (non-blocking)

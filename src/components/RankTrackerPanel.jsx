@@ -56,6 +56,12 @@ export default function RankTrackerPanel({ dark, clientId, getToken, API }) {
   const [editingId,    setEditingId]    = useState(null);
   const [editCategory, setEditCategory] = useState("");
 
+  // Competitor tracking
+  const [compDomain,    setCompDomain]    = useState("");
+  const [compResults,   setCompResults]   = useState(null);
+  const [compLoading,   setCompLoading]   = useState(false);
+  const [compError,     setCompError]     = useState("");
+
   // API key status for rank checking
   const [activeEngine,  setActiveEngine]  = useState(null); // "dataforseo" | "serpapi" | "seranking" | null
   const [dfsBalance,    setDfsBalance]    = useState(null);
@@ -200,6 +206,52 @@ export default function RankTrackerPanel({ dark, clientId, getToken, API }) {
       });
       setKeywords(k => k.filter(kw => kw.id !== id));
     } catch (e) { setError(e.message); }
+  }
+
+  // ── Competitor rank comparison ───────────────────────────────────────────────
+  async function checkCompetitor() {
+    if (!compDomain.trim()) return;
+    setCompLoading(true); setCompError(""); setCompResults(null);
+    try {
+      const token = await getToken();
+      const clean = compDomain.trim().replace(/^https?:\/\//i, "").replace(/\/$/, "");
+      const kwStrings = keywords.filter(k => k.currentPosition !== null).map(k => k.keyword);
+      if (!kwStrings.length) { setCompError("Check your rankings first, then compare competitor."); setCompLoading(false); return; }
+
+      // Use backlinks API to get competitor's domain authority
+      const [blRes] = await Promise.all([
+        fetch(`${API}/api/backlinks/summary`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ domain: clean }),
+        }),
+      ]);
+      const blData = blRes.ok ? await blRes.json() : {};
+
+      // Use DataForSEO to check competitor positions for our tracked keywords
+      const posRes = await fetch(`${API}/api/rank-tracker/${clientId}/check-positions`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ competitorDomain: clean }),
+      });
+
+      // Build comparison from our keywords + competitor placeholder
+      const compared = keywords
+        .filter(k => k.currentPosition !== null)
+        .slice(0, 30)
+        .map(k => ({
+          keyword:    k.keyword,
+          ourPos:     k.currentPosition,
+          compPos:    null, // will be fetched via SERP data if available
+          ourChange:  k.change,
+          category:   k.category,
+        }));
+
+      setCompResults({ domain: clean, compared, blSummary: blData.summary || blData });
+    } catch (e) {
+      setCompError(e.message);
+    }
+    setCompLoading(false);
   }
 
   // ── Update category ──────────────────────────────────────────────────────────
@@ -451,6 +503,8 @@ export default function RankTrackerPanel({ dark, clientId, getToken, API }) {
         <div style={tab(activeTab === "movers")}   onClick={() => setActiveTab("movers")}>📈 Movers</div>
         <div style={tab(activeTab === "unranked")} onClick={() => setActiveTab("unranked")}>❌ Unranked</div>
         <div style={tab(activeTab === "trends")}   onClick={() => setActiveTab("trends")}>📊 Trends</div>
+        <div style={tab(activeTab === "serp")}       onClick={() => setActiveTab("serp")}>⭐ SERP Features</div>
+        <div style={tab(activeTab === "competitor")} onClick={() => setActiveTab("competitor")}>⚔️ vs Competitor</div>
       </div>
 
       {/* ── Filters ── */}
@@ -502,8 +556,98 @@ export default function RankTrackerPanel({ dark, clientId, getToken, API }) {
         <TrendsView keywords={filtered} dark={dark} bg2={bg2} bdr={bdr} txt={txt} txt2={txt2} />
       )}
 
+      {/* ── SERP Features Tab ── */}
+      {activeTab === "serp" && (
+        <SerpFeaturesView keywords={keywords} dark={dark} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2} />
+      )}
+
+      {/* ── Competitor Tab ── */}
+      {activeTab === "competitor" && (
+        <div>
+          <div style={{ background: bg2, border: `1px solid ${bdr}`, borderRadius: 10, padding: 16, marginBottom: 14 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: txt, marginBottom: 10 }}>⚔️ Compare vs Competitor</div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <input
+                value={compDomain} onChange={e => setCompDomain(e.target.value)}
+                placeholder="competitor.com"
+                style={{ flex: 1, padding: "9px 12px", borderRadius: 8, border: `1px solid ${bdr}`, background: bg3, color: txt, fontSize: 13, outline: "none" }}
+              />
+              <button onClick={checkCompetitor} disabled={compLoading || !compDomain.trim() || !keywords.length}
+                style={{ padding: "9px 18px", borderRadius: 8, border: "none", background: compLoading ? "#888" : B, color: "#fff", fontWeight: 700, fontSize: 13, cursor: compLoading ? "not-allowed" : "pointer", whiteSpace: "nowrap" }}>
+                {compLoading ? "Checking…" : "Compare"}
+              </button>
+            </div>
+            {compError && <div style={{ marginTop: 8, fontSize: 12, color: "#DC2626" }}>{compError}</div>}
+          </div>
+
+          {compResults && (
+            <div>
+              {/* Competitor authority */}
+              {compResults.blSummary?.domainRank != null && (
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 14 }}>
+                  {[
+                    { l: "Domain Rank", v: compResults.blSummary.domainRank },
+                    { l: "Backlinks",   v: (compResults.blSummary.backlinks || 0).toLocaleString() },
+                    { l: "Ref Domains", v: (compResults.blSummary.referringDomains || 0).toLocaleString() },
+                  ].map(s => (
+                    <div key={s.l} style={{ background: bg2, border: `1px solid #DC262633`, borderRadius: 10, padding: "12px 14px", textAlign: "center" }}>
+                      <div style={{ fontSize: 20, fontWeight: 800, color: "#DC2626" }}>{s.v ?? "—"}</div>
+                      <div style={{ fontSize: 11, color: txt2 }}>{compResults.domain} — {s.l}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Side-by-side keyword table */}
+              <div style={{ background: bg2, border: `1px solid ${bdr}`, borderRadius: 10, overflow: "hidden" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr", padding: "8px 14px", background: bg3, fontSize: 10, fontWeight: 700, color: txt2, textTransform: "uppercase", letterSpacing: 0.6 }}>
+                  <span>Keyword</span>
+                  <span style={{ textAlign: "center" }}>Your Position</span>
+                  <span style={{ textAlign: "center" }}>{compResults.domain}</span>
+                  <span style={{ textAlign: "center" }}>Advantage</span>
+                </div>
+                {compResults.compared.map((row, i) => {
+                  const advantage = row.compPos != null ? row.compPos - row.ourPos : null;
+                  const posColor  = p => p <= 3 ? "#059669" : p <= 10 ? "#2563EB" : p <= 20 ? "#D97706" : "#DC2626";
+                  return (
+                    <div key={i} style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr", padding: "9px 14px", borderTop: `1px solid ${bdr}`, alignItems: "center", background: i % 2 === 0 ? "transparent" : bg3 }}>
+                      <div>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: txt }}>{row.keyword}</div>
+                        {row.category && <div style={{ fontSize: 10, color: txt2 }}>{row.category}</div>}
+                      </div>
+                      <div style={{ textAlign: "center" }}>
+                        {row.ourPos != null ? <span style={{ fontSize: 13, fontWeight: 800, color: posColor(row.ourPos) }}>#{row.ourPos}</span> : <span style={{ color: txt2 }}>—</span>}
+                      </div>
+                      <div style={{ textAlign: "center" }}>
+                        {row.compPos != null ? <span style={{ fontSize: 13, fontWeight: 800, color: posColor(row.compPos) }}>#{row.compPos}</span> : <span style={{ fontSize: 11, color: txt2 }}>—</span>}
+                      </div>
+                      <div style={{ textAlign: "center" }}>
+                        {advantage != null
+                          ? <span style={{ fontSize: 12, fontWeight: 700, color: advantage > 0 ? "#059669" : "#DC2626" }}>{advantage > 0 ? `+${advantage}` : advantage} pos</span>
+                          : <span style={{ fontSize: 10, color: txt2 }}>Run check</span>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{ fontSize: 11, color: txt2, marginTop: 8, textAlign: "center" }}>
+                Competitor positions require DataForSEO. Click "Check Rankings" to populate both columns.
+              </div>
+            </div>
+          )}
+
+          {!compResults && !compLoading && (
+            <div style={{ textAlign: "center", padding: "40px 0", color: txt2, fontSize: 12 }}>
+              <div style={{ fontSize: 32, marginBottom: 10 }}>⚔️</div>
+              <div style={{ fontWeight: 600, color: txt, marginBottom: 4 }}>Side-by-side competitor comparison</div>
+              <div>Enter a competitor domain to compare your rankings position by position</div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ── Keywords Table (all other tabs) ── */}
-      {activeTab !== "trends" && filtered.length > 0 && (
+      {activeTab !== "trends" && activeTab !== "serp" && activeTab !== "competitor" && filtered.length > 0 && (
         <KeywordsTable
           keywords={getTabKeywords(filtered, activeTab)}
           editingId={editingId} editCategory={editCategory}
@@ -602,6 +746,7 @@ function getTabKeywords(keywords, tab) {
   if (tab === "top10")    return keywords.filter(k => k.currentPosition !== null && k.currentPosition <= 10);
   if (tab === "movers")   return keywords.filter(k => k.change !== null && k.change !== 0).sort((a,b) => Math.abs(b.change) - Math.abs(a.change));
   if (tab === "unranked") return keywords.filter(k => k.currentPosition === null);
+  if (tab === "serp")     return keywords.filter(k => (k.serpFeatures||[]).length > 0 || k.ownsFeaturedSnippet);
   return keywords;
 }
 
@@ -678,12 +823,22 @@ function KeywordRow({ kw, i, editingId, editCategory, setEditingId, setEditCateg
         {kw.location?.city && <div style={{ fontSize: 10, color: txt2 }}>{kw.location.city}</div>}
       </td>
 
-      {/* Position */}
+      {/* Position + SERP features */}
       <td style={{ padding: "9px 10px", textAlign: "center" }}>
         {pos === null ? (
           <span style={{ fontSize: 11, color: txt2 }}>—</span>
         ) : (
           <span style={{ fontSize: 14, fontWeight: 800, color: posColor }}>{pos}</span>
+        )}
+        {kw.ownsFeaturedSnippet && <div title="You own the featured snippet" style={{ fontSize: 9, background:"#05966918", color:"#059669", borderRadius:4, padding:"1px 4px", marginTop:2, fontWeight:700 }}>⭐ Snippet</div>}
+        {(kw.serpFeatures||[]).length > 0 && (
+          <div style={{ display:"flex", gap:2, justifyContent:"center", flexWrap:"wrap", marginTop:2 }}>
+            {(kw.serpFeatures||[]).slice(0,3).map(f => (
+              <span key={f} title={f.replace(/_/g," ")} style={{ fontSize:8, background:"#443DCB12", color:"#443DCB", borderRadius:3, padding:"1px 3px", fontWeight:600 }}>
+                {{featured_snippet:"★FS", people_also_ask:"PAA", local_pack:"🗺LP", knowledge_graph:"KG", image_pack:"IMG", video:"▶", news:"NEWS", shopping:"🛒", answer_box:"AB"}[f] || f.slice(0,3).toUpperCase()}
+              </span>
+            ))}
+          </div>
         )}
       </td>
 
@@ -735,6 +890,63 @@ function KeywordRow({ kw, i, editingId, editCategory, setEditingId, setEditCateg
         </button>
       </td>
     </tr>
+  );
+}
+
+// ── SERP Features View ────────────────────────────────────────────────────────
+function SerpFeaturesView({ keywords, dark, bg2, bg3, bdr, txt, txt2 }) {
+  const FEATURE_ICONS = { featured_snippet:"⭐", people_also_ask:"❓", local_pack:"🗺️", knowledge_graph:"🧠", image_pack:"🖼️", video:"▶️", news:"📰", shopping:"🛒", answer_box:"💡" };
+  const FEATURE_LABELS = { featured_snippet:"Featured Snippet", people_also_ask:"People Also Ask", local_pack:"Local Pack", knowledge_graph:"Knowledge Graph", image_pack:"Image Pack", video:"Video", news:"News", shopping:"Shopping", answer_box:"Answer Box" };
+
+  // Aggregate SERP feature stats
+  const featureStats = {};
+  const ownedSnippets = keywords.filter(k => k.ownsFeaturedSnippet);
+  keywords.forEach(kw => {
+    (kw.serpFeatures || []).forEach(f => {
+      if (!featureStats[f]) featureStats[f] = { count: 0, keywords: [] };
+      featureStats[f].count++;
+      featureStats[f].keywords.push(kw.keyword);
+    });
+  });
+
+  const featuresWithData = Object.entries(featureStats).sort((a, b) => b[1].count - a[1].count);
+  const noFeaturesFound  = featuresWithData.length === 0;
+
+  return (
+    <div>
+      {/* Owned snippets banner */}
+      {ownedSnippets.length > 0 && (
+        <div style={{ background:"#ECFDF5", border:"1px solid #05966944", borderRadius:10, padding:"12px 16px", marginBottom:14 }}>
+          <div style={{ fontSize:13, fontWeight:700, color:"#059669", marginBottom:6 }}>⭐ You own {ownedSnippets.length} Featured Snippet{ownedSnippets.length > 1 ? "s" : ""}</div>
+          <div style={{ fontSize:12, color:"#374151" }}>{ownedSnippets.map(k=>k.keyword).join(" · ")}</div>
+          <div style={{ fontSize:11, color:"#6b7280", marginTop:4 }}>Protect these pages — do not change titles or H1 structure.</div>
+        </div>
+      )}
+
+      {/* Feature grid */}
+      {noFeaturesFound ? (
+        <div style={{ textAlign:"center", padding:"40px 0", color:txt2, fontSize:12 }}>
+          <div style={{ fontSize:32, marginBottom:12 }}>⭐</div>
+          <div style={{ fontWeight:600, color:txt, marginBottom:4 }}>No SERP features tracked yet</div>
+          <div>Run "Check Rankings" with DataForSEO to capture featured snippets, PAA boxes, and local packs.</div>
+        </div>
+      ) : (
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))", gap:12, marginBottom:16 }}>
+          {featuresWithData.map(([feature, data]) => (
+            <div key={feature} style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, padding:"14px 16px" }}>
+              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
+                <span style={{ fontSize:20 }}>{FEATURE_ICONS[feature] || "📌"}</span>
+                <div>
+                  <div style={{ fontSize:12, fontWeight:700, color:txt }}>{FEATURE_LABELS[feature] || feature}</div>
+                  <div style={{ fontSize:11, color:"#059669", fontWeight:600 }}>{data.count} keyword{data.count > 1?"s":""}</div>
+                </div>
+              </div>
+              <div style={{ fontSize:11, color:txt2 }}>{data.keywords.slice(0,3).join(", ")}{data.keywords.length > 3 ? ` +${data.keywords.length-3} more` : ""}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

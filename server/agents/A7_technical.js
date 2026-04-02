@@ -1,5 +1,6 @@
 const { saveState, getState } = require("../shared-state/stateManager");
 const { callLLM, parseJSON }  = require("../utils/llm");
+const { db }                  = require("../config/firebase");
 
 /**
  * A7 — Technical SEO & Core Web Vitals Agent
@@ -189,6 +190,24 @@ Provide technical fix recommendations. Return ONLY valid JSON:
   };
 
   await saveState(clientId, "A7_technical", result);
+
+  // ── Store CWV history for trend charts ───────────────────────────────
+  try {
+    const today = new Date().toISOString().split("T")[0];
+    await db.collection("cwv_history").add({
+      clientId,
+      date:         today,
+      mobileScore:  cwvData.mobile?.scores?.performance  ?? null,
+      desktopScore: cwvData.desktop?.scores?.performance ?? null,
+      mobileSeo:    cwvData.mobile?.scores?.seo          ?? null,
+      lcpMs:        cwvData.mobile?.rawMetrics?.lcp?.ms  ?? null,
+      clsValue:     cwvData.mobile?.rawMetrics?.cls?.value ?? null,
+      ttfbMs:       cwvData.mobile?.rawMetrics?.ttfb?.ms ?? null,
+      fcpMs:        cwvData.mobile?.rawMetrics?.fcp?.ms  ?? null,
+      createdAt:    new Date(),
+    });
+  } catch { /* non-blocking — collection may not exist yet */ }
+
   return { success: true, technical: result };
 }
 

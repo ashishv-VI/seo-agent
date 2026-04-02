@@ -91,6 +91,7 @@ function MainApp({ onLogout }) {
   const [bulkInput, setBulkInput]     = useState("");
   const [bulkResults, setBulkResults] = useState([]);
   const [bulkLoading, setBulkLoading] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
   const bottomRef = useRef(null);
 
   useEffect(() => {
@@ -129,6 +130,9 @@ function MainApp({ onLogout }) {
         setBrand(data.brand);
         setTmpBrand(data.brand);
       }
+      // Show onboarding if no API keys are set yet (first-time user)
+      const hasAnyKey = Object.values(k).some(v => v);
+      if (!hasAnyKey) setShowOnboarding(true);
     } catch { /* silent */ }
   }
 
@@ -377,6 +381,40 @@ function MainApp({ onLogout }) {
 
   return (
     <div style={s.app}>
+
+      {/* ── Onboarding Wizard (first-time users) ── */}
+      {showOnboarding && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.75)", zIndex:10000, display:"flex", alignItems:"center", justifyContent:"center", padding:24 }}>
+          <div style={{ background:"#fff", borderRadius:20, maxWidth:520, width:"100%", overflow:"hidden", boxShadow:"0 20px 60px rgba(0,0,0,0.3)" }}>
+            <div style={{ background:"linear-gradient(135deg,#443DCB,#6B62E8)", padding:"28px 32px" }}>
+              <div style={{ color:"#fff", fontSize:22, fontWeight:800, letterSpacing:"-0.02em" }}>Welcome to SEO Agent</div>
+              <div style={{ color:"#a5b4fc", fontSize:13, marginTop:4 }}>3 steps to get your first AI pipeline running</div>
+            </div>
+            <div style={{ padding:"28px 32px" }}>
+              {[
+                { step:1, icon:"🔑", title:"Add API Keys", desc:"Go to Settings (⚙️) and add at least one LLM key — Groq is free at groq.com", action:"Open Settings", onClick:() => { setShowSettings(true); setShowOnboarding(false); } },
+                { step:2, icon:"🏢", title:"Create Your First Client", desc:"Go to Client Manager → + Add Client. Enter the business name and website URL.", action:"Go to Clients", onClick:() => { setPage("clients"); setShowOnboarding(false); } },
+                { step:3, icon:"🚀", title:"Run the Pipeline", desc:"Open the client → click Pipeline → Run Full Pipeline. All 10 AI agents will analyse the site.", action:null },
+              ].map((item, i) => (
+                <div key={i} style={{ display:"flex", gap:14, marginBottom:i < 2 ? 20 : 0 }}>
+                  <div style={{ width:36, height:36, borderRadius:"50%", background:"#443DCB22", color:"#443DCB", fontSize:16, fontWeight:800, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>{item.step}</div>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontSize:14, fontWeight:700, color:"#111827", marginBottom:3 }}>{item.icon} {item.title}</div>
+                    <div style={{ fontSize:13, color:"#6b7280", lineHeight:1.5, marginBottom: item.action ? 8 : 0 }}>{item.desc}</div>
+                    {item.action && (
+                      <button onClick={item.onClick} style={{ padding:"6px 16px", borderRadius:8, border:"none", background:"#443DCB", color:"#fff", fontWeight:600, fontSize:12, cursor:"pointer" }}>{item.action} →</button>
+                    )}
+                  </div>
+                </div>
+              ))}
+              <button onClick={() => setShowOnboarding(false)} style={{ width:"100%", marginTop:24, padding:"11px", borderRadius:10, border:"1px solid #e5e7eb", background:"transparent", color:"#6b7280", fontSize:13, cursor:"pointer", fontWeight:600 }}>
+                I know what I'm doing — skip
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── GSC OAuth return banner ── */}
       {gscBanner === "success" && (
         <div style={{ position:"fixed", top:16, left:"50%", transform:"translateX(-50%)", zIndex:9999, padding:"12px 24px", borderRadius:10, background:"#059669", color:"#fff", fontWeight:600, fontSize:13, boxShadow:"0 4px 20px #0005", display:"flex", gap:12, alignItems:"center" }}>
@@ -554,7 +592,7 @@ function MainApp({ onLogout }) {
         {page==="serpsimulator" && <SerpSimulator dark={dark} keys={keys} model={model} />}
         {page==="competitorgap" && <CompetitorGap dark={dark} keys={keys} model={model} />}
         {page==="readability"   && <ReadabilityChecker dark={dark} keys={keys} model={model} />}
-        {page==="backlink"      && <BacklinkAnalyzer dark={dark} keys={keys} model={model} />}
+        {page==="backlink"      && <BacklinkAnalyzer dark={dark} getToken={() => user.getIdToken()} />}
         {page==="sitemap"       && <SitemapGenerator dark={dark} keys={keys} model={model} />}
         {page==="calendar"      && <ContentCalendar dark={dark} keys={keys} model={model} />}
         {page==="checklist"     && <SeoChecklist dark={dark} />}

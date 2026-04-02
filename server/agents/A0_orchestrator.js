@@ -256,6 +256,22 @@ async function runFullPipeline(clientId, keys, googleToken = null) {
         await saveScoreHistory(clientId, score);
         await db.collection("clients").doc(clientId).update({ seoScore: score.overall });
         console.log(`[A0] seoScore ${score.overall} saved for ${clientId}`);
+
+        // ── Save portal snapshot for month-over-month comparison ──────────
+        try {
+          const today = new Date().toISOString().split("T")[0];
+          await db.collection("portal_snapshots").add({
+            clientId,
+            date:         today,
+            seoScore:     score.overall,
+            techScore:    audit?.score || null,
+            mobileScore:  technical?.summary?.mobileScore   || null,
+            desktopScore: technical?.summary?.desktopScore  || null,
+            totalKeywords: keywords?.keywordMap?.length     || 0,
+            crawledPages:  (audit?.pages || []).length,
+            createdAt:    new Date(),
+          });
+        } catch { /* non-blocking */ }
       }
     } catch (e) { console.error("[A0] Score save failed:", e.message); }
 
