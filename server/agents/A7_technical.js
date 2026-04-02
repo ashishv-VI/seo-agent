@@ -21,18 +21,32 @@ async function runA7(clientId, keys) {
   {
     // Ensure URL has a protocol — PageSpeed API rejects bare domains
     const normalizedUrl = /^https?:\/\//i.test(siteUrl) ? siteUrl : `https://${siteUrl}`;
-    const apiKey = keys.google ? `&key=${keys.google}` : "";
+
+    async function fetchPageSpeed(strategy, useKey) {
+      const keyParam = (useKey && keys.google) ? `&key=${keys.google}` : "";
+      const apiUrl   = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(normalizedUrl)}&strategy=${strategy}${keyParam}&category=performance&category=seo&category=accessibility`;
+      const res      = await fetch(apiUrl, { signal: AbortSignal.timeout(60000) });
+      return res.json();
+    }
+
     for (const strategy of ["mobile", "desktop"]) {
       try {
-        const apiUrl = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(normalizedUrl)}&strategy=${strategy}${apiKey}&category=performance&category=seo&category=accessibility`;
-        const res    = await fetch(apiUrl, { signal: AbortSignal.timeout(60000) });
-        const data   = await res.json();
+        let data = await fetchPageSpeed(strategy, true);
 
-        // Surface API-level errors (rate limit, quota, bad key, etc.)
+        // If keyed call fails with quota/rate error → retry without key (free tier)
         if (data.error) {
-          const msg = data.error?.message || data.error?.status || JSON.stringify(data.error);
-          cwvData[strategy] = { error: `Google API: ${msg}` };
-          continue;
+          const errMsg = data.error?.message || "";
+          const isQuota = /quota|rate.?limit|exceeded/i.test(errMsg);
+          if (isQuota && keys.google) {
+            console.warn(`[A7] ${strategy} quota exceeded — retrying without API key`);
+            data = await fetchPageSpeed(strategy, false);
+          }
+          // If still erroring after retry, surface the error
+          if (data.error) {
+            const msg = data.error?.message || data.error?.status || JSON.stringify(data.error);
+            cwvData[strategy] = { error: `Google API: ${msg}` };
+            continue;
+          }
         }
 
         if (data.lighthouseResult) {
