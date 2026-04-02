@@ -1057,7 +1057,9 @@ function AutomationModePanel({ automationMode, setAutomationMode, savingMode, se
             {m.icon} {m.label}
           </button>
         ))}
-        <span style={{ marginLeft:"auto", fontSize:11, color:txt2 }}>{savingMode ? "Saving..." : `${autoFixCount} auto-fixable issues detected`}</span>
+        <span style={{ marginLeft:"auto", fontSize:11, color: autoFixCount > 0 ? "#059669" : txt2, fontWeight: autoFixCount > 0 ? 700 : 400 }}>
+          {savingMode ? "Saving..." : autoFixCount > 0 ? `✅ ${autoFixCount} auto-fixable issues ready` : "Run pipeline first to detect issues"}
+        </span>
       </div>
 
       {/* Mode explanation */}
@@ -1077,14 +1079,31 @@ function AutomationModePanel({ automationMode, setAutomationMode, savingMode, se
         {/* Action button */}
         {automationMode !== "manual" && (
           <div style={{ flexShrink:0, display:"flex", flexDirection:"column", alignItems:"flex-end", gap:8 }}>
-            <button onClick={runAIFixes} disabled={runningFixes} style={{
-              padding:"8px 16px", borderRadius:8, background:currentMode.color, color:"#fff",
-              border:"none", fontSize:12, fontWeight:700, cursor:runningFixes?"not-allowed":"pointer", opacity:runningFixes?0.7:1, whiteSpace:"nowrap",
-            }}>
-              {runningFixes ? "Generating..." : `⚡ Run AI Fixes Now`}
-            </button>
-            {fixResult && <div style={{ fontSize:11, color:currentMode.color, fontWeight:600, textAlign:"right", maxWidth:200 }}>{fixResult}</div>}
-            <div style={{ fontSize:10, color:txt2, textAlign:"right" }}>Fixes go to Approvals tab for review</div>
+            {autoFixCount === 0 ? (
+              <div style={{ textAlign:"right" }}>
+                <div style={{ padding:"8px 16px", borderRadius:8, background:bg3, color:txt2, fontSize:12, fontWeight:600, border:`1px solid ${bdr}`, whiteSpace:"nowrap" }}>
+                  ⚡ Run AI Fixes Now
+                </div>
+                <div style={{ fontSize:10, color:"#D97706", marginTop:6, maxWidth:200 }}>
+                  Run the full pipeline first — AI will detect auto-fixable issues and enable this button.
+                </div>
+              </div>
+            ) : (
+              <>
+                <button onClick={runAIFixes} disabled={runningFixes} style={{
+                  padding:"8px 16px", borderRadius:8, background:currentMode.color, color:"#fff",
+                  border:"none", fontSize:12, fontWeight:700, cursor:runningFixes?"not-allowed":"pointer", opacity:runningFixes?0.7:1, whiteSpace:"nowrap",
+                }}>
+                  {runningFixes ? "Generating..." : `⚡ Run AI Fixes (${autoFixCount})`}
+                </button>
+                {fixResult && (
+                  <div style={{ fontSize:11, color: fixResult.includes("Generated") ? "#059669" : "#D97706", fontWeight:600, textAlign:"right", maxWidth:220 }}>
+                    {fixResult}
+                  </div>
+                )}
+                <div style={{ fontSize:10, color:txt2, textAlign:"right" }}>Fixes go to Approvals tab for review</div>
+              </>
+            )}
           </div>
         )}
       </div>
