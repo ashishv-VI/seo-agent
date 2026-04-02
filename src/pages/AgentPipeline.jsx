@@ -514,12 +514,13 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
           onRefresh={async () => {
             try {
               const token = await getToken();
-              setAgentStatus(s => ({ ...s, A7: "running" }));
+              setRunning("A7");
               const r = await fetch(`${API}/api/agents/${clientId}/A7/run`, { method:"POST", headers:{ Authorization:`Bearer ${token}` } });
               const d = await r.json();
               if (d.success) setState(s => ({ ...s, A7_technical: d.technical }));
-              setAgentStatus(s => ({ ...s, A7: d.success ? "complete" : "failed" }));
-            } catch { setAgentStatus(s => ({ ...s, A7: "failed" })); }
+              await load(true);
+            } catch (e) { setError(e.message || "CWV refresh failed"); }
+            setRunning(null);
           }}
         />
       )}
