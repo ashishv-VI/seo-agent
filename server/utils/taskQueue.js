@@ -83,6 +83,26 @@ const ISSUE_METADATA = {
   low_keyword_visibility:  { impact:"High",   effort:"hard",  rankImpact:88, trafficPot:88, scoreGain:14, rankGain:"5-15 positions",  autoFixable:false },
   poor_mobile_performance: { impact:"High",   effort:"hard",  rankImpact:90, trafficPot:80, scoreGain:12, rankGain:"3-7 positions",   autoFixable:false },
   low_mobile_performance:  { impact:"Medium", effort:"medium",rankImpact:70, trafficPot:60, scoreGain:6,  rankGain:"2-4 positions",   autoFixable:false },
+
+  // A2 issue types missing from original list — caused silent task defaults
+  slow_ttfb:               { impact:"High",   effort:"hard",  rankImpact:88, trafficPot:78, scoreGain:10, rankGain:"3-6 positions",   autoFixable:false },
+  ttfb_warning:            { impact:"Medium", effort:"medium",rankImpact:65, trafficPot:55, scoreGain:5,  rankGain:"1-3 positions",   autoFixable:false },
+  redirect:                { impact:"Low",    effort:"easy",  rankImpact:40, trafficPot:30, scoreGain:2,  rankGain:"0-1 positions",   autoFixable:false },
+  site_unreachable:        { impact:"High",   effort:"hard",  rankImpact:100,trafficPot:100,scoreGain:20, rankGain:"Not indexable",   autoFixable:false },
+  robots_blocking_all:     { impact:"High",   effort:"easy",  rankImpact:100,trafficPot:100,scoreGain:18, rankGain:"Not indexable",   autoFixable:false },
+  robots_blocking:         { impact:"High",   effort:"easy",  rankImpact:80, trafficPot:70, scoreGain:8,  rankGain:"2-5 positions",   autoFixable:false },
+  no_robots_txt:           { impact:"Low",    effort:"easy",  rankImpact:35, trafficPot:25, scoreGain:2,  rankGain:"0-1 positions",   autoFixable:true  },
+  broken_links:            { impact:"High",   effort:"medium",rankImpact:75, trafficPot:60, scoreGain:7,  rankGain:"2-4 positions",   autoFixable:false },
+  inner_pages_no_title:    { impact:"High",   effort:"easy",  rankImpact:88, trafficPot:80, scoreGain:8,  rankGain:"3-6 positions",   autoFixable:true  },
+  inner_pages_no_h1:       { impact:"High",   effort:"easy",  rankImpact:82, trafficPot:72, scoreGain:7,  rankGain:"2-5 positions",   autoFixable:false },
+  weak_eeat:               { impact:"High",   effort:"medium",rankImpact:78, trafficPot:70, scoreGain:10, rankGain:"3-7 positions",   autoFixable:false },
+  eeat_improvements:       { impact:"Medium", effort:"medium",rankImpact:65, trafficPot:60, scoreGain:6,  rankGain:"2-4 positions",   autoFixable:false },
+  non_webp_images:         { impact:"Medium", effort:"medium",rankImpact:55, trafficPot:45, scoreGain:4,  rankGain:"1-2 positions",   autoFixable:false },
+  missing_image_dimensions:{ impact:"Low",    effort:"easy",  rankImpact:35, trafficPot:25, scoreGain:2,  rankGain:"0-1 positions",   autoFixable:false },
+  missing_og_tags:         { impact:"Medium", effort:"easy",  rankImpact:50, trafficPot:55, scoreGain:4,  rankGain:"CTR improvement", autoFixable:true  },
+  low_content:             { impact:"High",   effort:"hard",  rankImpact:82, trafficPot:80, scoreGain:12, rankGain:"4-8 positions",   autoFixable:false },
+  stale_content:           { impact:"Medium", effort:"medium",rankImpact:68, trafficPot:65, scoreGain:7,  rankGain:"2-5 positions",   autoFixable:false },
+  no_sitemap:              { impact:"High",   effort:"easy",  rankImpact:78, trafficPot:65, scoreGain:8,  rankGain:"2-4 positions",   autoFixable:true  },
 };
 
 const EFFORT_COST = { easy: 10, medium: 30, hard: 60 };

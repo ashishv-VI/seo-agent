@@ -210,14 +210,13 @@ async function runFullPipeline(clientId, keys, googleToken = null) {
     // to map target keywords to the right pages — avoids cannibalization
     await exec("A3", runA3);
 
-    // ── Stage 3: Competitive intelligence + Content strategy (parallel) ───
-    // A4 = competitor gap analysis (uses A3 keyword targets)
-    // A5 = content optimisation recommendations (uses A3 keyword clusters)
-    // Both need A3 data but are independent of each other
-    await Promise.all([
-      exec("A4", runA4),
-      exec("A5", runA5),
-    ]);
+    // ── Stage 3a: Competitive intelligence ────────────────────────────────
+    // A4 must finish before A5 — A5 reads A4's contentGaps and quickWins
+    await exec("A4", runA4);
+
+    // ── Stage 3b: Content strategy ────────────────────────────────────────
+    // Now A4 data is available in Firestore for A5 to read
+    await exec("A5", runA5);
 
     // ── Stage 4: On-page fixes + Local/GEO signals (parallel) ────────────
     // A6 = on-page tag fixes, schema markup, internal link map (uses A2+A3+A5)

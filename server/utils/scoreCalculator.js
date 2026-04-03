@@ -53,10 +53,10 @@ function calculateScore(audit, keywords, geo, onpage, technical) {
   const techScore = clamp(weightedAvg({
     ssl:            checks.isAccessible && checks.finalUrl?.startsWith("https") ? 100 : 30,
     pageSpeed:      checks.responseTime < 1000 ? 100 : checks.responseTime < 2500 ? 70 : checks.responseTime < 4000 ? 45 : 20,
-    cwvLCP:         scoreFromMs(technical?.cwv?.lcp, [2500, 4000]),
-    cwvCLS:         scoreFromVal(technical?.cwv?.cls, [0.1, 0.25]),
+    cwvLCP:         scoreFromMs(technical?.summary?.lcpMs ?? technical?.cwvData?.mobile?.rawMetrics?.lcp?.ms, [2500, 4000]),
+    cwvCLS:         scoreFromVal(technical?.summary?.clsValue ?? technical?.cwvData?.mobile?.rawMetrics?.cls?.value, [0.1, 0.25]),
     crawlability:   checks.robotsTxt?.exists ? (checks.robotsTxt?.hasDisallow ? 70 : 95) : 50,
-    mobileFriendly: technical?.summary?.mobileScore ?? checks.viewport ? 75 : 35,
+    mobileFriendly: technical?.summary?.mobileScore ?? (checks.viewport?.exists ? 75 : 35),
     structuredData: checks.schema?.length > 0 ? 85 : 30,
     redirectChain:  checks.redirectChain?.depth === 0 ? 100 : checks.redirectChain?.depth < 3 ? 65 : 20,
     requests:       (checks.httpRequests?.total || 0) < 20 ? 100 : (checks.httpRequests?.total || 0) < 50 ? 60 : 25,
@@ -68,7 +68,7 @@ function calculateScore(audit, keywords, geo, onpage, technical) {
   const techFactors = [
     { name:"SSL / HTTPS",       score: checks.finalUrl?.startsWith("https") ? 100 : 30,  weight:0.12 },
     { name:"Page Response Time",score: checks.responseTime < 1000 ? 100 : checks.responseTime < 2500 ? 70 : 35, weight:0.18 },
-    { name:"Core Web Vitals",   score: scoreFromMs(technical?.cwv?.lcp, [2500, 4000]),   weight:0.18 },
+    { name:"Core Web Vitals",   score: scoreFromMs(technical?.summary?.lcpMs ?? technical?.cwvData?.mobile?.rawMetrics?.lcp?.ms, [2500, 4000]), weight:0.18 },
     { name:"Crawlability",      score: checks.robotsTxt?.exists ? 90 : 50,               weight:0.14 },
     { name:"Mobile Friendly",   score: technical?.summary?.mobileScore ?? 60,             weight:0.12 },
     { name:"Structured Data",   score: checks.schema?.length > 0 ? 85 : 30,             weight:0.08 },
