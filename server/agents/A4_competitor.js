@@ -26,7 +26,13 @@ async function runA4(clientId, keys) {
   if (keys.serpapi && checkKeywords.length > 0) {
     for (const kw of checkKeywords) {
       try {
-        const url  = `https://serpapi.com/search.json?q=${encodeURIComponent(kw.keyword)}&api_key=${keys.serpapi}&num=20&gl=in&hl=en`;
+        const locationStr = (brief.targetLocations || []).join(" ").toLowerCase();
+        const gl = locationStr.includes("uk") || locationStr.includes("united kingdom") ? "gb"
+                 : locationStr.includes("australia") ? "au"
+                 : locationStr.includes("canada") ? "ca"
+                 : locationStr.includes("india") ? "in"
+                 : "us";
+        const url  = `https://serpapi.com/search.json?q=${encodeURIComponent(kw.keyword)}&api_key=${keys.serpapi}&num=20&gl=${gl}&hl=en`;
         const res  = await fetch(url, { signal: AbortSignal.timeout(8000) });
         const data = await res.json();
 

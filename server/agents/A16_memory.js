@@ -97,8 +97,8 @@ async function runA16(clientId, keys) {
     (rankings.rankings || []).forEach(r => { rankMap[r.keyword] = r.position; });
 
     for (const log of pushLogs) {
-      // Only process logs without rankingAfter yet
-      if (log.rankingAfter !== null || !log.pushedAt) continue;
+      // Only process logs that have a pushedAt date but no rankingAfter recorded yet
+      if (log.rankingAfter !== null && !log.pushedAt) continue;
 
       // Find ranking changes for keywords related to this fix
       // We use a simple heuristic: check if any ranking improved since the push date

@@ -346,7 +346,12 @@ Return ONLY valid JSON:
     if (!schema.jsonLd) return { ...schema, valid: false, validationError: "No JSON-LD provided" };
     try {
       const parsed = JSON.parse(schema.jsonLd);
-      const hasContext = parsed["@context"] && (parsed["@context"].includes("schema.org") || parsed["@context"] === "https://schema.org");
+      const ctx = parsed["@context"];
+      const hasContext = ctx && (
+        Array.isArray(ctx)
+          ? ctx.some(c => typeof c === "string" && c.includes("schema.org"))
+          : (typeof ctx === "string" && ctx.includes("schema.org"))
+      );
       const hasType    = !!parsed["@type"];
       const hasName    = !!parsed.name;
       return {

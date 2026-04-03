@@ -147,7 +147,7 @@ async function runA10(clientId, keys, gscToken = null) {
       const clientDoc = await db.collection("clients").doc(clientId).get();
       const cData     = clientDoc.data() || {};
       const { auth }  = require("../config/firebase");
-      const fbUser    = await auth.getUser(cData.ownerId).catch(() => null);
+      const fbUser    = cData.ownerId ? await auth.getUser(cData.ownerId).catch(() => null) : null;
       const toEmail   = fbUser?.email;
       if (toEmail && drops.length >= 3) { // only alert if 3+ drops
         sendRankingAlert({
