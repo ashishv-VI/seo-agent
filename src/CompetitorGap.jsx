@@ -18,6 +18,7 @@ export default function CompetitorGap({ dark, keys, model }) {
   const [results, setResults]     = useState(null);
   const [activeTab, setActiveTab] = useState("keywords");
   const [copied, setCopied]       = useState(null);
+  const [error,  setError]        = useState(null);
 
   const bg   = dark ? "#0a0a0a" : "#f5f5f0";
   const bg2  = dark ? "#111"    : "#ffffff";
@@ -28,30 +29,43 @@ export default function CompetitorGap({ dark, keys, model }) {
   const txt3 = dark ? "#444"    : "#bbb";
 
   async function callAI(prompt) {
-    const key = model === "groq" ? keys?.groq : keys?.gemini;
-    if (!key) return null;
     if (model === "groq") {
+      if (!keys?.groq) return null;
       const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${keys.groq}` },
         body: JSON.stringify({ model: "llama-3.1-8b-instant", max_tokens: 3000, messages: [{ role: "user", content: prompt }] })
       });
       const d = await res.json();
       return d.choices?.[0]?.message?.content || null;
-    } else {
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${keys?.gemini}`, {
+    } else if (model === "gemini") {
+      if (!keys?.gemini) return null;
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${keys.gemini}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
       });
       const d = await res.json();
       return d.candidates?.[0]?.content?.parts?.[0]?.text || null;
+    } else if (model === "deepseek" || model === "mistral") {
+      if (!keys?.openrouter) return null;
+      const mdl = model === "deepseek" ? "deepseek/deepseek-r1:free" : "mistralai/mistral-7b-instruct:free";
+      const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${keys.openrouter}` },
+        body: JSON.stringify({ model: mdl, max_tokens: 3000, messages: [{ role: "user", content: prompt }] })
+      });
+      const d = await res.json();
+      return d.choices?.[0]?.message?.content || null;
     }
+    return null;
   }
 
   async function analyze() {
     if (!mysite.trim() || !comp1.trim()) return;
-    setLoading(true); setResults(null);
+    const hasKey = keys?.groq || keys?.gemini || keys?.openrouter;
+    if (!hasKey) { setError("No API key set — open Settings (⚙️) and add a Groq or Gemini key."); return; }
+    setLoading(true); setResults(null); setError(null);
 
     const competitors = [comp1, comp2, comp3].filter(Boolean);
 
@@ -114,7 +128,11 @@ ACTION_PLAN_90: [90-day action plan in 3-4 sentences]
 BIGGEST_OPPORTUNITY: [single most important gap to close first and why]`;
 
     const text = await callAI(prompt);
-    if (text) {
+    if (!text) {
+      setError(`No response from ${model} — check your API key in Settings (⚙️) or try a different model.`);
+      setLoading(false); return;
+    }
+    {
       const get = (k) => { const m = text.match(new RegExp(`${k}:\\s*(.+)`)); return m ? m[1].trim() : ""; };
 
       const parseRows = (prefix, count) => {
@@ -214,6 +232,11 @@ BIGGEST_OPPORTUNITY: [single most important gap to close first and why]`;
               </div>
             ))}
           </div>
+          {error && (
+            <div style={{ background:"#DC262611", border:"1px solid #DC262633", borderRadius:8, padding:"10px 14px", marginBottom:12, fontSize:12, color:"#DC2626", fontWeight:500 }}>
+              ⚠️ {error}
+            </div>
+          )}
           <button onClick={analyze} disabled={loading || !mysite.trim() || !comp1.trim()}
             style={{ width: "100%", padding: "11px", borderRadius: 10, border: "none", background: loading || !mysite.trim() || !comp1.trim() ? "#333" : "#443DCB", color: loading || !mysite.trim() || !comp1.trim() ? txt3 : "#fff", fontWeight: 700, fontSize: 14, cursor: loading || !mysite.trim() || !comp1.trim() ? "not-allowed" : "pointer" }}>
             {loading ? "🕵️ Analyzing gaps..." : "🕵️ Analyze Competitor Gaps"}
