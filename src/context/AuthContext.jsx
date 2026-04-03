@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState } from "react";
-import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, GoogleAuthProvider, signInWithRedirect, getRedirectResult } from "firebase/auth";
+import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, GoogleAuthProvider, signInWithPopup } from "firebase/auth";
 import { auth } from "../config/firebase";
 
 const AuthContext = createContext(null);
@@ -46,21 +46,9 @@ export function AuthProvider({ children }) {
   const [googleToken, setGoogleToken] = useState(() => loadGoogleToken());
 
   useEffect(() => {
-    // Handle Google redirect result (after signInWithRedirect returns)
-    getRedirectResult(auth).then((result) => {
-      if (result) {
-        const credential = GoogleAuthProvider.credentialFromResult(result);
-        const token = credential?.accessToken || null;
-        if (token) saveGoogleToken(token);
-        setGoogleToken(token);
-        recordLoginEvent(result.user, "google", "login");
-      }
-    }).catch(() => {});
-
     return onAuthStateChanged(auth, (u) => {
       setUser(u);
       setLoading(false);
-      // If user signed out, clear stored token
       if (!u) { clearGoogleToken(); setGoogleToken(null); }
     });
   }, []);
@@ -84,9 +72,25 @@ export function AuthProvider({ children }) {
   };
 
   const loginWithGoogle = async () => {
-    // Use redirect (not popup) to avoid Cross-Origin-Opener-Policy errors
-    await signInWithRedirect(auth, provider);
-    // Page will redirect to Google — result is handled in useEffect via getRedirectResult
+    const result     = await signInWithPopup(auth, provider);
+    const credential = GoogleAuthProvider.credentialFromResult(result);
+    const token = credential?.accessToken || null;
+    if (token) saveGoogleToken(token);
+    setGoogleToken(token);
+    try {
+      const t = await result.user.getIdToken();
+      await fetch(API + "/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + t },
+        body: JSON.stringify({
+          email: result.user.email,
+          password: "google-oauth-" + result.user.uid,
+          name: result.user.displayName || result.user.email,
+        }),
+      });
+    } catch(_) {}
+    recordLoginEvent(result.user, "google", "login");
+    return result;
   };
 
   const logout   = () => { setGoogleToken(null); return signOut(auth); };
