@@ -156,7 +156,12 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
         body: "{}",
       });
       const data = await res.json();
-      if (!res.ok) { setError(data.error || "Failed to start pipeline"); return; }
+      if (!res.ok) {
+        const msg = data.missingKey === "llm"
+          ? "⚠️ No AI key set — go to ⚙️ Settings and add a free Groq key (groq.com) before running the pipeline."
+          : data.error || "Failed to start pipeline";
+        setError(msg); return;
+      }
 
       setPipelineStatus("running");
       setActiveTab("pipeline");
@@ -308,40 +313,65 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
 
       {error && <div style={{ padding:"10px 14px", borderRadius:8, background:"#DC262611", color:"#DC2626", fontSize:12, marginBottom:14 }}>{error}<button onClick={()=>setError("")} style={{ marginLeft:10, background:"none", border:"none", color:"#DC2626", cursor:"pointer" }}>×</button></div>}
 
-      {/* Tabs */}
-      <div style={{ display:"flex", gap:8, marginBottom:20, flexWrap:"wrap" }}>
-        {(isComplete("A2") || isComplete("A3")) && <div style={{...s.tab(activeTab==="actionplan"), background: activeTab==="actionplan"?"#059669":"transparent", color: activeTab==="actionplan"?"#fff":txt2, border:`1px solid ${activeTab==="actionplan"?"#059669":bdr}`}} onClick={()=>setActiveTab("actionplan")}>🎯 Action Plan</div>}
-        <div style={s.tab(activeTab==="pipeline")} onClick={()=>setActiveTab("pipeline")}>🔗 Pipeline</div>
-        <div style={s.tab(activeTab==="approvals")} onClick={()=>setActiveTab("approvals")}>
-          ✅ Approvals {approvalCount > 0 && <span style={{ marginLeft:4, background:"#D97706", color:"#fff", borderRadius:10, fontSize:9, padding:"1px 5px" }}>{approvalCount}</span>}
+      {/* Tabs — grouped to reduce overwhelm */}
+      <div style={{ display:"flex", flexDirection:"column", gap:6, marginBottom:20 }}>
+
+        {/* Row 1 — Core navigation (always visible) */}
+        <div style={{ display:"flex", gap:6, flexWrap:"wrap", alignItems:"center" }}>
+          <span style={{ fontSize:9, fontWeight:700, color:txt3, textTransform:"uppercase", letterSpacing:"0.08em", minWidth:38 }}>Core</span>
+          <div style={s.tab(activeTab==="pipeline")} onClick={()=>setActiveTab("pipeline")}>🔗 Pipeline</div>
+          {(isComplete("A2") || isComplete("A3")) && (
+            <div style={{...s.tab(activeTab==="actionplan"), background:activeTab==="actionplan"?"#059669":"transparent", color:activeTab==="actionplan"?"#fff":txt2, border:`1px solid ${activeTab==="actionplan"?"#059669":bdr}`}} onClick={()=>setActiveTab("actionplan")}>🎯 Action Plan</div>
+          )}
+          <div style={s.tab(activeTab==="approvals")} onClick={()=>setActiveTab("approvals")}>
+            ✅ Approvals {approvalCount > 0 && <span style={{ marginLeft:4, background:"#D97706", color:"#fff", borderRadius:10, fontSize:9, padding:"1px 5px" }}>{approvalCount}</span>}
+          </div>
+          <div style={s.tab(activeTab==="alerts")} onClick={()=>setActiveTab("alerts")}>
+            🚨 Alerts {alertCount > 0 && <span style={{ marginLeft:4, background:"#DC2626", color:"#fff", borderRadius:10, fontSize:9, padding:"1px 5px" }}>{alertCount}</span>}
+          </div>
+          {isComplete("A2") && <div style={s.tab(activeTab==="tasks")} onClick={()=>setActiveTab("tasks")}>📋 Tasks</div>}
         </div>
-        <div style={s.tab(activeTab==="alerts")} onClick={()=>setActiveTab("alerts")}>
-          🚨 Alerts {alertCount > 0 && <span style={{ marginLeft:4, background:"#DC2626", color:"#fff", borderRadius:10, fontSize:9, padding:"1px 5px" }}>{alertCount}</span>}
+
+        {/* Row 2 — Analysis results (shown after pipeline runs) */}
+        {(isComplete("A2") || isComplete("A3") || isComplete("A9")) && (
+          <div style={{ display:"flex", gap:6, flexWrap:"wrap", alignItems:"center" }}>
+            <span style={{ fontSize:9, fontWeight:700, color:txt3, textTransform:"uppercase", letterSpacing:"0.08em", minWidth:38 }}>Results</span>
+            {isComplete("A2") && <div style={{...s.tab(activeTab==="dashboard"), background:activeTab==="dashboard"?"#443DCB":"transparent", color:activeTab==="dashboard"?"#fff":txt2, border:`1px solid ${activeTab==="dashboard"?"#443DCB":bdr}`}} onClick={()=>setActiveTab("dashboard")}>🎯 Dashboard</div>}
+            {isComplete("A2") && <div style={s.tab(activeTab==="score")} onClick={()=>setActiveTab("score")}>🏆 Score</div>}
+            {isComplete("A2") && <div style={s.tab(activeTab==="audit")} onClick={()=>setActiveTab("audit")}>🏥 Audit</div>}
+            {isComplete("A3") && <div style={s.tab(activeTab==="keywords")} onClick={()=>setActiveTab("keywords")}>🔍 Keywords</div>}
+            {isComplete("A4") && <div style={s.tab(activeTab==="competitor")} onClick={()=>setActiveTab("competitor")}>🕵️ Competitor</div>}
+            {isComplete("A5") && <div style={s.tab(activeTab==="content")} onClick={()=>setActiveTab("content")}>✍️ Content</div>}
+            {isComplete("A6") && <div style={s.tab(activeTab==="onpage")} onClick={()=>setActiveTab("onpage")}>🏷️ On-Page</div>}
+            {isComplete("A7") && <div style={s.tab(activeTab==="technical")} onClick={()=>setActiveTab("technical")}>⚡ CWV</div>}
+            {isComplete("A8") && <div style={s.tab(activeTab==="geo")} onClick={()=>setActiveTab("geo")}>🌍 GEO</div>}
+            {isComplete("A9") && <div style={s.tab(activeTab==="report")} onClick={()=>setActiveTab("report")}>📊 Report</div>}
+            {isComplete("A2") && <div style={s.tab(activeTab==="pages")} onClick={()=>setActiveTab("pages")}>📄 Pages</div>}
+            {isComplete("A5") && <div style={s.tab(activeTab==="briefs")} onClick={()=>setActiveTab("briefs")}>📝 Briefs</div>}
+            {isComplete("A10") && <div style={s.tab(activeTab==="comparison")} onClick={()=>setActiveTab("comparison")}>📊 Before/After</div>}
+          </div>
+        )}
+
+        {/* Row 3 — Rankings */}
+        <div style={{ display:"flex", gap:6, flexWrap:"wrap", alignItems:"center" }}>
+          <span style={{ fontSize:9, fontWeight:700, color:txt3, textTransform:"uppercase", letterSpacing:"0.08em", minWidth:38 }}>Rankings</span>
+          <div style={s.tab(activeTab==="ranktracker")} onClick={()=>setActiveTab("ranktracker")}>📍 Rank Tracker</div>
+          <div style={s.tab(activeTab==="backlinks")} onClick={()=>setActiveTab("backlinks")}>🔗 Backlinks</div>
+          <div style={s.tab(activeTab==="kwresearch")} onClick={()=>setActiveTab("kwresearch")}>🔎 KW Research</div>
+          <div style={{...s.tab(activeTab==="gsckeys"), background:activeTab==="gsckeys"?"#0891B2":"transparent", color:activeTab==="gsckeys"?"#fff":txt2, border:`1px solid ${activeTab==="gsckeys"?"#0891B2":bdr}`}} onClick={()=>setActiveTab("gsckeys")}>📈 GSC Keywords</div>
         </div>
-        {isComplete("A2") && <div style={s.tab(activeTab==="audit")} onClick={()=>setActiveTab("audit")}>🏥 Audit</div>}
-        {isComplete("A3") && <div style={s.tab(activeTab==="keywords")} onClick={()=>setActiveTab("keywords")}>🔍 Keywords</div>}
-        {isComplete("A4") && <div style={s.tab(activeTab==="competitor")} onClick={()=>setActiveTab("competitor")}>🕵️ Competitor</div>}
-        {isComplete("A5") && <div style={s.tab(activeTab==="content")} onClick={()=>setActiveTab("content")}>✍️ Content</div>}
-        {isComplete("A6") && <div style={s.tab(activeTab==="onpage")} onClick={()=>setActiveTab("onpage")}>🏷️ On-Page</div>}
-        {isComplete("A7") && <div style={s.tab(activeTab==="technical")} onClick={()=>setActiveTab("technical")}>⚡ CWV</div>}
-        {isComplete("A8") && <div style={s.tab(activeTab==="geo")} onClick={()=>setActiveTab("geo")}>🌍 GEO</div>}
-        {isComplete("A9") && <div style={s.tab(activeTab==="report")} onClick={()=>setActiveTab("report")}>📊 Report</div>}
-        {isComplete("A2") && <div style={{...s.tab(activeTab==="dashboard"), background:activeTab==="dashboard"?"#443DCB":"transparent", color:activeTab==="dashboard"?"#fff":txt2, border:`1px solid ${activeTab==="dashboard"?"#443DCB":bdr}`}} onClick={()=>setActiveTab("dashboard")}>🎯 Dashboard</div>}
-        {isComplete("A2") && <div style={s.tab(activeTab==="score")} onClick={()=>setActiveTab("score")}>🏆 Score</div>}
-        {isComplete("A2") && <div style={s.tab(activeTab==="tasks")} onClick={()=>setActiveTab("tasks")}>📋 Tasks</div>}
-        {isComplete("A2") && <div style={s.tab(activeTab==="pages")} onClick={()=>setActiveTab("pages")}>📄 Pages</div>}
-        {isComplete("A5") && <div style={s.tab(activeTab==="briefs")} onClick={()=>setActiveTab("briefs")}>📝 Briefs</div>}
-        {isComplete("A10") && <div style={s.tab(activeTab==="comparison")} onClick={()=>setActiveTab("comparison")}>📊 Before/After</div>}
-        <div style={s.tab(activeTab==="ranktracker")} onClick={()=>setActiveTab("ranktracker")}>📍 Rank Tracker</div>
-        <div style={s.tab(activeTab==="backlinks")} onClick={()=>setActiveTab("backlinks")}>🔗 Backlinks</div>
-        <div style={s.tab(activeTab==="kwresearch")} onClick={()=>setActiveTab("kwresearch")}>🔎 KW Research</div>
-        <div style={s.tab(activeTab==="localseo")} onClick={()=>setActiveTab("localseo")}>🏪 Local SEO</div>
-        <div style={s.tab(activeTab==="integrations")} onClick={()=>setActiveTab("integrations")}>🔌 Integrations</div>
-        {isComplete("A3") && <div style={s.tab(activeTab==="autopilot")} onClick={()=>setActiveTab("autopilot")}>📝 Autopilot</div>}
-        {isComplete("A10") && <div style={s.tab(activeTab==="roi")} onClick={()=>setActiveTab("roi")}>💰 ROI</div>}
-        <div style={s.tab(activeTab==="analytics")} onClick={()=>setActiveTab("analytics")}>📊 Analytics</div>
-        <div style={s.tab(activeTab==="tracking")} onClick={()=>setActiveTab("tracking")}>🔍 Tracking</div>
-        <div style={{...s.tab(activeTab==="gsckeys"), background:activeTab==="gsckeys"?"#0891B2":"transparent", color:activeTab==="gsckeys"?"#fff":txt2, border:`1px solid ${activeTab==="gsckeys"?"#0891B2":bdr}`}} onClick={()=>setActiveTab("gsckeys")}>📈 GSC Keywords</div>
+
+        {/* Row 4 — Tools & Settings */}
+        <div style={{ display:"flex", gap:6, flexWrap:"wrap", alignItems:"center" }}>
+          <span style={{ fontSize:9, fontWeight:700, color:txt3, textTransform:"uppercase", letterSpacing:"0.08em", minWidth:38 }}>Tools</span>
+          <div style={s.tab(activeTab==="localseo")} onClick={()=>setActiveTab("localseo")}>🏪 Local SEO</div>
+          {isComplete("A10") && <div style={s.tab(activeTab==="roi")} onClick={()=>setActiveTab("roi")}>💰 ROI</div>}
+          <div style={s.tab(activeTab==="analytics")} onClick={()=>setActiveTab("analytics")}>📊 Analytics</div>
+          <div style={s.tab(activeTab==="tracking")} onClick={()=>setActiveTab("tracking")}>🔍 Tracking</div>
+          {isComplete("A3") && <div style={s.tab(activeTab==="autopilot")} onClick={()=>setActiveTab("autopilot")}>📝 Autopilot</div>}
+          <div style={s.tab(activeTab==="integrations")} onClick={()=>setActiveTab("integrations")}>🔌 Integrations</div>
+        </div>
+
       </div>
 
       {/* Pipeline Tab */}
@@ -2919,6 +2949,7 @@ function ScoreBreakdownView({ clientId, state, dark, bg2, bg3, bdr, txt, txt2, g
   const [score,    setScore]    = useState(null);
   const [forecast, setForecast] = useState(null);
   const [tasks,    setTasks]    = useState([]);
+  const [history,  setHistory]  = useState([]);
   const [loading,  setLoading]  = useState(true);
   const [drill,    setDrill]    = useState(null);
 
@@ -2926,17 +2957,20 @@ function ScoreBreakdownView({ clientId, state, dark, bg2, bg3, bdr, txt, txt2, g
     async function fetchScore() {
       try {
         const token = await getToken();
-        const [sRes, fRes, tRes] = await Promise.all([
-          fetch(`${API}/api/agents/${clientId}/score`,    { headers: { Authorization: `Bearer ${token}` } }),
-          fetch(`${API}/api/agents/${clientId}/forecast`, { headers: { Authorization: `Bearer ${token}` } }),
-          fetch(`${API}/api/agents/${clientId}/tasks`,    { headers: { Authorization: `Bearer ${token}` } }),
+        const [sRes, fRes, tRes, hRes] = await Promise.all([
+          fetch(`${API}/api/agents/${clientId}/score`,         { headers: { Authorization: `Bearer ${token}` } }),
+          fetch(`${API}/api/agents/${clientId}/forecast`,      { headers: { Authorization: `Bearer ${token}` } }),
+          fetch(`${API}/api/agents/${clientId}/tasks`,         { headers: { Authorization: `Bearer ${token}` } }),
+          fetch(`${API}/api/agents/${clientId}/score/history`,  { headers: { Authorization: `Bearer ${token}` } }),
         ]);
         const sData = await sRes.json();
         const fData = await fRes.json();
         const tData = await tRes.json();
+        const hData = hRes.ok ? await hRes.json() : {};
         setScore(sData.score);
         setForecast(fData.forecast);
         setTasks((tData.tasks || []).filter(t => t.status === "pending").slice(0, 10));
+        setHistory((hData.history || []).slice(-12)); // last 12 data points
       } catch { /* noop */ }
       setLoading(false);
     }
@@ -2978,6 +3012,76 @@ function ScoreBreakdownView({ clientId, state, dark, bg2, bg3, bdr, txt, txt2, g
           </div>
         </div>
       </div>
+
+      {/* Score History Trend Chart */}
+      {history.length >= 2 && (
+        <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:14, padding:20, marginBottom:20 }}>
+          <div style={{ fontSize:13, fontWeight:700, color:txt, marginBottom:14 }}>📈 Score History — Last {history.length} Runs</div>
+          {(() => {
+            const max = Math.max(...history.map(h => h.overall || 0), 100);
+            const min = Math.max(0, Math.min(...history.map(h => h.overall || 0)) - 10);
+            const H = 80, W = 100;
+            const pts = history.map((h, i) => {
+              const x = (i / (history.length - 1)) * W;
+              const y = H - ((( h.overall || 0) - min) / (max - min)) * H;
+              return [x, y];
+            });
+            const pathD = pts.map((p, i) => `${i === 0 ? "M" : "L"}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ");
+            const first = history[0]?.overall || 0;
+            const last  = history[history.length - 1]?.overall || 0;
+            const delta = last - first;
+            const deltaColor = delta >= 0 ? "#059669" : "#DC2626";
+            return (
+              <div style={{ display:"flex", alignItems:"flex-start", gap:24 }}>
+                <div style={{ flex:1 }}>
+                  <svg viewBox={`0 0 ${W} ${H + 10}`} style={{ width:"100%", height:100, overflow:"visible" }}>
+                    {/* Grid lines */}
+                    {[0, 0.25, 0.5, 0.75, 1].map(t => {
+                      const y = H - t * H;
+                      const v = Math.round(min + t * (max - min));
+                      return (
+                        <g key={t}>
+                          <line x1="0" y1={y} x2={W} y2={y} stroke={dark?"#222":"#eee"} strokeWidth="0.5" />
+                          <text x="-1" y={y + 1} fontSize="4" fill={dark?"#444":"#bbb"} textAnchor="end">{v}</text>
+                        </g>
+                      );
+                    })}
+                    {/* Area fill */}
+                    <path d={`${pathD} L${W},${H} L0,${H} Z`} fill={`${last >= 50 ? "#05966918" : "#DC262618"}`} />
+                    {/* Line */}
+                    <path d={pathD} fill="none" stroke={last >= 75 ? "#059669" : last >= 50 ? "#D97706" : "#DC2626"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                    {/* Data points */}
+                    {pts.map((p, i) => (
+                      <circle key={i} cx={p[0]} cy={p[1]} r="2" fill={last >= 75 ? "#059669" : last >= 50 ? "#D97706" : "#DC2626"} />
+                    ))}
+                    {/* Date labels on X axis */}
+                    {history.map((h, i) => {
+                      if (i % Math.max(1, Math.floor(history.length / 4)) !== 0 && i !== history.length - 1) return null;
+                      const x = (i / (history.length - 1)) * W;
+                      const label = h.date ? h.date.slice(5) : `#${i+1}`;
+                      return <text key={i} x={x} y={H + 9} fontSize="3.5" fill={dark?"#444":"#bbb"} textAnchor="middle">{label}</text>;
+                    })}
+                  </svg>
+                </div>
+                <div style={{ display:"flex", flexDirection:"column", gap:10, minWidth:100 }}>
+                  <div style={{ textAlign:"center" }}>
+                    <div style={{ fontSize:22, fontWeight:800, color:scoreColor }}>{last}</div>
+                    <div style={{ fontSize:10, color:txt2 }}>Current Score</div>
+                  </div>
+                  <div style={{ textAlign:"center" }}>
+                    <div style={{ fontSize:16, fontWeight:700, color:deltaColor }}>{delta >= 0 ? "▲" : "▼"} {Math.abs(delta)}</div>
+                    <div style={{ fontSize:10, color:txt2 }}>vs first run</div>
+                  </div>
+                  <div style={{ textAlign:"center" }}>
+                    <div style={{ fontSize:14, fontWeight:700, color:txt }}>{history.length}</div>
+                    <div style={{ fontSize:10, color:txt2 }}>pipeline runs</div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+      )}
 
       {/* 4 Dimension Cards */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 14, marginBottom: 20 }}>

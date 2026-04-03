@@ -192,7 +192,7 @@ async function runA2(clientId) {
           }
         } catch { /* skip malformed */ }
       }
-      const pagesToCrawl = [...foundLinks].slice(0, 20);
+      const pagesToCrawl = [...foundLinks].slice(0, 50);
       discoveredUrls = [...foundLinks];
       checks.internalLinksFound = pagesToCrawl.length;
 
@@ -216,17 +216,18 @@ async function runA2(clientId) {
             brokenLinks.push({ url: pg.url, status: pg.status });
           } else {
             pageAudits.push({
-              url:          pg.url,
-              title:        pg.checks?.title?.value || "(missing)",
-              titleLength:  pg.checks?.title?.length || 0,
-              hasH1:        (pg.checks?.h1?.count || 0) > 0,
-              hasMeta:      pg.checks?.metaDescription?.exists || false,
-              hasCanonical: pg.checks?.canonical?.exists || false,
-              altMissing:   pg.checks?.altTextAudit?.missingAlt || 0,
-              wordCount:    pg.checks?.wordCount || 0,
-              freshness:    pg.checks?.contentFreshness?.freshnessSignal || "unknown",
-              crawlDepth:   1,
-              issues:       [...(pg.issues?.p1||[]), ...(pg.issues?.p2||[])].length,
+              url:             pg.url,
+              title:           pg.checks?.title?.value || "(missing)",
+              titleLength:     pg.checks?.title?.length || 0,
+              metaDescription: pg.checks?.metaDescription?.value || "",
+              hasH1:           (pg.checks?.h1?.count || 0) > 0,
+              hasMeta:         pg.checks?.metaDescription?.exists || false,
+              hasCanonical:    pg.checks?.canonical?.exists || false,
+              altMissing:      pg.checks?.altTextAudit?.missingAlt || 0,
+              wordCount:       pg.checks?.wordCount || 0,
+              freshness:       pg.checks?.contentFreshness?.freshnessSignal || "unknown",
+              crawlDepth:      1,
+              issues:          [...(pg.issues?.p1||[]), ...(pg.issues?.p2||[])].length,
             });
           }
         }
@@ -275,6 +276,44 @@ async function runA2(clientId) {
           detail: `${noH1.length} inner page(s) missing H1 tag`,
           fix:    "Add one keyword-optimised H1 to every page",
           urls:   noH1.map(p => p.url),
+        });
+      }
+
+      // ── Duplicate Title Detection ──────────────────
+      // Pages sharing the same title tag — Google picks one to rank, others lose value
+      const titlesAll = pageAudits.filter(p => p.title && p.title !== "(missing)");
+      const titleMap  = {};
+      for (const p of titlesAll) {
+        const t = p.title.trim().toLowerCase();
+        if (!titleMap[t]) titleMap[t] = [];
+        titleMap[t].push(p.url);
+      }
+      const dupTitles = Object.entries(titleMap).filter(([, urls]) => urls.length > 1);
+      if (dupTitles.length > 0) {
+        issues.p2.push({
+          type:   "duplicate_titles",
+          detail: `${dupTitles.length} duplicate title tag(s) across pages — Google cannot distinguish these pages`,
+          fix:    "Give every page a unique, descriptive title tag (50-60 chars) with its own target keyword",
+          examples: dupTitles.slice(0, 5).map(([t, urls]) => `"${t}" used on: ${urls.join(", ")}`),
+        });
+      }
+
+      // ── Duplicate Meta Description Detection ──────
+      const metasAll = pageAudits.filter(p => p.metaDescription && p.metaDescription !== "");
+      const metaMap  = {};
+      for (const p of metasAll) {
+        const m = (p.metaDescription || "").trim().toLowerCase();
+        if (!m) continue;
+        if (!metaMap[m]) metaMap[m] = [];
+        metaMap[m].push(p.url);
+      }
+      const dupMetas = Object.entries(metaMap).filter(([, urls]) => urls.length > 1);
+      if (dupMetas.length > 0) {
+        issues.p3.push({
+          type:   "duplicate_meta_desc",
+          detail: `${dupMetas.length} duplicate meta description(s) found — hurts CTR as every result looks the same`,
+          fix:    "Write a unique, compelling meta description (140-155 chars) for every page",
+          examples: dupMetas.slice(0, 3).map(([m, urls]) => `"${m.slice(0, 60)}..." on: ${urls.join(", ")}`),
         });
       }
     } catch { /* multi-page crawl failed silently */ }

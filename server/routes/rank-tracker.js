@@ -12,45 +12,6 @@ const { checkBulkPositionsSerp }                                   = require("..
 const { getState }      = require("../shared-state/stateManager");
 const { sendRankingAlert } = require("../utils/emailer");
 
-// ── DEBUG: Test SE Ranking API endpoints (temporary) ─────────────────────────
-router.get("/debug-seranking", verifyToken, async (req, res) => {
-  try {
-    const keys    = await getUserKeys(req.uid);
-    const apiKey  = keys.seranking;
-    if (!apiKey) return res.status(400).json({ error: "No SE Ranking API key set" });
-
-    const keyword = req.query.keyword || "school photography in uk";
-    const country = req.query.country || "GB";
-    const domain  = req.query.domain  || "imagophotography.co.uk";
-    const SE_BASE = "https://api4.seranking.com";
-
-    const endpoints = [
-      `${SE_BASE}/research/keywords/competitors?keyword=${encodeURIComponent(keyword)}&country=${country}&limit=10`,
-      `${SE_BASE}/research/keyword/competitors?keyword=${encodeURIComponent(keyword)}&country=${country}&limit=10`,
-      `${SE_BASE}/research/keyword/organic?keyword=${encodeURIComponent(keyword)}&country=${country}&limit=10`,
-      `${SE_BASE}/research/keywords/organic?keyword=${encodeURIComponent(keyword)}&country=${country}&limit=10`,
-      `${SE_BASE}/research/domain/organic/keywords?domain=${encodeURIComponent(domain)}&country=${country}&limit=5`,
-    ];
-
-    const results = [];
-    for (const url of endpoints) {
-      try {
-        const r    = await fetch(url, { headers: { "Authorization": `Token ${apiKey}` }, signal: AbortSignal.timeout(8000) });
-        const text = await r.text();
-        let body;
-        try { body = JSON.parse(text); } catch { body = text.slice(0, 300); }
-        results.push({ url, status: r.status, body: typeof body === "object" ? JSON.stringify(body).slice(0, 500) : body });
-      } catch (e) {
-        results.push({ url, error: e.message });
-      }
-    }
-
-    return res.json({ keyword, country, domain, results });
-  } catch (e) {
-    return res.status(500).json({ error: e.message });
-  }
-});
-
 // Helper: verify client ownership
 async function getClientDoc(clientId, uid) {
   const doc = await db.collection("clients").doc(clientId).get();

@@ -103,6 +103,8 @@ const ISSUE_METADATA = {
   low_content:             { impact:"High",   effort:"hard",  rankImpact:82, trafficPot:80, scoreGain:12, rankGain:"4-8 positions",   autoFixable:false },
   stale_content:           { impact:"Medium", effort:"medium",rankImpact:68, trafficPot:65, scoreGain:7,  rankGain:"2-5 positions",   autoFixable:false },
   no_sitemap:              { impact:"High",   effort:"easy",  rankImpact:78, trafficPot:65, scoreGain:8,  rankGain:"2-4 positions",   autoFixable:true  },
+  duplicate_titles:        { impact:"High",   effort:"easy",  rankImpact:80, trafficPot:72, scoreGain:9,  rankGain:"3-6 positions",   autoFixable:true  },
+  duplicate_meta_desc:     { impact:"Medium", effort:"easy",  rankImpact:55, trafficPot:60, scoreGain:4,  rankGain:"CTR improvement", autoFixable:true  },
 };
 
 const EFFORT_COST = { easy: 10, medium: 30, hard: 60 };

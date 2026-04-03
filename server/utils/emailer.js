@@ -5,6 +5,21 @@
  */
 const nodemailer = require("nodemailer");
 
+// ── Startup check — warn immediately if no email config ──────────────────────
+// On Render: set GMAIL_USER + GMAIL_PASS (use Gmail App Password, NOT your real password)
+// or set EMAIL_HOST + EMAIL_PORT + EMAIL_USER + EMAIL_PASS for any SMTP provider
+const hasEmailConfig = !!(
+  (process.env.EMAIL_HOST && process.env.EMAIL_USER && process.env.EMAIL_PASS) ||
+  (process.env.GMAIL_USER && process.env.GMAIL_PASS)
+);
+if (!hasEmailConfig) {
+  console.warn(
+    "[emailer] ⚠️  No email config found — ranking alerts and pipeline emails will not send.\n" +
+    "           To fix: add GMAIL_USER + GMAIL_PASS to Render environment variables.\n" +
+    "           Use a Gmail App Password (not your login password): myaccount.google.com/apppasswords"
+  );
+}
+
 function createTransport() {
   // Support Gmail OAuth-app password OR generic SMTP
   if (process.env.EMAIL_HOST) {

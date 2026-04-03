@@ -52,6 +52,16 @@ router.post("/:clientId/run-pipeline", verifyToken, async (req, res) => {
     const keys = await getUserKeys(req.uid);
     const { googleToken } = req.body;
 
+    // ── Gate: require at least one LLM key before starting ────────────────
+    // A3, A4, A5, A6, A8 all call callLLM() — without a key they silently
+    // fail but the pipeline still shows "complete" with empty data.
+    if (!keys.groq && !keys.gemini) {
+      return res.status(400).json({
+        error: "No LLM key configured. Add a Groq or Gemini API key in Settings before running the pipeline.",
+        missingKey: "llm",
+      });
+    }
+
     // Reset all downstream agents to pending so frontend shows fresh state
     await db.collection("clients").doc(req.params.clientId).update({
       "agents.A2": "pending",

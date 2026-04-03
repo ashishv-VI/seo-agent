@@ -211,6 +211,7 @@ async function saveScoreHistory(clientId, scoreData) {
     await ref.set({
       scoreId:    ref.id,
       clientId,
+      date:       new Date().toISOString().split("T")[0], // YYYY-MM-DD for chart labels
       recordedAt: FieldValue.serverTimestamp(),
       ...scoreData,
     });
