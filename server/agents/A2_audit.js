@@ -1,5 +1,6 @@
 const { saveState, getState } = require("../shared-state/stateManager");
 const { emitTasks, clearTasks } = require("../utils/taskQueue");
+const { emitToolSuggestion }    = require("../utils/toolBridge");
 
 /**
  * A2 — Technical & On-Page Audit Agent
@@ -85,7 +86,7 @@ async function runA2(clientId) {
     // Parse HTML for on-page checks
     const html = await res.text();
     checks._homepageHtml = html; // used by multi-page crawler below
-    const onPage = parseOnPage(html, res.url);
+    const onPage = parseOnPage(html, res.url, clientId);
     Object.assign(checks, onPage.checks);
     onPage.issues.p1.forEach(i => issues.p1.push(i));
     onPage.issues.p2.forEach(i => issues.p2.push(i));
@@ -204,7 +205,7 @@ async function runA2(clientId) {
           const responseTime = Date.now() - t0;
           if (!res.ok) return { url, status: res.status, broken: true };
           const html     = await res.text();
-          const onPage   = parseOnPage(html, url);
+          const onPage   = parseOnPage(html, url, clientId);
           return { url, status: res.status, broken: false, responseTime, checks: onPage.checks, issues: onPage.issues };
         })
       );
@@ -396,11 +397,18 @@ async function runA2(clientId) {
   // Save to shared state
   await saveState(clientId, "A2_audit", auditResult);
 
+  // Emit tool suggestion for missing sitemap (non-blocking)
+  if (!checks.sitemap?.exists) {
+    emitToolSuggestion(clientId, "no_sitemap", {}, {
+      pages: (auditResult.pages || []).map(p => p.url).filter(Boolean),
+    }).catch(() => {});
+  }
+
   return { success: true, audit: auditResult };
 }
 
 // ── HTML Parser ────────────────────────────────────
-function parseOnPage(html, pageUrl) {
+function parseOnPage(html, pageUrl, clientId) {
   const checks = {};
   const issues = { p1: [], p2: [], p3: [] };
 
@@ -633,6 +641,17 @@ function parseOnPage(html, pageUrl) {
     emitTasks(clientId, issues.p2, "p2", "A2"),
     emitTasks(clientId, issues.p3, "p3", "A2"),
   ]).catch(() => {});
+
+  // Emit tool suggestions for actionable on-page issues (non-blocking)
+  if (clientId) {
+    const pageData = { url: pageUrl, title: checks.title?.value, h1: checks.h1?.value, metaDesc: checks.metaDescription?.value };
+    const toolEmits = [];
+    if (!checks.title?.exists || checks.title?.length < 10)       toolEmits.push(emitToolSuggestion(clientId, "missing_title",           { url: pageUrl }, pageData));
+    if (!checks.metaDescription?.exists)                           toolEmits.push(emitToolSuggestion(clientId, "missing_meta_description", { url: pageUrl }, pageData));
+    if (checks.h1?.count === 0)                                    toolEmits.push(emitToolSuggestion(clientId, "missing_h1",              { url: pageUrl }, pageData));
+    if (jsonLdBlocks.length === 0)                                 toolEmits.push(emitToolSuggestion(clientId, "missing_schema",          { url: pageUrl }, pageData));
+    Promise.allSettled(toolEmits).catch(() => {});
+  }
 
   return { checks, issues };
 }

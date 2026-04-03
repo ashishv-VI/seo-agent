@@ -280,6 +280,7 @@ export default function ClientManager({ dark }) {
       setShowForm(false);
       setForm(blankForm);
       await loadClients();
+      if (data.clientId) setSelected(data.clientId);
     } catch (e) { setError(e.message); }
     setSaving(false);
   }

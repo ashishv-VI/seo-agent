@@ -1,5 +1,6 @@
 const { saveState, getState } = require("../shared-state/stateManager");
 const { callLLM, parseJSON }  = require("../utils/llm");
+const { emitToolSuggestion }  = require("../utils/toolBridge");
 
 // Deep-sanitize object before writing to Firestore — removes all undefined values
 function sanitize(obj) {
@@ -407,6 +408,25 @@ Return ONLY valid JSON:
   };
 
   await saveState(clientId, "A6_onpage", sanitize(result));
+
+  // Emit tool suggestions for on-page fixes (non-blocking)
+  try {
+    const pageData = { url: siteUrl, title: checks.title?.value, h1: checks.h1?.value, metaDesc: checks.metaDescription?.value };
+    const emits = [];
+    if (!checks.title?.exists || checks.title?.length < 10 || checks.title?.length > 70)
+      emits.push(emitToolSuggestion(clientId, "missing_title",           { url: siteUrl }, pageData));
+    if (!checks.metaDescription?.exists)
+      emits.push(emitToolSuggestion(clientId, "missing_meta_description", { url: siteUrl }, pageData));
+    if (checks.h1?.count === 0)
+      emits.push(emitToolSuggestion(clientId, "missing_h1",              { url: siteUrl }, pageData));
+    if (!checks.eeat?.hasSchemaOrg)
+      emits.push(emitToolSuggestion(clientId, "missing_schema",          { url: siteUrl, pageType: "webpage" }, pageData));
+    // After on-page fixes, suggest SERP preview
+    if (checks.title?.exists && checks.metaDescription?.exists)
+      emits.push(emitToolSuggestion(clientId, "meta_fix_ready",          { url: siteUrl }, pageData));
+    Promise.allSettled(emits).catch(() => {});
+  } catch { /* non-blocking */ }
+
   return { success: true, onpage: result };
 }
 

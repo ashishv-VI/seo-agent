@@ -1,5 +1,6 @@
 const { saveState, getState } = require("../shared-state/stateManager");
 const { callLLM, parseJSON }  = require("../utils/llm");
+const { emitToolSuggestion }  = require("../utils/toolBridge");
 
 /**
  * A3 — Keyword Research & Mapping Agent
@@ -72,7 +73,13 @@ Generate 5-8 keywords per cluster. Make them realistic and specific to the busin
 
     for (const kw of allKeywords) {
       try {
-        const url  = `https://serpapi.com/search.json?q=${encodeURIComponent(kw.keyword)}&api_key=${keys.serpapi}&num=10&gl=in&hl=en`;
+        const locationStr = (brief.targetLocations || []).join(" ").toLowerCase();
+        const gl = locationStr.includes("uk") || locationStr.includes("united kingdom") ? "gb"
+                 : locationStr.includes("australia") ? "au"
+                 : locationStr.includes("canada") ? "ca"
+                 : locationStr.includes("india") ? "in"
+                 : "us";
+        const url  = `https://serpapi.com/search.json?q=${encodeURIComponent(kw.keyword)}&api_key=${keys.serpapi}&num=10&gl=${gl}&hl=en`;
         const res  = await fetch(url, { signal: AbortSignal.timeout(8000) });
         const data = await res.json();
         if (data.organic_results) {
@@ -232,6 +239,24 @@ Generate 5-8 keywords per cluster. Make them realistic and specific to the busin
   };
 
   await saveState(clientId, "A3_keywords", result);
+
+  // Emit tool suggestions: content brief for top keywords, AEO for question keywords
+  try {
+    const topKws = (result.keywordMap || []).slice(0, 10).map(k => k.keyword);
+    if (topKws.length > 0) {
+      emitToolSuggestion(clientId, "keywords_ready", {}, {
+        keywords:     topKws,
+        businessName: brief.businessName || "",
+        url:          brief.websiteUrl   || "",
+      }).catch(() => {});
+    }
+    // AEO suggestion for any question-format keywords
+    const questionKw = (result.snippetOpportunities || []).find(k => /^(what|how|why|when|where|which)/i.test(k.keyword));
+    if (questionKw) {
+      emitToolSuggestion(clientId, "aeo_opportunity", { keyword: questionKw.keyword, topic: questionKw.cluster || "" }, {}).catch(() => {});
+    }
+  } catch { /* non-blocking */ }
+
   return { success: true, keywords: result };
 }
 
