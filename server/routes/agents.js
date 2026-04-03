@@ -593,6 +593,29 @@ router.post("/:clientId/run-a10", verifyToken, async (req, res) => {
   }
 });
 
+// ── A11 Link Builder ───────────────────────────────
+router.post("/:clientId/A11/run", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const keys = await getUserKeys(req.uid);
+    const { runA11 } = require("../agents/A11_linkBuilder");
+    return runAgent(req.params.clientId, "A11", runA11, keys, res);
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
+// GET A11 link-building state
+router.get("/:clientId/A11/state", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const data = await getState(req.params.clientId, "A11_linkbuilding");
+    return res.json(data || {});
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
 // ── A12 Auto-Exec ──────────────────────────────────
 router.post("/:clientId/run-a12", verifyToken, async (req, res) => {
   try {

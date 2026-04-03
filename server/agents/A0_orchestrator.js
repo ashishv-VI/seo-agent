@@ -16,19 +16,20 @@ const { sendPipelineComplete }                   = require("../utils/emailer");
  */
 
 const DEPENDENCY_CHAIN = {
-  A1: [],
-  A2: ["A1"],
-  A3: ["A1", "A2"],
-  A4: ["A3"],
-  A5: ["A4"],
-  A6: ["A2"],
-  A7: ["A2"],
-  A8: ["A2"],
-  A9: ["A2"],
+  A1:  [],
+  A2:  ["A1"],
+  A3:  ["A1", "A2"],
+  A4:  ["A3"],
+  A5:  ["A4"],
+  A6:  ["A2"],
+  A7:  ["A2"],
+  A8:  ["A2"],
+  A9:  ["A2"],
+  A11: ["A4"],   // Link Building — manual only, needs competitor data from A4
 };
 
 const TIER = {
-  A0: 1, A1: 1, A2: 1, A3: 1, A4: 2, A5: 2, A6: 2, A7: 2, A8: 2, A9: 2,
+  A0: 1, A1: 1, A2: 1, A3: 1, A4: 2, A5: 2, A6: 2, A7: 2, A8: 2, A9: 2, A11: 2,
 };
 
 // ── Check if an agent can run based on its dependencies ──────────────────────
@@ -55,7 +56,7 @@ async function canRunAgent(clientId, agentId) {
 }
 
 function getStateSuffix(agentId) {
-  const map = { A1:"brief", A2:"audit", A3:"keywords", A4:"competitor", A5:"content", A6:"onpage", A7:"technical", A8:"geo", A9:"report" };
+  const map = { A1:"brief", A2:"audit", A3:"keywords", A4:"competitor", A5:"content", A6:"onpage", A7:"technical", A8:"geo", A9:"report", A11:"linkbuilding" };
   return map[agentId] || agentId.toLowerCase();
 }
 

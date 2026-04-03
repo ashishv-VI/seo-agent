@@ -22,6 +22,7 @@ const ALL_AGENTS = [
   { id:"A8",  label:"GEO & Off-Page",     icon:"🌍", phase:3 },
   { id:"A9",  label:"Reports",            icon:"📊", phase:4 },
   { id:"A10", label:"Rank Tracker",       icon:"📈", phase:4 },
+  { id:"A11", label:"Link Building",      icon:"🔗", phase:4 },
   { id:"A12", label:"Auto-Fix Engine",    icon:"⚡", phase:4 },
 ];
 
@@ -223,6 +224,9 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
     } else if (agentId === "A8") {
       url  = `${API}/api/agents/${clientId}/A8/run`;
       body = JSON.stringify({ googleToken: googleToken || null });
+    } else if (agentId === "A11") {
+      url  = `${API}/api/agents/${clientId}/A11/run`;
+      body = "{}";
     } else {
       url  = `${API}/api/agents/${clientId}/${agentId}/run`;
       body = "{}";
@@ -346,6 +350,7 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
             {isComplete("A7") && <div style={s.tab(activeTab==="technical")} onClick={()=>setActiveTab("technical")}>⚡ CWV</div>}
             {isComplete("A8") && <div style={s.tab(activeTab==="geo")} onClick={()=>setActiveTab("geo")}>🌍 GEO</div>}
             {isComplete("A9") && <div style={s.tab(activeTab==="report")} onClick={()=>setActiveTab("report")}>📊 Report</div>}
+            {isComplete("A11") && <div style={s.tab(activeTab==="linkbuilding")} onClick={()=>setActiveTab("linkbuilding")}>🔗 Link Building</div>}
             {isComplete("A2") && <div style={s.tab(activeTab==="pages")} onClick={()=>setActiveTab("pages")}>📄 Pages</div>}
             {isComplete("A5") && <div style={s.tab(activeTab==="briefs")} onClick={()=>setActiveTab("briefs")}>📝 Briefs</div>}
             {isComplete("A10") && <div style={s.tab(activeTab==="comparison")} onClick={()=>setActiveTab("comparison")}>📊 Before/After</div>}
@@ -575,6 +580,11 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
       {/* Report Tab */}
       {activeTab==="report" && state.A9_report && (
         <FullReportView report={state.A9_report} dark={dark} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2} />
+      )}
+
+      {/* Link Building Tab */}
+      {activeTab==="linkbuilding" && (
+        <LinkBuildingView lb={state.A11_linkbuilding} dark={dark} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2} />
       )}
 
       {/* Dashboard Tab */}
@@ -1001,7 +1011,7 @@ function GscKeywordsTab({ dark, clientId, getToken, API, clientWebsite, onGoToIn
 }
 
 function getStateSuffix(id) {
-  return { A1:"brief", A2:"audit", A3:"keywords", A4:"competitor", A5:"content", A6:"onpage", A7:"technical", A8:"geo", A9:"report" }[id] || id;
+  return { A1:"brief", A2:"audit", A3:"keywords", A4:"competitor", A5:"content", A6:"onpage", A7:"technical", A8:"geo", A9:"report", A11:"linkbuilding" }[id] || id;
 }
 
 // ── Automation Mode Panel ────────────────────────────
@@ -4754,6 +4764,124 @@ function LocalSeoTab({ dark, state, client }) {
           <li><strong>Add NAP to footer</strong> — identical Name, Address, Phone on every page</li>
           <li><strong>Create location pages</strong> — one page per city/area you serve</li>
         </ol>
+      </div>
+    </div>
+  );
+}
+
+// ── A11 Link Building View ────────────────────────────────────────────────────
+function LinkBuildingView({ lb, dark, bg2, bg3, bdr, txt, txt2 }) {
+  if (!lb) return (
+    <div style={{ padding:40, textAlign:"center", color:txt2 }}>
+      <div style={{ fontSize:40, marginBottom:12 }}>🔗</div>
+      <div style={{ fontSize:15, fontWeight:700, color:txt, marginBottom:8 }}>No link building data yet</div>
+      <div style={{ fontSize:13, color:txt2 }}>Run A11 Link Builder from the Pipeline tab to generate opportunities.</div>
+    </div>
+  );
+
+  const typeColor = {
+    directory:     "#443DCB",
+    guest_post:    "#059669",
+    resource_page: "#0891B2",
+    broken_link:   "#D97706",
+    pr:            "#9333EA",
+    partnership:   "#DC2626",
+  };
+  const typeLabel = {
+    directory:     "Directory",
+    guest_post:    "Guest Post",
+    resource_page: "Resource Page",
+    broken_link:   "Broken Link",
+    pr:            "PR / HARO",
+    partnership:   "Partnership",
+  };
+  const difficultyColor = { easy:"#059669", medium:"#D97706", hard:"#DC2626" };
+  const priorityBg      = { high:"#DC262611", medium:"#D9770611", low:"#6B728011" };
+  const priorityColor   = { high:"#DC2626",   medium:"#D97706",   low:"#6B7280" };
+
+  const opportunities = lb.opportunities || [];
+  const quickWins     = lb.quickWins     || [];
+
+  return (
+    <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+
+      {/* Summary bar */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))", gap:10 }}>
+        {[
+          { label:"Total Opportunities", value: opportunities.length,                               color:"#443DCB" },
+          { label:"High Priority",        value: opportunities.filter(o=>o.priority==="high").length,  color:"#DC2626" },
+          { label:"Easy Wins",            value: opportunities.filter(o=>o.difficulty==="easy").length,color:"#059669" },
+          { label:"Quick Wins",           value: quickWins.length,                                   color:"#D97706" },
+        ].map(s => (
+          <div key={s.label} style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, padding:"14px 16px", textAlign:"center" }}>
+            <div style={{ fontSize:26, fontWeight:800, color:s.color }}>{s.value}</div>
+            <div style={{ fontSize:11, color:txt2, marginTop:2 }}>{s.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Summary */}
+      {lb.summary && (
+        <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, padding:"14px 16px", fontSize:13, color:txt, lineHeight:1.6 }}>
+          {lb.summary}
+        </div>
+      )}
+
+      {/* Quick Wins */}
+      {quickWins.length > 0 && (
+        <div style={{ background:"#05966910", border:"1px solid #05966933", borderRadius:10, padding:"14px 16px" }}>
+          <div style={{ fontSize:13, fontWeight:700, color:"#059669", marginBottom:8 }}>⚡ Quick Wins — Do These First</div>
+          {quickWins.map((w, i) => (
+            <div key={i} style={{ fontSize:12, color:txt, padding:"4px 0", display:"flex", gap:8, alignItems:"flex-start" }}>
+              <span style={{ color:"#059669", fontWeight:700, flexShrink:0 }}>{i+1}.</span>{w}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Opportunities list */}
+      <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, overflow:"hidden" }}>
+        <div style={{ padding:"10px 16px", background:bg3, borderBottom:`1px solid ${bdr}`, fontSize:12, fontWeight:700, color:txt }}>
+          All Opportunities ({opportunities.length})
+        </div>
+        {opportunities.map((opp, i) => (
+          <div key={i} style={{ padding:"14px 16px", borderBottom:`1px solid ${bdr}22`, display:"flex", flexDirection:"column", gap:6 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+              <span style={{ fontSize:12, fontWeight:700, color:txt, flex:1 }}>{opp.target}</span>
+              <span style={{ fontSize:10, padding:"2px 8px", borderRadius:10, background:`${typeColor[opp.type] || "#443DCB"}18`, color:typeColor[opp.type] || "#443DCB", fontWeight:600 }}>
+                {typeLabel[opp.type] || opp.type}
+              </span>
+              <span style={{ fontSize:10, padding:"2px 8px", borderRadius:10, background:priorityBg[opp.priority] || "#6B728011", color:priorityColor[opp.priority] || "#6B7280", fontWeight:600 }}>
+                {opp.priority} priority
+              </span>
+              <span style={{ fontSize:10, color:difficultyColor[opp.difficulty] || "#D97706", fontWeight:600 }}>
+                {opp.difficulty}
+              </span>
+            </div>
+            <div style={{ fontSize:12, color:txt2, lineHeight:1.5 }}>
+              <strong style={{ color:txt }}>Approach:</strong> {opp.approach}
+            </div>
+            {opp.emailSubjectLine && opp.emailSubjectLine !== "N/A — self-serve" && (
+              <div style={{ fontSize:11, color:"#443DCB", background:"#443DCB0D", borderRadius:6, padding:"5px 8px", fontFamily:"monospace" }}>
+                Subject: {opp.emailSubjectLine}
+              </div>
+            )}
+            <div style={{ display:"flex", gap:12, flexWrap:"wrap" }}>
+              {opp.domainAuthority && (
+                <span style={{ fontSize:10, color:txt2 }}>DA: <strong style={{ color:txt }}>{opp.domainAuthority}</strong></span>
+              )}
+              {opp.estimatedTimeToSecure && (
+                <span style={{ fontSize:10, color:txt2 }}>Time: <strong style={{ color:txt }}>{opp.estimatedTimeToSecure}</strong></span>
+              )}
+              {opp.url && (
+                <a href={opp.url.startsWith("http") ? opp.url : `https://${opp.url}`} target="_blank" rel="noreferrer"
+                  style={{ fontSize:10, color:"#443DCB", textDecoration:"none" }}>
+                  🔗 Visit site
+                </a>
+              )}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
