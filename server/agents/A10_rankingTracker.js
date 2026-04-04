@@ -76,7 +76,57 @@ async function runA10(clientId, keys, gscToken = null) {
     }
   }
 
-  // ── Fallback: estimate from A4 competitor data ────
+  // ── FREE FALLBACK: DuckDuckGo SERP scraper (no API key) ────────────────
+  // Uses getSERP() from serpScraper.js (DDG/Bing HTML) — already in the codebase.
+  // Checks top keywords from A3 keyword map. Sequential to respect rate limits.
+  if (!results.rankings.length) {
+    try {
+      const { getSERP } = require("../crawler/serpScraper");
+      const cleanDomain = siteUrl
+        .replace(/^https?:\/\//, "")
+        .replace(/^www\./, "")
+        .replace(/\/$/, "")
+        .toLowerCase();
+
+      const topKws = (keywords?.keywordMap || [])
+        .filter(k => k.priority === "high" || k.cluster === "generic")
+        .slice(0, 10)
+        .map(k => k.keyword);
+
+      if (topKws.length > 0) {
+        const rankingData = [];
+        const locationStr = (brief.targetLocations || []).join(" ").toLowerCase();
+        const loc = locationStr.includes("uk")        ? "uk"
+                  : locationStr.includes("india")     ? "in"
+                  : locationStr.includes("australia") ? "au" : "us";
+
+        for (const kw of topKws) {
+          try {
+            const serp  = await getSERP(kw, { location: loc });
+            const found = (serp.results || []).findIndex(r =>
+              (r.url || r.link || "").toLowerCase().includes(cleanDomain)
+            );
+            rankingData.push({
+              keyword:    kw,
+              position:   found >= 0 ? found + 1 : null,
+              page:       found >= 0 ? (serp.results[found].url || serp.results[found].link) : null,
+              clicks:     null,
+              impressions:null,
+              source:     "DDG",
+            });
+          } catch { /* skip individual keyword on error */ }
+          await new Promise(r => setTimeout(r, 900));
+        }
+
+        if (rankingData.length > 0) {
+          results.rankings = rankingData;
+          results.source   = "DDG (free)";
+        }
+      }
+    } catch { /* getSERP unavailable — fall through */ }
+  }
+
+  // ── Last resort: estimate from A4 competitor data ─────────────────────
   if (!results.rankings.length) {
     const competitor = await getState(clientId, "A4_competitor");
     if (competitor?.rankingMatrix?.length > 0) {

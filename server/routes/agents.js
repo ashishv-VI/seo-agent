@@ -703,36 +703,46 @@ router.get("/:clientId/pages", verifyToken, async (req, res) => {
 
     if (!audit) return res.json({ pages: [] });
 
-    // Build per-page issue map from audit issues
-    const pageMap = {};
+    // Global issue list (for homepage entry)
     const allIssues = [
       ...(audit.issues?.p1||[]).map(i => ({ ...i, severity:"critical" })),
       ...(audit.issues?.p2||[]).map(i => ({ ...i, severity:"warning" })),
-      ...(audit.issues?.p3||[]).map(i => ({ ...i, severity:"info" })),
+      ...(audit.issues?.p3||[]).map(i => ({ ...i, severity:"info"     })),
     ];
 
-    // Use rich per-page data from A2 pageAudits (preferred), then fallback to homepage
-    const rawPageAudits = audit.checks?.pageAudits || [];
+    // ── Use rich pageAudits from A2 (real per-page data: title, meta, h1, wordCount)
+    const pageAudits = audit.checks?.pageAudits || [];
 
-    // Homepage entry from checks
-    const homepageEntry = {
-      url:          audit.checks?.finalUrl || audit.siteUrl || "",
-      title:        audit.checks?.serpPreview?.title || audit.checks?.title?.value || "(Homepage)",
-      hasH1:        (audit.checks?.h1?.count || 0) > 0,
-      hasMeta:      audit.checks?.metaDescription?.exists || false,
-      hasCanonical: audit.checks?.canonical?.exists || false,
-      wordCount:    audit.checks?.wordCount || 0,
-      issueCount:   allIssues.length,
-      issues:       allIssues.slice(0, 8),
-      crawlDepth:   0,
-      isHomepage:   true,
+    // Homepage as separate entry with its own on-page data
+    const homepage = {
+      url:             audit.checks?.finalUrl || "",
+      title:           audit.checks?.title?.value || "",
+      titleLength:     audit.checks?.title?.length || 0,
+      metaDescription: audit.checks?.metaDescription?.value || "",
+      hasH1:           (audit.checks?.h1?.count || 0) >= 1,
+      hasMeta:         !!audit.checks?.metaDescription?.exists,
+      hasCanonical:    !!audit.checks?.canonical?.exists,
+      wordCount:       audit.checks?.wordCount || 0,
+      altMissing:      audit.checks?.altTextAudit?.missingAlt || 0,
+      isHomepage:      true,
+      crawlDepth:      0,
     };
 
-    const richPages = rawPageAudits.length > 0
-      ? [homepageEntry, ...rawPageAudits]
-      : [homepageEntry, ...(audit?.pages || []).slice(0, 19).map(p => ({ url: typeof p === "string" ? p : p.url, title: "(Page)", issues: [], issueCount: 0 }))];
+    // Combine: homepage first + inner pages, deduplicate
+    let allPages = [homepage, ...pageAudits].filter((p, i, arr) =>
+      p.url && arr.findIndex(x => x.url === p.url) === i
+    );
 
-    // Map keywords to pages
+    // Fallback for old data without pageAudits
+    if (allPages.length <= 1) {
+      const fallback = (audit?.pages || []).slice(0, 30).map(p => ({
+        url: typeof p === "string" ? p : p.url,
+        title: "", hasH1: false, hasMeta: false, hasCanonical: false,
+      }));
+      allPages = [homepage, ...fallback];
+    }
+
+    // Map keywords to page paths
     const kwMap = {};
     (keywords?.keywordMap || []).forEach(k => {
       if (k.suggestedPage) {
@@ -741,30 +751,68 @@ router.get("/:clientId/pages", verifyToken, async (req, res) => {
       }
     });
 
-    // Score each page from its own issue array
-    const pages = richPages.slice(0, 30).map(page => {
-      const pgIssues  = Array.isArray(page.issues) ? page.issues : [];
-      const p1Count   = pgIssues.filter(i => i.severity === "critical").length;
-      const p2Count   = pgIssues.filter(i => i.severity === "warning").length;
-      const pageScore = Math.max(0, 100 - (p1Count * 20) - (p2Count * 8));
+    // Score each page from actual on-page signals (not from global issue list)
+    const pages = allPages.slice(0, 50).map(page => {
       let urlPath = "/";
       try { urlPath = page.url ? new URL(page.url).pathname : "/"; } catch { urlPath = page.url || "/"; }
+
+      let score = 100;
+      const pg_issues = [];
+
+      if (!page.title || page.title === "(missing)" || page.title === "") {
+        score -= 20;
+        pg_issues.push({ type:"missing_title",      label:"No title tag",                        severity:"critical" });
+      } else if ((page.titleLength||0) > 60) {
+        score -= 5;
+        pg_issues.push({ type:"long_title",         label:`Title too long (${page.titleLength} chars)`, severity:"warning" });
+      }
+      if (!page.hasMeta && !page.metaDescription) {
+        score -= 15;
+        pg_issues.push({ type:"missing_meta",       label:"No meta description",                 severity:"warning" });
+      }
+      if (!page.hasH1) {
+        score -= 15;
+        pg_issues.push({ type:"missing_h1",         label:"No H1 tag",                           severity:"warning" });
+      }
+      if (!page.hasCanonical) {
+        score -= 8;
+        pg_issues.push({ type:"missing_canonical",  label:"No canonical tag",                    severity:"info"    });
+      }
+      if ((page.wordCount||0) > 0 && page.wordCount < 300) {
+        score -= 15;
+        pg_issues.push({ type:"thin_content",       label:`Thin content (${page.wordCount} words)`, severity:"warning" });
+      }
+      if ((page.altMissing||0) > 0) {
+        score -= 5;
+        pg_issues.push({ type:"missing_alt",        label:`${page.altMissing} images missing alt`, severity:"info"  });
+      }
+
+      // For homepage, also merge global issues (redirect chains, sitemap, robots, etc.)
+      const mergedIssues = page.isHomepage
+        ? [...pg_issues, ...allIssues.filter(i => !pg_issues.find(p => p.type === i.type)).slice(0, 5)]
+        : pg_issues;
+
+      score = Math.max(0, Math.min(100, score));
+
       return {
-        url:            page.url,
-        path:           urlPath,
-        title:          page.title && page.title !== "(missing)" ? page.title : urlPath,
-        score:          pageScore,
-        issues:         pgIssues.slice(0, 8),
-        issueCount:     page.issueCount ?? pgIssues.length,
-        targetKeywords: kwMap[urlPath] || [],
-        hasTitle:       !!(page.title && page.title !== "(missing)"),
-        hasMeta:        page.hasMeta || false,
-        hasH1:          page.hasH1  || false,
-        wordCount:      page.wordCount || 0,
-        altMissing:     page.altMissing || 0,
-        responseTime:   page.responseTime || null,
-        statusCode:     page.statusCode || 200,
-        isHomepage:     page.isHomepage || false,
+        url:             page.url,
+        path:            urlPath,
+        title:           (page.title && page.title !== "(missing)") ? page.title : null,
+        titleLength:     page.titleLength || 0,
+        metaDescription: page.metaDescription || null,
+        score,
+        issues:          mergedIssues,
+        issueCount:      mergedIssues.length,
+        targetKeywords:  kwMap[urlPath] || [],
+        hasTitle:        !!(page.title && page.title !== "(missing)"),
+        hasMeta:         !!(page.hasMeta || page.metaDescription),
+        hasH1:           !!page.hasH1,
+        hasCanonical:    !!page.hasCanonical,
+        wordCount:       page.wordCount || 0,
+        altMissing:      page.altMissing || 0,
+        responseTime:    page.responseTime || null,
+        statusCode:      page.statusCode || 200,
+        isHomepage:      !!page.isHomepage,
       };
     });
 

@@ -9,8 +9,45 @@ const { getUserKeys }   = require("../utils/getUserKeys");
 const { getDomainKeywords, getKeywordMetrics, checkBulkPositions } = require("../utils/seranking");
 const { checkBulkPositionsDFS, verifyDFSCredentials }              = require("../utils/dataforseo");
 const { checkBulkPositionsSerp }                                   = require("../utils/serprank");
+const { getSERP }       = require("../crawler/serpScraper");
 const { getState }      = require("../shared-state/stateManager");
 const { sendRankingAlert } = require("../utils/emailer");
+
+// ── Free DDG rank checker (no API key needed) ─────────────────────────────
+// Uses DuckDuckGo/Bing HTML scraper already in the codebase.
+// Returns { "keyword lower": { position, url } }
+async function checkPositionsDDG(domain, keywords, country) {
+  const cleanDomain = domain
+    .replace(/^https?:\/\//, "")
+    .replace(/^www\./, "")
+    .replace(/\/$/, "")
+    .toLowerCase();
+
+  const loc = country === "GB" ? "uk"
+            : country === "IN" ? "in"
+            : country === "AU" ? "au"
+            : country === "CA" ? "ca" : "us";
+
+  const results = {};
+  for (const kw of keywords) {
+    try {
+      const serp  = await getSERP(kw, { location: loc });
+      const found = (serp.results || []).findIndex(r => {
+        const u = (r.url || r.link || "").toLowerCase();
+        return u.includes(cleanDomain);
+      });
+      results[kw.toLowerCase()] = {
+        position: found >= 0 ? found + 1 : null,
+        url:      found >= 0 ? (serp.results[found].url || serp.results[found].link || null) : null,
+      };
+    } catch {
+      results[kw.toLowerCase()] = { position: null, url: null };
+    }
+    // Respectful delay — DDG rate-limits aggressive scrapers
+    await new Promise(r => setTimeout(r, 900));
+  }
+  return results;
+}
 
 // Helper: verify client ownership
 async function getClientDoc(clientId, uid) {
@@ -258,11 +295,6 @@ router.post("/:clientId/check-positions", verifyToken, async (req, res) => {
     const brief  = await getState(req.params.clientId, "A1_brief") || {};
     const domain = brief.websiteUrl || doc.data().website || "";
 
-    if (!keys.dataforseo && !keys.serp && !keys.seranking) {
-      return res.status(400).json({
-        error: "No rank checking API configured. Add a DataForSEO key or SerpAPI key in settings for live position checks.",
-      });
-    }
     if (!domain) {
       return res.status(400).json({ error: "No website URL found for this client" });
     }
@@ -286,8 +318,11 @@ router.post("/:clientId/check-positions", verifyToken, async (req, res) => {
     let   checked = 0;
     const batch   = db.batch();
 
-    // Engine priority: DataForSEO (best) → SerpAPI (good, 100 free/mo) → SE Ranking DB (fallback)
-    const engine = keys.dataforseo ? "dataforseo" : keys.serp ? "serpapi" : "seranking";
+    // Engine priority: DataForSEO → SerpAPI → SE Ranking → DuckDuckGo (free, no API needed)
+    const engine = keys.dataforseo ? "dataforseo"
+                 : keys.serp       ? "serpapi"
+                 : keys.seranking  ? "seranking"
+                 : "ddg";
 
     for (const [country, kwGroup] of Object.entries(byCountry)) {
       const keywordStrings = kwGroup.map(k => k.keyword);
@@ -297,9 +332,11 @@ router.post("/:clientId/check-positions", verifyToken, async (req, res) => {
         positions = await checkBulkPositionsDFS(domain, keywordStrings, keys.dataforseo, country);
       } else if (engine === "serpapi") {
         positions = await checkBulkPositionsSerp(domain, keywordStrings, keys.serp, country);
-      } else {
-        // SE Ranking Research DB — works only for well-indexed domains
+      } else if (engine === "seranking") {
         positions = await checkBulkPositions(domain, keywordStrings, keys.seranking, country);
+      } else {
+        // Free DDG fallback — no API key needed, uses DuckDuckGo/Bing HTML scraper
+        positions = await checkPositionsDDG(domain, keywordStrings, country);
       }
 
       for (const kw of kwGroup) {
@@ -308,6 +345,10 @@ router.post("/:clientId/check-positions", verifyToken, async (req, res) => {
         const prevPos = kw.currentPosition;
         const newPos  = result.position;
         const change  = (prevPos !== null && newPos !== null) ? prevPos - newPos : null;
+
+        // Store new position on the in-memory object for drop detection below
+        kw._newPos  = newPos;
+        kw._change  = change;
 
         const history = (kw.history || []).slice(-89);
         history.push({ date: today, position: newPos, url: result.url || null });
@@ -319,8 +360,8 @@ router.post("/:clientId/check-positions", verifyToken, async (req, res) => {
           rankingUrl:       result.url || null,
           lastChecked:      now,
           history,
-          serpFeatures:          result.serpFeatures          || [],
-          ownsFeaturedSnippet:   result.ownsFeaturedSnippet   || false,
+          serpFeatures:         result.serpFeatures         || [],
+          ownsFeaturedSnippet:  result.ownsFeaturedSnippet  || false,
         });
         checked++;
       }
@@ -329,25 +370,19 @@ router.post("/:clientId/check-positions", verifyToken, async (req, res) => {
     await batch.commit();
 
     // ── Fire alerts for significant ranking drops (non-blocking) ──────────
+    // Build a flat map of all new positions from the batch update above
+    const newPositionMap = {};
+    for (const kw of kwDocs) {
+      newPositionMap[kw.id] = kw._newPos ?? null;
+    }
+
     const drops = [];
     for (const kw of kwDocs) {
-      const country  = kw.location?.country || "US";
-      const keyLower = kw.keyword.toLowerCase();
-      const newPos   = (byCountry[country] || [])
-        .find(k => k.keyword.toLowerCase() === keyLower)
-        ? (() => {
-            // retrieve from the positions map we built earlier
-            const engine2 = keys.dataforseo ? "dataforseo" : keys.serp ? "serpapi" : "seranking";
-            return null; // positions map is out of scope here — use prevPos heuristic
-          })()
-        : null;
-      // kw.change is the PREVIOUS change; the new change was stored in batch.
-      // We detect via prevPos vs the result stored in batch (not readable here).
-      // Use stored previous change as a proxy — only fire if consistently dropping.
-      const prevChange = kw.change;
-      const prevPos    = kw.previousPosition;
-      if (prevChange !== null && prevChange < -4 && prevPos !== null) {
-        drops.push({ kw, prevChange, prevPos });
+      // Use the live _change computed during this check-positions run (not the stale stored value)
+      const liveChange = kw._change ?? kw.change;
+      const prevPos    = kw.currentPosition; // was the position before this run
+      if (liveChange !== null && liveChange < -4 && prevPos !== null) {
+        drops.push({ kw, prevChange: liveChange, prevPos });
       }
     }
     if (drops.length > 0) {
