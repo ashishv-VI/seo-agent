@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { TOOLS, CATS, MODELS } from "./tools";
+import ErrorBoundary from "./components/ErrorBoundary";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import Login from "./pages/Login";
 import Dashboard from "./Dashboard";
@@ -30,7 +31,7 @@ import UserPanel from "./pages/UserPanel";
 import GlobalChat from "./GlobalChat";
 import ClientPortal from "./pages/ClientPortal";
 
-const API = import.meta.env.VITE_API_URL || "https://seo-agent-backend-8m1z.onrender.com";
+const API = import.meta.env.VITE_API_URL || "https://seo-agent-backend-8mfz.onrender.com";
 
 // ── URL param detection — no auth needed ──────────
 const _params      = new URLSearchParams(window.location.search);
@@ -576,6 +577,7 @@ function MainApp({ onLogout }) {
         </div>
 
         {/* ── Pages ── */}
+        <ErrorBoundary>
         {page==="clients"       && <ClientManager dark={dark} />}
         {page==="users"         && <UserPanel dark={dark} />}
         {page==="dashboard"     && <Dashboard onToolSelect={selectTool} count={count} keys={keys} dark={dark} onPageSelect={setPage} />}
@@ -686,6 +688,7 @@ function MainApp({ onLogout }) {
             </div>
           </>
         )}
+        </ErrorBoundary>
       </div>
 
       {/* ── Settings Modal ── */}

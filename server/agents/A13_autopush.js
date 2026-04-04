@@ -112,6 +112,7 @@ async function runA13(clientId, keys) {
       continue;
     }
 
+    let wpBackup = null; // declared here so catch block can access it for rollback
     try {
       let pushResult = null;
       let fieldPushed = "";
@@ -119,6 +120,23 @@ async function runA13(clientId, keys) {
       // Read current values before overwriting (for ROI log)
       let oldTitle = wpItem.seoTitle  || wpItem.title || null;
       let oldMeta  = wpItem.metaDescription || null;
+
+      // Fetch full WP backup before any overwrite — store in Firestore for rollback
+      try {
+        wpBackup = await wp.getPost(wpInt.url, wpInt.username, wpInt.appPassword, wpItem.type, wpItem.id);
+        await db.collection("wp_backups").add({
+          clientId,
+          approvalId:      item.id,
+          wpPostId:        wpItem.id,
+          wpPostType:      wpItem.type,
+          issueType,
+          backedUpAt:      new Date().toISOString(),
+          title:           wpBackup.title,
+          seoTitle:        wpBackup.seoTitle,
+          metaDescription: wpBackup.metaDescription,
+          canonicalUrl:    wpBackup.canonicalUrl,
+        });
+      } catch { /* backup is best-effort — proceed even if it fails */ }
 
       if (issueType === "title_tag" || issueType === "missing_title" || issueType === "short_title" || issueType === "long_title" || issueType === "seo_title") {
         const newTitle = data.suggestedFix || data.codeSnippet || null;
@@ -206,6 +224,18 @@ async function runA13(clientId, keys) {
         });
       }
     } catch (e) {
+      // Attempt to restore from backup if we have one
+      if (wpBackup) {
+        try {
+          await wp.updatePageMeta(wpInt.url, wpInt.username, wpInt.appPassword, wpItem.type, wpItem.id, {
+            title:           wpBackup.title,
+            seoTitle:        wpBackup.seoTitle,
+            metaDescription: wpBackup.metaDescription,
+            canonicalUrl:    wpBackup.canonicalUrl,
+          });
+          console.log(`[A13] Restored WP backup for ${wpItem.type} #${wpItem.id} after push failure`);
+        } catch { /* restore also failed — backup remains in Firestore for manual rollback */ }
+      }
       failed.push({ id: item.id, issue: issueType, error: e.message });
     }
   }

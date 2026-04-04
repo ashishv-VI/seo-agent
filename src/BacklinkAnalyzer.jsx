@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-const API = "https://seo-agent-backend-8m1z.onrender.com";
+const API = import.meta.env.VITE_API_URL || "https://seo-agent-backend-8mfz.onrender.com";
 
 export default function BacklinkAnalyzer({ dark, getToken }) {
   const [domain, setDomain]       = useState("");

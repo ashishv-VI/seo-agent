@@ -366,7 +366,7 @@ async function runA2(clientId) {
 
   // ── Build Result ───────────────────────────────────
   const totalIssues = issues.p1.length + issues.p2.length + issues.p3.length;
-  const healthScore = Math.max(0, 100 - (issues.p1.length * 20) - (issues.p2.length * 10) - (issues.p3.length * 3));
+  const healthScore = Math.min(92, Math.max(8, 100 - (issues.p1.length * 30) - (issues.p2.length * 12) - (issues.p3.length * 4)));
 
   const auditResult = {
     status:      "complete",

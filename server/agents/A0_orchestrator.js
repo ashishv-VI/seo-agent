@@ -138,6 +138,16 @@ async function handleFailure(clientId, agentId, error) {
 // Uses lazy requires to avoid circular dependency issues.
 // Called fire-and-forget from the /run-pipeline route — does NOT block the HTTP response.
 async function runFullPipeline(clientId, keys, googleToken = null) {
+  // 25-minute hard timeout — Render free tier kills processes silently after ~30 min
+  const pipelineTimeout = setTimeout(async () => {
+    console.error(`[A0] Pipeline timeout for ${clientId} after 25 minutes`);
+    await db.collection("clients").doc(clientId).update({
+      pipelineStatus:      "failed",
+      pipelineError:       "Pipeline timed out after 25 minutes — re-run when available",
+      pipelineCompletedAt: new Date().toISOString(),
+    }).catch(() => {});
+  }, 25 * 60 * 1000);
+
   // Clear previous task queue so we start fresh
   try {
     const { clearTasks } = require("../utils/taskQueue");
@@ -191,10 +201,11 @@ async function runFullPipeline(clientId, keys, googleToken = null) {
     // A2 = full technical audit (crawl, broken links, on-page checks)
     // A7 = Core Web Vitals & performance (PageSpeed API)
     // Both only need the website URL — can run simultaneously
-    const [a2ok] = await Promise.all([
+    const [a2res] = await Promise.allSettled([
       exec("A2", runA2),
       exec("A7", runA7),
     ]);
+    const a2ok = a2res.status === "fulfilled" && a2res.value;
 
     // A2 is critical — keyword mapping depends on knowing what pages exist
     // and what technical issues need fixing. Abort if it fails.
@@ -219,7 +230,7 @@ async function runFullPipeline(clientId, keys, googleToken = null) {
     // ── Stage 3b: Content strategy + Link Building (parallel) ───────────
     // A5 reads A4's contentGaps. A11 reads A4's competitor domains.
     // Both only need A4 to be complete — run in parallel for speed.
-    await Promise.all([
+    await Promise.allSettled([
       exec("A5",  runA5),
       exec("A11", runA11),
     ]);
@@ -228,14 +239,14 @@ async function runFullPipeline(clientId, keys, googleToken = null) {
     // A6 = on-page tag fixes, schema markup, internal link map (uses A2+A3+A5)
     // A8 = local SEO, citations, Google Business Profile (uses A2 + brief)
     // Independent of each other — parallelise for speed
-    await Promise.all([
+    await Promise.allSettled([
       exec("A6", runA6),
       exec("A8", (id, k) => runA8(id, k, googleToken)),
     ]);
 
     // ── Stage 5: Strategy Report + Ranking Tracker (parallel) ────────────
     // A9 synthesises all agent outputs; A10 captures keyword position baseline
-    await Promise.all([
+    await Promise.allSettled([
       exec("A9",  (id, k) => generateReport(id, k, null)),
       exec("A10", (id, k) => runA10(id, k, googleToken)),
     ]);
@@ -335,6 +346,8 @@ async function runFullPipeline(clientId, keys, googleToken = null) {
       pipelineError:       `Fatal error: ${err.message}`,
       pipelineCompletedAt: new Date().toISOString(),
     });
+  } finally {
+    clearTimeout(pipelineTimeout);
   }
 }
 

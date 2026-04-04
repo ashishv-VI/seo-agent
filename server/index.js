@@ -31,7 +31,7 @@ const app  = express();
 const PORT = process.env.PORT || 5000;
 
 // ── CORS ────────────────────────────────────────────
-app.use(cors({
+const corsOptions = {
   origin: function(origin, callback) {
     // Allow requests with no origin (mobile apps, curl, server-to-server)
     if (!origin) return callback(null, true);
@@ -46,7 +46,13 @@ app.use(cors({
     callback(new Error("Not allowed by CORS"));
   },
   credentials: true,
-}));
+};
+
+// Explicit OPTIONS preflight handler — must come BEFORE route registration
+// Without this, Express can send a 404 on preflight before cors headers are added
+app.options("*", cors(corsOptions));
+
+app.use(cors(corsOptions));
 
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
@@ -190,7 +196,18 @@ app.use((req, res) => {
 });
 
 // ── Error Handler ──────────────────────────────────
+// Must set CORS headers here too — otherwise 500 errors look like CORS errors in the browser
 app.use((err, req, res, next) => {
+  const origin = req.headers.origin || "";
+  if (
+    !origin ||
+    origin.endsWith(".onrender.com") ||
+    origin === process.env.FRONTEND_URL ||
+    origin.startsWith("http://localhost")
+  ) {
+    res.header("Access-Control-Allow-Origin",  origin || "*");
+    res.header("Access-Control-Allow-Credentials", "true");
+  }
   console.error("Server error:", err);
   res.status(500).json({ error: "Internal server error" });
 });
