@@ -8,9 +8,23 @@ if (!process.env.FIREBASE_SERVICE_ACCOUNT) {
 
 let sa;
 try {
-  sa = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+  const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
+
+  // Try direct parse first
+  try {
+    sa = JSON.parse(raw);
+  } catch {
+    // Render Dashboard sometimes stores private_key with literal newlines
+    // instead of escaped \n — this breaks JSON.parse. Fix and retry.
+    const fixed = raw.replace(/("private_key"\s*:\s*")([\s\S]*?)("(?:\s*,|\s*\}))/g, (_, p1, p2, p3) => {
+      return p1 + p2.replace(/\r?\n/g, "\\n") + p3;
+    });
+    sa = JSON.parse(fixed);
+    console.log("✅ FIREBASE_SERVICE_ACCOUNT parsed after newline fix");
+  }
 } catch (err) {
   console.error("❌ FIREBASE_SERVICE_ACCOUNT is not valid JSON:", err.message);
+  console.error("   Hint: In Render Dashboard, make sure the entire value is valid JSON");
   process.exit(1);
 }
 
