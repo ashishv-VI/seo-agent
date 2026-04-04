@@ -27,6 +27,7 @@ async function runA10(clientId, keys, gscToken = null) {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${gscToken}` },
         body: JSON.stringify({ startDate, endDate, dimensions: ["query","page"], rowLimit: 50 }),
+        signal: AbortSignal.timeout(20000),
       });
       const data = await res.json();
       if (data.rows?.length > 0) {
@@ -55,7 +56,7 @@ async function runA10(clientId, keys, gscToken = null) {
       for (const kw of topKws.slice(0, 8)) { // limit API calls
         try {
           const serpUrl = `https://serpapi.com/search.json?engine=google&q=${encodeURIComponent(kw)}&num=100&api_key=${keys.serpapi}`;
-          const res  = await fetch(serpUrl);
+          const res  = await fetch(serpUrl, { signal: AbortSignal.timeout(10000) });
           const data = await res.json();
           const organic = data.organic_results || [];
           const found   = organic.findIndex(r => r.link?.includes(siteUrl.replace(/https?:\/\//, "").split("/")[0]));
