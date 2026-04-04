@@ -30,6 +30,8 @@ import UserPanel from "./pages/UserPanel";
 import GlobalChat from "./GlobalChat";
 import ClientPortal from "./pages/ClientPortal";
 
+const API = import.meta.env.VITE_API_URL || "https://seo-agent-backend-8m1z.onrender.com";
+
 // ── URL param detection — no auth needed ──────────
 const _params      = new URLSearchParams(window.location.search);
 const portalToken  = _params.get("portal");
@@ -108,7 +110,7 @@ function MainApp({ onLogout }) {
   async function loadBackendKeys() {
     try {
       const token = await user.getIdToken();
-      const res   = await fetch("https://seo-agent-backend-8m1z.onrender.com/api/keys/get", {
+      const res   = await fetch(`${API}/api/keys/get`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
@@ -184,7 +186,7 @@ function MainApp({ onLogout }) {
         payload._brand = tmpBrand;
       }
       if (Object.keys(payload).length > 0) {
-        await fetch("https://seo-agent-backend-8m1z.onrender.com/api/keys/save", {
+        await fetch(`${API}/api/keys/save`, {
           method:  "POST",
           headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
           body:    JSON.stringify(payload),

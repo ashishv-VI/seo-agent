@@ -35,6 +35,7 @@ async function generateReport(clientId, keys, gscToken = null) {
         method:  "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${gscToken}` },
         body:    JSON.stringify({ startDate, endDate, dimensions: ["query"], rowLimit: 10 }),
+        signal:  AbortSignal.timeout(20000),
       });
       const data = await res.json();
       if (data.rows) {

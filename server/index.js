@@ -3,6 +3,8 @@ const express = require("express");
 const cors    = require("cors");
 const { db }  = require("./config/firebase");
 
+const { authLimiter, agentLimiter, chatLimiter, apiLimiter } = require("./middleware/rateLimiter");
+
 const authRoutes    = require("./routes/auth");
 const keysRoutes    = require("./routes/keys");
 const clientsRoutes = require("./routes/clients");
@@ -68,19 +70,19 @@ app.get("/test-db", async (req, res) => {
 });
 
 // ── API Routes ─────────────────────────────────────
-app.use("/api/auth",    authRoutes);
-app.use("/api/keys",    keysRoutes);
-app.use("/api/clients", clientsRoutes);
-app.use("/api/agents",  agentsRoutes);
-app.use("/api/chat",   chatRoutes);
-app.use("/api/rank-tracker", rankTrackerRoutes);
-app.use("/api/admin",        adminRoutes);
-app.use("/api/portal",       portalRoutes);
-app.use("/api/integrations", integrationsRoutes);
-app.use("/api/gsc",          gscRoutes);
-app.use("/api/ga4",          ga4Routes);
-app.use("/api/backlinks",    backlinksRoutes);
-app.use("/api/tools",        toolsRoutes);
+app.use("/api/auth",         authLimiter,  authRoutes);
+app.use("/api/keys",         apiLimiter,   keysRoutes);
+app.use("/api/clients",      apiLimiter,   clientsRoutes);
+app.use("/api/agents",       agentLimiter, agentsRoutes);
+app.use("/api/chat",         chatLimiter,  chatRoutes);
+app.use("/api/rank-tracker", apiLimiter,   rankTrackerRoutes);
+app.use("/api/admin",        apiLimiter,   adminRoutes);
+app.use("/api/portal",       apiLimiter,   portalRoutes);
+app.use("/api/integrations", apiLimiter,   integrationsRoutes);
+app.use("/api/gsc",          apiLimiter,   gscRoutes);
+app.use("/api/ga4",          apiLimiter,   ga4Routes);
+app.use("/api/backlinks",    apiLimiter,   backlinksRoutes);
+app.use("/api/tools",        agentLimiter, toolsRoutes);
 
 // ── Daily alert monitoring ─────────────────────────
 // Runs A9.checkAlerts for every active client — detects new technical issues,

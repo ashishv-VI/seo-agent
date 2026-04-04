@@ -26,7 +26,7 @@ async function runA8(clientId, keys, googleToken) {
   if (keys.google) {
     try {
       const kgUrl = `https://kgsearch.googleapis.com/v1/entities:search?query=${encodeURIComponent(business)}&key=${keys.google}&limit=3&types=LocalBusiness`;
-      const kgRes = await fetch(kgUrl);
+      const kgRes = await fetch(kgUrl, { signal: AbortSignal.timeout(10000) });
       const kgData = await kgRes.json();
       if (kgData.itemListElement?.length > 0) {
         const entity = kgData.itemListElement[0].result;
@@ -47,6 +47,7 @@ async function runA8(clientId, keys, googleToken) {
       // Step 1: Get accounts
       const acctRes = await fetch("https://mybusinessaccountmanagement.googleapis.com/v1/accounts", {
         headers: { Authorization: `Bearer ${googleToken}` },
+        signal: AbortSignal.timeout(15000),
       });
       const acctData = await acctRes.json();
       const accounts = acctData.accounts || [];
@@ -58,7 +59,7 @@ async function runA8(clientId, keys, googleToken) {
         // Step 2: Get locations
         const locRes = await fetch(
           `https://mybusinessbusinessinformation.googleapis.com/v1/${accountName}/locations?readMask=name,title,storefrontAddress,websiteUri,regularHours,categories,metadata,profile`,
-          { headers: { Authorization: `Bearer ${googleToken}` } }
+          { headers: { Authorization: `Bearer ${googleToken}` }, signal: AbortSignal.timeout(15000) }
         );
         const locData = await locRes.json();
         const locations_gbp = locData.locations || [];
@@ -83,7 +84,7 @@ async function runA8(clientId, keys, googleToken) {
             `dailyMetric=CALL_CLICKS&dailyMetric=WEBSITE_CLICKS&dailyMetric=BUSINESS_DIRECTION_REQUESTS&` +
             `dailyRange.startDate.year=${startDate.getFullYear()}&dailyRange.startDate.month=${startDate.getMonth()+1}&dailyRange.startDate.day=${startDate.getDate()}&` +
             `dailyRange.endDate.year=${endDate.getFullYear()}&dailyRange.endDate.month=${endDate.getMonth()+1}&dailyRange.endDate.day=${endDate.getDate()}`,
-            { headers: { Authorization: `Bearer ${googleToken}` } }
+            { headers: { Authorization: `Bearer ${googleToken}` }, signal: AbortSignal.timeout(15000) }
           );
           const perfData = await perfRes.json();
           if (!perfData.error) {
@@ -110,6 +111,7 @@ async function runA8(clientId, keys, googleToken) {
         {
           method: "POST",
           headers: { Authorization: `Bearer ${googleToken}`, "Content-Type": "application/json" },
+          signal: AbortSignal.timeout(15000),
           body: JSON.stringify({
             dateRanges: [{ startDate: "90daysAgo", endDate: "today" }],
             dimensions: [{ name: "sessionDefaultChannelGrouping" }],

@@ -465,6 +465,19 @@ function parseOnPage(html, pageUrl, clientId) {
     issues.p2.push({ type: "no_viewport", detail: "No viewport meta tag — poor mobile experience", fix: "Add <meta name='viewport' content='width=device-width, initial-scale=1'>" });
   }
 
+  // ── Noindex detection — invisible ranking killer ──
+  const robotsMetaMatch = html.match(/<meta[^>]*name=["']robots["'][^>]*content=["']([^"']*)["']/i)
+                       || html.match(/<meta[^>]*content=["']([^"']*)["'][^>]*name=["']robots["']/i);
+  const robotsContent   = robotsMetaMatch?.[1]?.toLowerCase() || "";
+  checks.robotsMeta = { value: robotsContent || null };
+  if (robotsContent.includes("noindex")) {
+    issues.p1.push({
+      type:   "noindex_detected",
+      detail: `Page ${pageLabel} has <meta name="robots" content="${robotsContent}"> — Google will NOT index this page`,
+      fix:    "Remove 'noindex' from the robots meta tag or change to 'index, follow'",
+    });
+  }
+
   // ── Thin Content Detection ───────────────────────
   const strippedText = html
     .replace(/<script[\s\S]*?<\/script>/gi, "")

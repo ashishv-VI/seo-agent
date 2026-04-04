@@ -149,6 +149,7 @@ async function runFullPipeline(clientId, keys, googleToken = null) {
   const { runA3 }          = require("./A3_keywords");
   const { runA4 }          = require("./A4_competitor");
   const { runA5 }          = require("./A5_content");
+  const { runA11 }         = require("./A11_linkBuilder");
   const { runA6 }          = require("./A6_onpage");
   const { runA7 }          = require("./A7_technical");
   const { runA8 }          = require("./A8_geo");
@@ -215,9 +216,13 @@ async function runFullPipeline(clientId, keys, googleToken = null) {
     // A4 must finish before A5 — A5 reads A4's contentGaps and quickWins
     await exec("A4", runA4);
 
-    // ── Stage 3b: Content strategy ────────────────────────────────────────
-    // Now A4 data is available in Firestore for A5 to read
-    await exec("A5", runA5);
+    // ── Stage 3b: Content strategy + Link Building (parallel) ───────────
+    // A5 reads A4's contentGaps. A11 reads A4's competitor domains.
+    // Both only need A4 to be complete — run in parallel for speed.
+    await Promise.all([
+      exec("A5",  runA5),
+      exec("A11", runA11),
+    ]);
 
     // ── Stage 4: On-page fixes + Local/GEO signals (parallel) ────────────
     // A6 = on-page tag fixes, schema markup, internal link map (uses A2+A3+A5)

@@ -1,6 +1,7 @@
 const { saveState, getState } = require("../shared-state/stateManager");
 const { callLLM, parseJSON }  = require("../utils/llm");
 const { db, FieldValue }      = require("../config/firebase");
+const { emitToolSuggestion }  = require("../utils/toolBridge");
 
 /**
  * A5 — Content Optimisation Agent
@@ -147,6 +148,18 @@ Generate optimised content recommendations. Return ONLY valid JSON:
   };
 
   await saveState(clientId, "A5_content", result);
+
+  // Emit Blog Generator suggestion for any content gaps identified
+  try {
+    const gaps = result.contentData?.contentGaps || [];
+    if (gaps.length > 0) {
+      emitToolSuggestion(clientId, "thin_content", { keyword: gaps[0].keyword || gaps[0].topic || "" }, {
+        topic:   gaps[0].keyword || gaps[0].topic || "",
+        keyword: gaps[0].keyword || "",
+      }).catch(() => {});
+    }
+  } catch { /* non-blocking */ }
+
   return { success: true, content: result };
 }
 
