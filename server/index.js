@@ -3,7 +3,15 @@ const express = require("express");
 const cors    = require("cors");
 const { db }  = require("./config/firebase");
 
-const { authLimiter, agentLimiter, chatLimiter, apiLimiter } = require("./middleware/rateLimiter");
+// Load rate limiters — graceful fallback if express-rate-limit not yet installed
+let authLimiter, agentLimiter, chatLimiter, apiLimiter;
+try {
+  ({ authLimiter, agentLimiter, chatLimiter, apiLimiter } = require("./middleware/rateLimiter"));
+} catch (e) {
+  console.warn("[index] rateLimiter unavailable — using passthrough:", e.message);
+  const passthrough = (req, res, next) => next();
+  authLimiter = agentLimiter = chatLimiter = apiLimiter = passthrough;
+}
 
 const authRoutes    = require("./routes/auth");
 const keysRoutes    = require("./routes/keys");
@@ -22,21 +30,20 @@ const toolsRoutes        = require("./routes/tools");
 const app  = express();
 const PORT = process.env.PORT || 5000;
 
-// ── CORS — Production URLs ─────────────────────────
-const allowedOrigins = [
-  process.env.FRONTEND_URL,
-  "https://seo-agent-6jrv.onrender.com",
-  "http://localhost:5173",
-  "http://localhost:3000",
-].filter(Boolean);
-
+// ── CORS ────────────────────────────────────────────
 app.use(cors({
   origin: function(origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error("Not allowed by CORS"));
+    // Allow requests with no origin (mobile apps, curl, server-to-server)
+    if (!origin) return callback(null, true);
+    // Allow all onrender.com subdomains + localhost
+    if (
+      origin.endsWith(".onrender.com") ||
+      origin === process.env.FRONTEND_URL ||
+      origin.startsWith("http://localhost")
+    ) {
+      return callback(null, true);
     }
+    callback(new Error("Not allowed by CORS"));
   },
   credentials: true,
 }));
