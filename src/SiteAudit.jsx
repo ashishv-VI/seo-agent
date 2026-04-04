@@ -33,8 +33,8 @@ export default function SiteAudit({ dark, googleKey, groqKey, geminiKey, model }
     const fullUrl = url.startsWith("http") ? url : `https://${url}`;
     try {
       const [mob, desk] = await Promise.all([
-        fetch(`https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(fullUrl)}&key=${googleKey}&strategy=mobile`).then(r=>r.json()),
-        fetch(`https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(fullUrl)}&key=${googleKey}&strategy=desktop`).then(r=>r.json()),
+        fetch(`https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(fullUrl)}&key=${googleKey}&strategy=mobile`, { signal: AbortSignal.timeout(30000) }).then(r=>r.json()),
+        fetch(`https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(fullUrl)}&key=${googleKey}&strategy=desktop`, { signal: AbortSignal.timeout(30000) }).then(r=>r.json()),
       ]);
       if (mob.error) { setError(mob.error.message); setLoading(false); return; }
       const score  = (d,k) => Math.round((d.lighthouseResult?.categories?.[k]?.score||0)*100);

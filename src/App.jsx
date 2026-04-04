@@ -227,7 +227,7 @@ function MainApp({ onLogout }) {
       const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${keys.groq}` },
-        body: JSON.stringify({ model: "llama-3.1-8b-instant", max_tokens: 2000, messages: [{ role: "user", content: prompt }] })
+        body: JSON.stringify({ model: "llama-3.1-8b-instant", max_tokens: 4000, messages: [{ role: "user", content: prompt }] })
       });
       const d = await res.json();
       return d.choices?.[0]?.message?.content || null;
@@ -245,7 +245,7 @@ function MainApp({ onLogout }) {
       const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${keys.openrouter}` },
-        body: JSON.stringify({ model: "deepseek/deepseek-r1:free", max_tokens: 2000, messages: [{ role: "user", content: prompt }] })
+        body: JSON.stringify({ model: "deepseek/deepseek-r1:free", max_tokens: 4000, messages: [{ role: "user", content: prompt }] })
       });
       const d = await res.json();
       return d.choices?.[0]?.message?.content || null;
@@ -254,7 +254,7 @@ function MainApp({ onLogout }) {
       const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${keys.openrouter}` },
-        body: JSON.stringify({ model: "mistralai/mistral-7b-instruct:free", max_tokens: 2000, messages: [{ role: "user", content: prompt }] })
+        body: JSON.stringify({ model: "mistralai/mistral-7b-instruct:free", max_tokens: 4000, messages: [{ role: "user", content: prompt }] })
       });
       const d = await res.json();
       return d.choices?.[0]?.message?.content || null;
@@ -281,8 +281,8 @@ function MainApp({ onLogout }) {
     setLoading(true); setInput("");
     try {
       const [mob, desk] = await Promise.all([
-        fetch(`https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(url)}&key=${keys.google}&strategy=mobile`).then(r => r.json()),
-        fetch(`https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(url)}&key=${keys.google}&strategy=desktop`).then(r => r.json()),
+        fetch(`https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(url)}&key=${keys.google}&strategy=mobile`, { signal: AbortSignal.timeout(30000) }).then(r => r.json()),
+        fetch(`https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(url)}&key=${keys.google}&strategy=desktop`, { signal: AbortSignal.timeout(30000) }).then(r => r.json()),
       ]);
       const score = (d, k) => Math.round((d.lighthouseResult?.categories?.[k]?.score || 0) * 100);
       const val   = (d, k) => d.lighthouseResult?.audits?.[k]?.displayValue || "N/A";

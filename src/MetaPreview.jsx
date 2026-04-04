@@ -101,7 +101,7 @@ Rules:
         const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
           method: "POST",
           headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
-          body: JSON.stringify({ model: "llama-3.1-8b-instant", max_tokens: 400, messages: [{ role: "user", content: prompt }] })
+          body: JSON.stringify({ model: "llama-3.1-8b-instant", max_tokens: 800, messages: [{ role: "user", content: prompt }] })
         });
         const d = await res.json();
         text = d.choices?.[0]?.message?.content || "";
