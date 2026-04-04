@@ -97,6 +97,7 @@ function MainApp({ onLogout }) {
   const [bulkResults, setBulkResults] = useState([]);
   const [bulkLoading, setBulkLoading] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [onboardSteps, setOnboardSteps]     = useState({ key: false, client: false, pipeline: false });
   const bottomRef = useRef(null);
 
   useEffect(() => {
@@ -135,9 +136,24 @@ function MainApp({ onLogout }) {
         setBrand(data.brand);
         setTmpBrand(data.brand);
       }
-      // Show onboarding if no API keys are set yet (first-time user)
+      // Never show if user dismissed permanently
+      if (localStorage.getItem("seo_onboarding_dismissed") === "true") return;
+
       const hasAnyKey = Object.values(k).some(v => v);
-      if (!hasAnyKey) setShowOnboarding(true);
+
+      // Fetch clients to check steps 2 & 3
+      let hasClient = false, hasPipeline = false;
+      try {
+        const cRes  = await fetch(`${API}/api/clients`, { headers: { Authorization: `Bearer ${token}` } });
+        const cData = await cRes.json();
+        const cls   = cData.clients || [];
+        hasClient   = cls.length > 0;
+        hasPipeline = cls.some(c => c.pipelineStatus === "complete");
+      } catch { /* ignore */ }
+
+      setOnboardSteps({ key: hasAnyKey, client: hasClient, pipeline: hasPipeline });
+      // Show only if at least one step is incomplete
+      if (!(hasAnyKey && hasClient && hasPipeline)) setShowOnboarding(true);
     } catch { /* silent */ }
   }
 
@@ -397,23 +413,30 @@ function MainApp({ onLogout }) {
             </div>
             <div style={{ padding:"28px 32px" }}>
               {[
-                { step:1, icon:"🔑", title:"Add API Keys", desc:"Go to Settings (⚙️) and add at least one LLM key — Groq is free at groq.com", action:"Open Settings", onClick:() => { setShowSettings(true); setShowOnboarding(false); } },
-                { step:2, icon:"🏢", title:"Create Your First Client", desc:"Go to Client Manager → + Add Client. Enter the business name and website URL.", action:"Go to Clients", onClick:() => { setPage("clients"); setShowOnboarding(false); } },
-                { step:3, icon:"🚀", title:"Run the Pipeline", desc:"Open the client → click Pipeline → Run Full Pipeline. All 10 AI agents will analyse the site.", action:null },
+                { step:1, icon:"🔑", title:"Add API Keys",          done: onboardSteps.key,      desc:"Go to Settings (⚙️) and add at least one LLM key — Groq is free at groq.com",         action:"Open Settings", onClick:() => { setShowSettings(true); setShowOnboarding(false); } },
+                { step:2, icon:"🏢", title:"Create Your First Client", done: onboardSteps.client, desc:"Go to Client Manager → + Add Client. Enter the business name and website URL.",         action:"Go to Clients",  onClick:() => { setPage("clients"); setShowOnboarding(false); } },
+                { step:3, icon:"🚀", title:"Run the Pipeline",       done: onboardSteps.pipeline, desc:"Open the client → click Pipeline → Run Full Pipeline. All 10 AI agents will analyse the site.", action:null },
               ].map((item, i) => (
-                <div key={i} style={{ display:"flex", gap:14, marginBottom:i < 2 ? 20 : 0 }}>
-                  <div style={{ width:36, height:36, borderRadius:"50%", background:"#443DCB22", color:"#443DCB", fontSize:16, fontWeight:800, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>{item.step}</div>
+                <div key={i} style={{ display:"flex", gap:14, marginBottom:i < 2 ? 20 : 0, opacity: item.done ? 0.6 : 1 }}>
+                  <div style={{ width:36, height:36, borderRadius:"50%", background: item.done ? "#059669" : "#443DCB22", color: item.done ? "#fff" : "#443DCB", fontSize: item.done ? 18 : 16, fontWeight:800, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                    {item.done ? "✓" : item.step}
+                  </div>
                   <div style={{ flex:1 }}>
-                    <div style={{ fontSize:14, fontWeight:700, color:"#111827", marginBottom:3 }}>{item.icon} {item.title}</div>
-                    <div style={{ fontSize:13, color:"#6b7280", lineHeight:1.5, marginBottom: item.action ? 8 : 0 }}>{item.desc}</div>
-                    {item.action && (
+                    <div style={{ fontSize:14, fontWeight:700, color: item.done ? "#059669" : "#111827", marginBottom:3, display:"flex", alignItems:"center", gap:6 }}>
+                      {item.icon} {item.title} {item.done && <span style={{ fontSize:11, fontWeight:600, background:"#d1fae5", color:"#065f46", padding:"1px 7px", borderRadius:99 }}>Done</span>}
+                    </div>
+                    {!item.done && <div style={{ fontSize:13, color:"#6b7280", lineHeight:1.5, marginBottom: item.action ? 8 : 0 }}>{item.desc}</div>}
+                    {!item.done && item.action && (
                       <button onClick={item.onClick} style={{ padding:"6px 16px", borderRadius:8, border:"none", background:"#443DCB", color:"#fff", fontWeight:600, fontSize:12, cursor:"pointer" }}>{item.action} →</button>
                     )}
                   </div>
                 </div>
               ))}
               <button onClick={() => setShowOnboarding(false)} style={{ width:"100%", marginTop:24, padding:"11px", borderRadius:10, border:"1px solid #e5e7eb", background:"transparent", color:"#6b7280", fontSize:13, cursor:"pointer", fontWeight:600 }}>
-                I know what I'm doing — skip
+                Skip for now
+              </button>
+              <button onClick={() => { localStorage.setItem("seo_onboarding_dismissed","true"); setShowOnboarding(false); }} style={{ width:"100%", marginTop:8, padding:"9px", borderRadius:10, border:"none", background:"transparent", color:"#9ca3af", fontSize:12, cursor:"pointer" }}>
+                Don't show me again
               </button>
             </div>
           </div>

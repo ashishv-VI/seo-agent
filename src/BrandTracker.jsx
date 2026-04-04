@@ -43,7 +43,7 @@ export default function BrandTracker({ dark, keys, model }) {
       const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
-        body: JSON.stringify({ model: "llama-3.1-8b-instant", max_tokens: 2000, messages: [{ role: "user", content: prompt }] })
+        body: JSON.stringify({ model: "llama-3.1-8b-instant", max_tokens: 4000, messages: [{ role: "user", content: prompt }] })
       });
       const d = await res.json();
       return d.choices?.[0]?.message?.content || null;
