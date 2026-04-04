@@ -26,6 +26,7 @@ const gscRoutes          = require("./routes/gsc");
 const ga4Routes          = require("./routes/ga4");
 const backlinksRoutes    = require("./routes/backlinks");
 const toolsRoutes        = require("./routes/tools");
+const crawlerRoutes      = require("./routes/crawlerRoutes");
 
 const app  = express();
 const PORT = process.env.PORT || 5000;
@@ -96,6 +97,7 @@ app.use("/api/gsc",          apiLimiter,   gscRoutes);
 app.use("/api/ga4",          apiLimiter,   ga4Routes);
 app.use("/api/backlinks",    apiLimiter,   backlinksRoutes);
 app.use("/api/tools",        agentLimiter, toolsRoutes);
+app.use("/api/crawler",      apiLimiter,   crawlerRoutes);
 
 // ── Daily alert monitoring ─────────────────────────
 // Runs A9.checkAlerts for every active client — detects new technical issues,
