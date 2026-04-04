@@ -1,6 +1,7 @@
 const { saveState, getState } = require("../shared-state/stateManager");
 const { emitTasks, clearTasks } = require("../utils/taskQueue");
 const { emitToolSuggestion }    = require("../utils/toolBridge");
+const { renderPage, isJSRendered } = require("../utils/jsRenderer");
 
 /**
  * A2 — Technical & On-Page Audit Agent
@@ -84,7 +85,18 @@ async function runA2(clientId) {
     }
 
     // Parse HTML for on-page checks
-    const html = await res.text();
+    // If page appears JS-rendered (blank body), try Puppeteer for real content
+    let rawHtml = await res.text();
+    checks.isJSRendered = isJSRendered(rawHtml);
+    if (checks.isJSRendered) {
+      console.log(`[A2] JS-rendered page detected at ${siteUrl} → trying Puppeteer`);
+      const { html: renderedHtml, rendered } = await renderPage(siteUrl, 20000);
+      if (renderedHtml && renderedHtml.length > rawHtml.length) {
+        rawHtml = renderedHtml;
+        checks.jsRenderingUsed = rendered; // true = Puppeteer, false = fetch fallback
+      }
+    }
+    const html = rawHtml;
     checks._homepageHtml = html; // used by multi-page crawler below
     const onPage = parseOnPage(html, res.url, clientId);
     Object.assign(checks, onPage.checks);
@@ -222,14 +234,47 @@ async function runA2(clientId) {
       discoveredUrls = [...foundLinks];
       checks.internalLinksFound = pagesToCrawl.length;
 
-      // Crawl each page in parallel (with timeout)
+      // ── Depth-2 crawl: also discover links from level-1 pages ────────────
+      // This finds pages linked from inner pages, not just from homepage.
+      // Capped at 80 total URLs to stay within 25-min pipeline timeout.
+      const depth2Links = new Set([...foundLinks]);
+      const depth1Sample = pagesToCrawl.slice(0, 10); // sample 10 inner pages for depth-2 links
+      await Promise.allSettled(
+        depth1Sample.map(async innerUrl => {
+          try {
+            const r = await fetch(innerUrl, { redirect:"follow", signal: AbortSignal.timeout(5000), headers:{ "User-Agent":"SEO-Agent-Audit/1.0" } });
+            if (!r.ok) return;
+            const h = await r.text();
+            const ms = h.matchAll(/href=["']([^"'#?][^"']*)["']/gi);
+            for (const m of ms) {
+              try {
+                const a = new URL(m[1], innerUrl).href;
+                if (new URL(a).hostname === domain && !depth2Links.has(a) &&
+                    !SKIP_EXTENSIONS.test(a) && !SKIP_PATTERNS.some(p => p.test(a))) {
+                  depth2Links.add(a);
+                  if (depth2Links.size >= 80) return;
+                }
+              } catch { /* skip */ }
+            }
+          } catch { /* skip */ }
+        })
+      );
+      // Merge: original depth-1 pages first, then new depth-2 discoveries
+      const allPagesToCrawl = [...new Set([...pagesToCrawl, ...[...depth2Links].filter(u => !foundLinks.has(u))])].slice(0, 80);
+      checks.internalLinksFound = allPagesToCrawl.length;
+      discoveredUrls = allPagesToCrawl;
+
+      // Crawl all discovered pages in parallel (with timeout)
       const crawlResults = await Promise.allSettled(
-        pagesToCrawl.map(async url => {
+        allPagesToCrawl.map(async url => {
           const t0  = Date.now();
           const res = await fetch(url, { redirect:"follow", signal: AbortSignal.timeout(7000), headers:{ "User-Agent":"SEO-Agent-Audit/1.0" } });
           const responseTime = Date.now() - t0;
           if (!res.ok) return { url, status: res.status, broken: true };
           const html     = await res.text();
+          // JS detection — flag blank pages for user awareness
+          const isBlank  = html.length < 800 && (html.includes("__NEXT_DATA__") || html.includes("window.__INITIAL_STATE__") || html.includes("data-reactroot"));
+          if (isBlank) return { url, status: res.status, broken: false, jsRendered: true, responseTime };
           const onPage   = parseOnPage(html, url, clientId);
           return { url, status: res.status, broken: false, responseTime, checks: onPage.checks, issues: onPage.issues };
         })
@@ -240,6 +285,17 @@ async function runA2(clientId) {
           const pg = r.value;
           if (pg.broken) {
             brokenLinks.push({ url: pg.url, status: pg.status });
+          } else if (pg.jsRendered) {
+            // JS-rendered page — flag it but don't audit (content not available via fetch)
+            pageAudits.push({
+              url:          pg.url,
+              title:        "(JS-rendered — content not accessible via fetch)",
+              jsRendered:   true,
+              crawlDepth:   foundLinks.has(pg.url) ? 1 : 2,
+              responseTime: pg.responseTime || null,
+              issues:       [{ type: "js_rendered", label: "Page uses client-side JS rendering — audit incomplete", severity: "info" }],
+              issueCount:   1,
+            });
           } else {
             const pgIssues = [
               ...(pg.issues?.p1||[]).map(i => ({ ...i, severity: "critical" })),
@@ -256,7 +312,7 @@ async function runA2(clientId) {
               altMissing:      pg.checks?.altTextAudit?.missingAlt || 0,
               wordCount:       pg.checks?.wordCount || 0,
               freshness:       pg.checks?.contentFreshness?.freshnessSignal || "unknown",
-              crawlDepth:      1,
+              crawlDepth:      foundLinks.has(pg.url) ? 1 : 2,
               responseTime:    pg.responseTime || null,
               issues:          pgIssues,
               issueCount:      pgIssues.length,
