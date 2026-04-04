@@ -197,7 +197,7 @@ BIGGEST_OPPORTUNITY: [single most important gap to close first and why]`;
       <div style={{ maxWidth: 980, margin: "0 auto" }}>
         <div style={{ fontSize: 18, fontWeight: 700, color: txt, marginBottom: 4 }}>🕵️ Competitor Gap Analyzer</div>
         <div style={{ fontSize: 13, color: txt2, marginBottom: 20 }}>
-          Keyword · Content · Backlink · Technical · Social gaps — sabka analysis ek jagah
+          Keyword · Content · Backlink · Technical · Social gaps — all analysed in one place
         </div>
 
         {/* Input */}

@@ -55,16 +55,16 @@ export default function App() {
   );
 }
 
-// ── Inner App — Auth check hoga yahan ─────────────
+// ── Inner App — Auth guard ─────────────────────────
 function AppInner() {
   const { user, logout } = useAuth();
 
-  // Agar user login nahi hai — Login page dikhao
+  // If user is not logged in — show Login page
   if (!user) {
     return <Login />;
   }
 
-  // User login hai — main app dikhao
+  // User is authenticated — render main app
   return <MainApp onLogout={logout} />;
 }
 

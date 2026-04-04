@@ -264,7 +264,7 @@ body { font-family: 'Segoe UI', Arial, sans-serif; color: #1a1a18; }
       <div style={{ maxWidth: 1000, margin: "0 auto" }}>
         <div style={{ fontSize: 18, fontWeight: 700, color: txt, marginBottom: 4 }}>⚡ AI Prompt-to-Content Generator</div>
         <div style={{ fontSize: 13, color: txt2, marginBottom: 20 }}>
-          Topic dalo → AI poora SEO page banata hai — Content + Meta Tags + Schema sab ek saath
+          Enter a topic → AI generates a complete SEO page — Content + Meta Tags + Schema, all at once
         </div>
 
         {/* ── STEP 1: Config ── */}
@@ -554,7 +554,7 @@ body { font-family: 'Segoe UI', Arial, sans-serif; color: #1a1a18; }
                 <div style={{ background: "#05966911", border: "1px solid #05966933", borderRadius: 12, padding: 16 }}>
                   <div style={{ fontSize: 12, fontWeight: 600, color: "#059669", marginBottom: 8 }}>💡 Pro Tip</div>
                   <div style={{ fontSize: 12, color: txt2, lineHeight: 1.6 }}>
-                    Content mein <code style={{ background: bg3, padding: "1px 6px", borderRadius: 4, fontSize: 11 }}>{"{{INTERNAL LINK: topic}}"}</code> markers hain — inhein apne actual page URLs se replace karo.
+                    The content contains <code style={{ background: bg3, padding: "1px 6px", borderRadius: 4, fontSize: 11 }}>{"{{INTERNAL LINK: topic}}"}</code> markers — replace them with your actual page URLs before publishing.
                   </div>
                 </div>
               </div>
