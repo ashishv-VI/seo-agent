@@ -26,6 +26,8 @@ import PromptToContent from "./PromptToContent";
 import CompetitorGap from "./CompetitorGap";
 import ReadabilityChecker from "./ReadabilityChecker";
 import BacklinkAnalyzer from "./BacklinkAnalyzer";
+import KeywordResearch from "./KeywordResearch";
+import DomainOverview from "./DomainOverview";
 import SitemapGenerator from "./SitemapGenerator";
 import UserPanel from "./pages/UserPanel";
 import GlobalChat from "./GlobalChat";
@@ -486,11 +488,15 @@ function MainApp({ onLogout }) {
             <div onClick={()=>setPage("ga4")}           style={s.navItem(page==="ga4",           "#DC2626")}>📊 <span>GA4 Analytics</span></div>
             <div onClick={()=>setPage("ranktracker")}   style={s.navItem(page==="ranktracker",   "#059669")}>📡 <span>Rank Tracker</span></div>
 
+            <div style={s.secLabel}>Crawler</div>
+            <div onClick={()=>setPage("domainoverview")} style={s.navItem(page==="domainoverview", "#059669")}>🌐 <span>Domain Overview</span></div>
+            <div onClick={()=>setPage("keywordresearch")} style={s.navItem(page==="keywordresearch", "#9333EA")}>🔑 <span>Keyword Research</span></div>
+            <div onClick={()=>setPage("backlink")}       style={s.navItem(page==="backlink",       "#1E40AF")}>🔗 <span>Backlink Analyzer</span></div>
+
             <div style={s.secLabel}>SEO Tools</div>
             <div onClick={()=>setPage("audit")}         style={s.navItem(page==="audit",         "#DC2626")}>🏥 <span>Site Audit</span></div>
             <div onClick={()=>setPage("compare")}       style={s.navItem(page==="compare",       "#0891B2")}>⚔️ <span>Compare Sites</span></div>
             <div onClick={()=>setPage("competitorgap")} style={s.navItem(page==="competitorgap", "#443DCB")}>🕵️ <span>Competitor Gap</span></div>
-            <div onClick={()=>setPage("backlink")}      style={s.navItem(page==="backlink",      "#1E40AF")}>🔗 <span>Backlink Analyzer</span></div>
             <div onClick={()=>setPage("readability")}   style={s.navItem(page==="readability",   "#059669")}>📖 <span>Readability Checker</span></div>
             <div onClick={()=>setPage("sitemap")}       style={s.navItem(page==="sitemap",       "#D97706")}>🗺️ <span>Sitemap Generator</span></div>
 
@@ -596,7 +602,9 @@ function MainApp({ onLogout }) {
         {page==="serpsimulator" && <SerpSimulator dark={dark} keys={keys} model={model} />}
         {page==="competitorgap" && <CompetitorGap dark={dark} keys={keys} model={model} />}
         {page==="readability"   && <ReadabilityChecker dark={dark} keys={keys} model={model} />}
-        {page==="backlink"      && <BacklinkAnalyzer dark={dark} getToken={() => user.getIdToken()} />}
+        {page==="backlink"        && <BacklinkAnalyzer  dark={dark} getToken={() => user.getIdToken()} />}
+        {page==="domainoverview"  && <DomainOverview    dark={dark} getToken={() => user.getIdToken()} />}
+        {page==="keywordresearch" && <KeywordResearch   dark={dark} getToken={() => user.getIdToken()} />}
         {page==="sitemap"       && <SitemapGenerator dark={dark} keys={keys} model={model} />}
         {page==="calendar"      && <ContentCalendar dark={dark} keys={keys} model={model} />}
         {page==="checklist"     && <SeoChecklist dark={dark} />}
