@@ -4,7 +4,7 @@
  */
 import { useState, useEffect } from "react";
 
-const API = import.meta.env.VITE_API_URL || "https://seo-agent-backend-8mfz.onrender.com";
+const API = import.meta.env.VITE_API_URL || "https://seo-agent-backend-8m1z.onrender.com";
 const B   = "#443DCB";
 
 function ScoreRing({ score, size = 100 }) {

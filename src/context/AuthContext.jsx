@@ -8,7 +8,7 @@ provider.addScope("https://www.googleapis.com/auth/webmasters.readonly");
 provider.addScope("https://www.googleapis.com/auth/business.manage");
 provider.addScope("https://www.googleapis.com/auth/analytics.readonly");
 provider.addScope("https://www.googleapis.com/auth/analytics.manage.users.readonly");
-const API        = import.meta.env.VITE_API_URL || "https://seo-agent-backend-8mfz.onrender.com";
+const API        = import.meta.env.VITE_API_URL || "https://seo-agent-backend-8m1z.onrender.com";
 
 const GSC_TOKEN_KEY    = "seo_gsc_token";
 const GSC_TOKEN_EXPIRY = "seo_gsc_token_expiry";

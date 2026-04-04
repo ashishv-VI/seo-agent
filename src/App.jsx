@@ -31,7 +31,7 @@ import UserPanel from "./pages/UserPanel";
 import GlobalChat from "./GlobalChat";
 import ClientPortal from "./pages/ClientPortal";
 
-const API = import.meta.env.VITE_API_URL || "https://seo-agent-backend-8mfz.onrender.com";
+const API = import.meta.env.VITE_API_URL || "https://seo-agent-backend-8m1z.onrender.com";
 
 // ── URL param detection — no auth needed ──────────
 const _params      = new URLSearchParams(window.location.search);

@@ -14,7 +14,7 @@ const GSC_API_BASE     = "https://searchconsole.googleapis.com";
 
 function getClientId()     { return process.env.GOOGLE_CLIENT_ID     || ""; }
 function getClientSecret() { return process.env.GOOGLE_CLIENT_SECRET  || ""; }
-function getBackendUrl()   { return (process.env.BACKEND_URL || "https://seo-agent-backend-8mfz.onrender.com").replace(/\/+$/, ""); }
+function getBackendUrl()   { return (process.env.BACKEND_URL || "https://seo-agent-backend-8m1z.onrender.com").replace(/\/+$/, ""); }
 
 const CALLBACK_PATH = "/api/gsc/oauth/callback";
 

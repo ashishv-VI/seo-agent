@@ -12,7 +12,7 @@ services:
       - key: FRONTEND_URL
         value: https://seo-agent-6jrv.onrender.com
       - key: BACKEND_URL
-        value: https://seo-agent-backend-8mfz.onrender.com
+        value: https://seo-agent-backend-8m1z.onrender.com
       # Set these manually in Render dashboard → Environment:
       # FIREBASE_PROJECT_ID
       # FIREBASE_PRIVATE_KEY_ID
@@ -30,4 +30,4 @@ services:
     staticPublishPath: dist
     envVars:
       - key: VITE_API_URL
-        value: https://seo-agent-backend-8mfz.onrender.com
+        value: https://seo-agent-backend-8m1z.onrender.com
