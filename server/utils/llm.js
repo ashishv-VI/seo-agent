@@ -3,20 +3,27 @@
  * Each provider retries once on timeout before falling to the next.
  */
 
-const RETRY_DELAY_MS = 1500;
+const RETRY_DELAY_MS    = 1500;
+const RATE_LIMIT_WAIT_MS = 60000; // 60 seconds — standard Groq/Gemini rate-limit window
 
 async function sleep(ms) {
   return new Promise(r => setTimeout(r, ms));
 }
 
-// ── Single provider call with one retry on timeout ───────────────────────────
+// ── Single provider call with one retry on timeout or rate-limit ─────────────
 async function callWithRetry(fn, providerName) {
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
       const result = await fn();
       if (result) return result;
     } catch (e) {
-      const isTimeout = e.name === "TimeoutError" || e.message?.includes("timeout");
+      const isTimeout   = e.name === "TimeoutError"   || e.message?.includes("timeout");
+      const isRateLimit = e.name === "RateLimitError" || e.message?.includes("429");
+      if (attempt === 1 && isRateLimit) {
+        console.warn(`[llm] ${providerName} rate-limited (429) — waiting 60s before retry`);
+        await sleep(RATE_LIMIT_WAIT_MS);
+        continue;
+      }
       if (attempt === 1 && isTimeout) {
         console.warn(`[llm] ${providerName} timeout on attempt 1 — retrying in ${RETRY_DELAY_MS}ms`);
         await sleep(RETRY_DELAY_MS);
@@ -50,6 +57,7 @@ async function callLLM(prompt, keys, options = {}) {
         }),
         signal: AbortSignal.timeout(30000),
       });
+      if (res.status === 429) throw Object.assign(new Error("429 rate limit"), { name: "RateLimitError" });
       const data = await res.json();
       return data.choices?.[0]?.message?.content || null;
     }, "Groq");
@@ -72,6 +80,7 @@ async function callLLM(prompt, keys, options = {}) {
           signal: AbortSignal.timeout(30000),
         }
       );
+      if (res.status === 429) throw Object.assign(new Error("429 rate limit"), { name: "RateLimitError" });
       const data = await res.json();
       return data.candidates?.[0]?.content?.parts?.[0]?.text || null;
     }, "Gemini");
@@ -97,6 +106,7 @@ async function callLLM(prompt, keys, options = {}) {
         }),
         signal: AbortSignal.timeout(35000),
       });
+      if (res.status === 429) throw Object.assign(new Error("429 rate limit"), { name: "RateLimitError" });
       const data = await res.json();
       return data.choices?.[0]?.message?.content || null;
     }, "OpenRouter");
