@@ -3498,9 +3498,10 @@ function TaskQueueView({ clientId, dark, bg2, bg3, bdr, txt, txt2, getToken, API
 
 // ── Pages View (Per-page SEO audit) ─────────────────
 function PagesView({ clientId, dark, bg2, bg3, bdr, txt, txt2, getToken, API, onTabSwitch }) {
-  const [pages,   setPages]   = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [filter,  setFilter]  = useState("all"); // all | critical | good
+  const [pages,    setPages]    = useState([]);
+  const [loading,  setLoading]  = useState(true);
+  const [filter,   setFilter]   = useState("all"); // all | critical | good
+  const [expanded, setExpanded] = useState(null);  // url of expanded row
 
   useEffect(() => {
     async function fetchPages() {
@@ -3576,43 +3577,78 @@ function PagesView({ clientId, dark, bg2, bg3, bdr, txt, txt2, getToken, API, on
         {filtered.map((page, i) => {
           const sc = page.score >= 75 ? "#059669" : page.score >= 50 ? "#D97706" : "#DC2626";
           const statusLabel = page.score >= 75 ? "Healthy" : page.score >= 50 ? "Needs Work" : "Critical";
+          const isOpen = expanded === page.url;
+          const hasIssues = page.issues?.length > 0;
           return (
-            <div key={i} style={{ display:"grid", gridTemplateColumns:"2fr 80px 80px 100px 1fr", gap:0, padding:"12px 16px", borderBottom:`1px solid ${bdr}`, alignItems:"center" }}>
-              {/* Page URL + title */}
-              <div>
-                <div style={{ fontSize:12, fontWeight:600, color:txt, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{page.title || page.path}</div>
-                <div style={{ fontSize:10, color:txt2, marginTop:2, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{page.path}</div>
-                {/* Missing signals */}
-                <div style={{ display:"flex", gap:4, marginTop:4, flexWrap:"wrap" }}>
-                  {!page.hasTitle && <span style={{ fontSize:9, padding:"1px 5px", borderRadius:4, background:"#FEF2F2", color:"#DC2626", fontWeight:600 }}>No Title</span>}
-                  {!page.hasMeta  && <span style={{ fontSize:9, padding:"1px 5px", borderRadius:4, background:"#FFF7ED", color:"#D97706", fontWeight:600 }}>No Meta</span>}
-                  {!page.hasH1   && <span style={{ fontSize:9, padding:"1px 5px", borderRadius:4, background:"#FFF7ED", color:"#D97706", fontWeight:600 }}>No H1</span>}
+            <div key={i} style={{ borderBottom:`1px solid ${bdr}` }}>
+              {/* Main row */}
+              <div
+                onClick={() => hasIssues && setExpanded(isOpen ? null : page.url)}
+                style={{ display:"grid", gridTemplateColumns:"2fr 80px 80px 100px 1fr", gap:0, padding:"12px 16px", alignItems:"center", cursor: hasIssues ? "pointer" : "default", background: isOpen ? `${sc}08` : "transparent" }}
+              >
+                {/* Page URL + title */}
+                <div>
+                  <div style={{ fontSize:12, fontWeight:600, color:txt, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                    {hasIssues && <span style={{ marginRight:6, fontSize:10, color:sc }}>{isOpen ? "▼" : "▶"}</span>}
+                    {page.title || page.path}
+                    {page.isHomepage && <span style={{ marginLeft:6, fontSize:9, padding:"1px 5px", borderRadius:4, background:"#443DCB22", color:"#443DCB", fontWeight:700 }}>Homepage</span>}
+                  </div>
+                  <div style={{ fontSize:10, color:txt2, marginTop:2, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{page.path}</div>
+                  <div style={{ display:"flex", gap:4, marginTop:4, flexWrap:"wrap" }}>
+                    {!page.hasTitle && <span style={{ fontSize:9, padding:"1px 5px", borderRadius:4, background:"#FEF2F2", color:"#DC2626", fontWeight:600 }}>No Title</span>}
+                    {!page.hasMeta  && <span style={{ fontSize:9, padding:"1px 5px", borderRadius:4, background:"#FFF7ED", color:"#D97706", fontWeight:600 }}>No Meta</span>}
+                    {!page.hasH1   && <span style={{ fontSize:9, padding:"1px 5px", borderRadius:4, background:"#FFF7ED", color:"#D97706", fontWeight:600 }}>No H1</span>}
+                    {page.wordCount > 0 && page.wordCount < 300 && <span style={{ fontSize:9, padding:"1px 5px", borderRadius:4, background:"#EEF2FF", color:"#443DCB", fontWeight:600 }}>Thin ({page.wordCount}w)</span>}
+                  </div>
+                </div>
+
+                {/* Score ring */}
+                <div style={{ textAlign:"center" }}>
+                  <div style={{ display:"inline-flex", width:42, height:42, borderRadius:"50%", border:`3px solid ${sc}`, alignItems:"center", justifyContent:"center", flexDirection:"column", background:`${sc}12` }}>
+                    <span style={{ fontSize:12, fontWeight:800, color:sc }}>{page.score}</span>
+                  </div>
+                </div>
+
+                {/* Issue count */}
+                <div style={{ textAlign:"center", fontSize:13, fontWeight:700, color:page.issueCount>0?"#D97706":txt2 }}>
+                  {page.issueCount}
+                </div>
+
+                {/* Status badge */}
+                <div style={{ textAlign:"center" }}>
+                  <span style={{ fontSize:10, padding:"3px 8px", borderRadius:8, background:`${sc}18`, color:sc, fontWeight:700 }}>{statusLabel}</span>
+                </div>
+
+                {/* Keywords */}
+                <div style={{ fontSize:11, color:txt2 }}>
+                  {page.targetKeywords?.length > 0
+                    ? page.targetKeywords.slice(0,3).map(k => k.keyword || k).join(", ")
+                    : <span style={{ color:txt2, fontStyle:"italic" }}>No keywords mapped</span>}
                 </div>
               </div>
 
-              {/* Score ring */}
-              <div style={{ textAlign:"center" }}>
-                <div style={{ display:"inline-flex", width:42, height:42, borderRadius:"50%", border:`3px solid ${sc}`, alignItems:"center", justifyContent:"center", flexDirection:"column", background:`${sc}12` }}>
-                  <span style={{ fontSize:12, fontWeight:800, color:sc }}>{page.score}</span>
+              {/* Expanded issues panel */}
+              {isOpen && hasIssues && (
+                <div style={{ padding:"0 16px 14px 32px", background:`${sc}06` }}>
+                  <div style={{ fontSize:11, fontWeight:700, color:txt2, marginBottom:8, textTransform:"uppercase", letterSpacing:1 }}>Issues on this page</div>
+                  <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                    {page.issues.map((issue, j) => {
+                      const sev = issue.severity === "critical" ? "#DC2626" : "#D97706";
+                      return (
+                        <div key={j} style={{ padding:"8px 12px", borderRadius:8, border:`1px solid ${sev}33`, background:`${sev}08` }}>
+                          <div style={{ display:"flex", gap:8, alignItems:"flex-start" }}>
+                            <span style={{ fontSize:10, padding:"2px 6px", borderRadius:4, background:`${sev}22`, color:sev, fontWeight:700, flexShrink:0 }}>{issue.severity === "critical" ? "P1" : "P2"}</span>
+                            <div style={{ flex:1 }}>
+                              <div style={{ fontSize:12, fontWeight:600, color:txt }}>{issue.detail || issue.type}</div>
+                              {issue.fix && <div style={{ fontSize:11, color:txt2, marginTop:3 }}>Fix: {issue.fix}</div>}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-
-              {/* Issue count */}
-              <div style={{ textAlign:"center", fontSize:13, fontWeight:700, color:page.issueCount>0?"#D97706":txt2 }}>
-                {page.issueCount}
-              </div>
-
-              {/* Status badge */}
-              <div style={{ textAlign:"center" }}>
-                <span style={{ fontSize:10, padding:"3px 8px", borderRadius:8, background:`${sc}18`, color:sc, fontWeight:700 }}>{statusLabel}</span>
-              </div>
-
-              {/* Keywords */}
-              <div style={{ fontSize:11, color:txt2 }}>
-                {page.targetKeywords?.length > 0
-                  ? page.targetKeywords.slice(0,3).map(k => k.keyword || k).join(", ")
-                  : <span style={{ color:txt2, fontStyle:"italic" }}>No keywords mapped</span>}
-              </div>
+              )}
             </div>
           );
         })}

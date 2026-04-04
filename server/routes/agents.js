@@ -711,20 +711,26 @@ router.get("/:clientId/pages", verifyToken, async (req, res) => {
       ...(audit.issues?.p3||[]).map(i => ({ ...i, severity:"info" })),
     ];
 
-    // Use pages crawled from checks, then A2 auto-discovered pages, fallback to homepage
-    let crawledPages = audit.checks?.pages || null;
-    if (!crawledPages || crawledPages.length === 0) {
-      const crawledFromAudit = audit?.pages || audit?.internalLinks || [];
-      if (crawledFromAudit.length > 0) {
-        crawledPages = crawledFromAudit.slice(0, 30).map(p => ({
-          url: typeof p === "string" ? p : p.url,
-          autoDiscovered: true,
-        }));
-      }
-    }
-    if (!crawledPages || crawledPages.length === 0) {
-      crawledPages = [{ url: audit.checks?.finalUrl || "", title: audit.checks?.serpPreview?.title || "", issues: [] }];
-    }
+    // Use rich per-page data from A2 pageAudits (preferred), then fallback to homepage
+    const rawPageAudits = audit.checks?.pageAudits || [];
+
+    // Homepage entry from checks
+    const homepageEntry = {
+      url:          audit.checks?.finalUrl || audit.siteUrl || "",
+      title:        audit.checks?.serpPreview?.title || audit.checks?.title?.value || "(Homepage)",
+      hasH1:        (audit.checks?.h1?.count || 0) > 0,
+      hasMeta:      audit.checks?.metaDescription?.exists || false,
+      hasCanonical: audit.checks?.canonical?.exists || false,
+      wordCount:    audit.checks?.wordCount || 0,
+      issueCount:   allIssues.length,
+      issues:       allIssues.slice(0, 8),
+      crawlDepth:   0,
+      isHomepage:   true,
+    };
+
+    const richPages = rawPageAudits.length > 0
+      ? [homepageEntry, ...rawPageAudits]
+      : [homepageEntry, ...(audit?.pages || []).slice(0, 19).map(p => ({ url: typeof p === "string" ? p : p.url, title: "(Page)", issues: [], issueCount: 0 }))];
 
     // Map keywords to pages
     const kwMap = {};
@@ -735,26 +741,30 @@ router.get("/:clientId/pages", verifyToken, async (req, res) => {
       }
     });
 
-    // Score each page
-    const pages = crawledPages.slice(0, 20).map(page => {
-      const pageIssues = allIssues.filter(i => i.page === page.url || !i.page);
-      const p1Count = pageIssues.filter(i=>i.severity==="critical").length;
-      const p2Count = pageIssues.filter(i=>i.severity==="warning").length;
+    // Score each page from its own issue array
+    const pages = richPages.slice(0, 30).map(page => {
+      const pgIssues  = Array.isArray(page.issues) ? page.issues : [];
+      const p1Count   = pgIssues.filter(i => i.severity === "critical").length;
+      const p2Count   = pgIssues.filter(i => i.severity === "warning").length;
       const pageScore = Math.max(0, 100 - (p1Count * 20) - (p2Count * 8));
       let urlPath = "/";
       try { urlPath = page.url ? new URL(page.url).pathname : "/"; } catch { urlPath = page.url || "/"; }
       return {
-        url:          page.url,
-        path:         urlPath,
-        title:        page.title || "(No title)",
-        score:        pageScore,
-        issues:       pageIssues.slice(0, 5),
-        issueCount:   pageIssues.length,
+        url:            page.url,
+        path:           urlPath,
+        title:          page.title && page.title !== "(missing)" ? page.title : urlPath,
+        score:          pageScore,
+        issues:         pgIssues.slice(0, 8),
+        issueCount:     page.issueCount ?? pgIssues.length,
         targetKeywords: kwMap[urlPath] || [],
-        hasTitle:     !!page.title,
-        hasMeta:      !!page.meta,
-        hasH1:        !!page.h1,
-        statusCode:   page.statusCode || 200,
+        hasTitle:       !!(page.title && page.title !== "(missing)"),
+        hasMeta:        page.hasMeta || false,
+        hasH1:          page.hasH1  || false,
+        wordCount:      page.wordCount || 0,
+        altMissing:     page.altMissing || 0,
+        responseTime:   page.responseTime || null,
+        statusCode:     page.statusCode || 200,
+        isHomepage:     page.isHomepage || false,
       };
     });
 

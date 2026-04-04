@@ -178,6 +178,26 @@ async function runA2(clientId) {
   const internalLinks = checks.internalLinks || [];
   let   discoveredUrls = [];
 
+  // Skip non-HTML resources and WordPress system paths
+  const SKIP_EXTENSIONS = /\.(css|js|ico|png|jpg|jpeg|gif|svg|webp|woff|woff2|ttf|eot|pdf|zip|xml|json|txt|mp4|mp3|wav|avi|mov|map|gz|tar|rar|exe|dmg)(\?.*)?$/i;
+  const SKIP_PATTERNS = [
+    /\/wp-content\/themes\//i,
+    /\/wp-content\/plugins\//i,
+    /\/wp-content\/uploads\//i,
+    /\/wp-json\//i,
+    /\/feed\/?(\?.*)?$/i,
+    /\/oembed/i,
+    /\/xmlrpc\.php/i,
+    /\/wp-admin\//i,
+    /\/wp-login\.php/i,
+    /\/wp-cron\.php/i,
+    /\?replytocom=/i,
+    /\/tag\//i,
+    /\/author\//i,
+    /\/page\/\d+/i,
+    /\/(cdn-cgi|__webpack|_next\/static)\//i,
+  ];
+
   if (checks.isAccessible) {
     try {
       // Extract internal links from homepage HTML
@@ -188,7 +208,12 @@ async function runA2(clientId) {
       for (const m of linkMatches) {
         try {
           const abs = new URL(m[1], siteUrl).href;
-          if (new URL(abs).hostname === domain && abs !== siteUrl && !abs.endsWith(".pdf") && !abs.endsWith(".zip")) {
+          if (
+            new URL(abs).hostname === domain &&
+            abs !== siteUrl &&
+            !SKIP_EXTENSIONS.test(abs) &&
+            !SKIP_PATTERNS.some(p => p.test(abs))
+          ) {
             foundLinks.add(abs);
           }
         } catch { /* skip malformed */ }
@@ -216,6 +241,10 @@ async function runA2(clientId) {
           if (pg.broken) {
             brokenLinks.push({ url: pg.url, status: pg.status });
           } else {
+            const pgIssues = [
+              ...(pg.issues?.p1||[]).map(i => ({ ...i, severity: "critical" })),
+              ...(pg.issues?.p2||[]).map(i => ({ ...i, severity: "warning" })),
+            ];
             pageAudits.push({
               url:             pg.url,
               title:           pg.checks?.title?.value || "(missing)",
@@ -228,7 +257,9 @@ async function runA2(clientId) {
               wordCount:       pg.checks?.wordCount || 0,
               freshness:       pg.checks?.contentFreshness?.freshnessSignal || "unknown",
               crawlDepth:      1,
-              issues:          [...(pg.issues?.p1||[]), ...(pg.issues?.p2||[])].length,
+              responseTime:    pg.responseTime || null,
+              issues:          pgIssues,
+              issueCount:      pgIssues.length,
             });
           }
         }
