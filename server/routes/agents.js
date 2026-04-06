@@ -787,10 +787,16 @@ router.get("/:clientId/pages", verifyToken, async (req, res) => {
         pg_issues.push({ type:"missing_alt",        label:`${page.altMissing} images missing alt`, severity:"info"  });
       }
 
-      // For homepage, also merge global issues (redirect chains, sitemap, robots, etc.)
-      const mergedIssues = page.isHomepage
-        ? [...pg_issues, ...allIssues.filter(i => !pg_issues.find(p => p.type === i.type)).slice(0, 5)]
-        : pg_issues;
+      // For homepage: merge global site-level issues (sitemap, robots, redirect chains etc.)
+      // For inner pages: merge A2's full per-page issues (schema, dup titles, CWV notes etc.)
+      let mergedIssues;
+      if (page.isHomepage) {
+        mergedIssues = [...pg_issues, ...allIssues.filter(i => !pg_issues.find(p => p.type === i.type)).slice(0, 8)];
+      } else {
+        // page.issues comes from A2 auditPage() — has detail + fix fields
+        const a2Issues = (page.issues || []).filter(i => !pg_issues.find(p => p.type === i.type));
+        mergedIssues = [...pg_issues, ...a2Issues];
+      }
 
       score = Math.max(0, Math.min(100, score));
 
@@ -800,6 +806,7 @@ router.get("/:clientId/pages", verifyToken, async (req, res) => {
         title:           (page.title && page.title !== "(missing)") ? page.title : null,
         titleLength:     page.titleLength || 0,
         metaDescription: page.metaDescription || null,
+        h1:              page.h1 || null,
         score,
         issues:          mergedIssues,
         issueCount:      mergedIssues.length,
@@ -812,6 +819,7 @@ router.get("/:clientId/pages", verifyToken, async (req, res) => {
         altMissing:      page.altMissing || 0,
         responseTime:    page.responseTime || null,
         statusCode:      page.statusCode || 200,
+        crawlDepth:      page.crawlDepth || (page.isHomepage ? 0 : 1),
         isHomepage:      !!page.isHomepage,
       };
     });

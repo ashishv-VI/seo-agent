@@ -551,7 +551,7 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
       {/* Technical Tab */}
       {activeTab==="technical" && state.A7_technical && (
         <FullTechnicalView
-          tech={state.A7_technical} dark={dark} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2}
+          tech={state.A7_technical} audit={state.A2_audit} dark={dark} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2}
           clientId={clientId} API={API} getToken={getToken}
           onRefresh={async () => {
             try {
@@ -2641,8 +2641,9 @@ function FullOnPageView({ op, bg2, bg3, bdr, txt, txt2 }) {
   );
 }
 
-function FullTechnicalView({ tech, bg2, bg3, bdr, txt, txt2, onRefresh }) {
+function FullTechnicalView({ tech, audit, bg2, bg3, bdr, txt, txt2, onRefresh }) {
   const [refreshing, setRefreshing] = useState(false);
+  const [perfTab, setPerfTab] = useState("homepage"); // homepage | pages
   const hasMobile  = !!(tech.cwvData?.mobile?.scores);
   const hasDesktop = !!(tech.cwvData?.desktop?.scores);
   const hasAnyData = hasMobile || hasDesktop;
@@ -2822,6 +2823,124 @@ function FullTechnicalView({ tech, bg2, bg3, bdr, txt, txt2, onRefresh }) {
           </div>
         </div>
       )}
+
+      {/* ── Per-Page Performance Section ──────────────── */}
+      {(() => {
+        const pageAudits = audit?.checks?.pageAudits || [];
+        if (pageAudits.length === 0) return null;
+
+        // Pages with response time data
+        const withTime  = pageAudits.filter(p => p.responseTime != null).sort((a,b) => b.responseTime - a.responseTime);
+        // Pages with performance-related issues
+        const perfTypes = ["cwv","lcp","cls","fid","fcp","tbt","slow","response","speed","js","css","minif","cache","redirect"];
+        const withIssues = pageAudits.filter(p =>
+          (p.issues||[]).some(i => perfTypes.some(t => (i.type||"").includes(t) || (i.detail||"").toLowerCase().includes(t)))
+        );
+        // Pages with SEO issues
+        const withSEOIssues = pageAudits.filter(p => (p.issues||[]).length > 0);
+
+        return (
+          <div style={{ marginTop:16 }}>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 }}>
+              <div style={{ fontSize:13, fontWeight:700, color:txt }}>
+                📄 All Crawled Pages — {pageAudits.length} pages
+              </div>
+              <div style={{ display:"flex", gap:6 }}>
+                {[
+                  { id:"seo",   label:`SEO Issues (${withSEOIssues.length})` },
+                  { id:"speed", label:`Speed (${withTime.length})` },
+                ].map(t => (
+                  <button key={t.id} onClick={() => setPerfTab(t.id)} style={{ padding:"5px 12px", borderRadius:8, fontSize:11, fontWeight:600, cursor:"pointer", border:`1px solid ${perfTab===t.id?"#443DCB":bdr}`, background:perfTab===t.id?"#443DCB":"transparent", color:perfTab===t.id?"#fff":txt2 }}>{t.label}</button>
+                ))}
+              </div>
+            </div>
+
+            {/* SEO Issues per page */}
+            {perfTab === "seo" && (
+              <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, overflow:"hidden" }}>
+                {withSEOIssues.length === 0 && (
+                  <div style={{ padding:24, textAlign:"center", color:"#059669", fontSize:12, fontWeight:600 }}>✅ No issues found on crawled pages</div>
+                )}
+                {withSEOIssues.map((p, i) => {
+                  const critCount = (p.issues||[]).filter(x => x.severity === "critical").length;
+                  const warnCount = (p.issues||[]).filter(x => x.severity === "warning").length;
+                  let pagePath = p.url;
+                  try { pagePath = new URL(p.url).pathname; } catch {}
+                  return (
+                    <div key={i} style={{ padding:"10px 14px", borderBottom:`1px solid ${bdr}`, background: i%2===0?bg2:bg3 }}>
+                      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:6 }}>
+                        <div style={{ fontSize:12, fontWeight:600, color:txt, flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", marginRight:12 }}>
+                          {p.title && p.title !== "(missing)" ? p.title : pagePath}
+                        </div>
+                        <div style={{ display:"flex", gap:4, flexShrink:0 }}>
+                          {critCount > 0 && <span style={{ fontSize:10, padding:"2px 6px", borderRadius:6, background:"#DC262618", color:"#DC2626", fontWeight:700 }}>P1 ×{critCount}</span>}
+                          {warnCount > 0 && <span style={{ fontSize:10, padding:"2px 6px", borderRadius:6, background:"#D9770618", color:"#D97706", fontWeight:700 }}>P2 ×{warnCount}</span>}
+                        </div>
+                      </div>
+                      <div style={{ fontSize:10, color:txt2, marginBottom:6 }}>{pagePath}</div>
+                      <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
+                        {(p.issues||[]).map((iss, j) => {
+                          const sc = iss.severity === "critical" ? "#DC2626" : iss.severity === "info" ? "#6B7280" : "#D97706";
+                          return (
+                            <div key={j} style={{ display:"flex", gap:6, alignItems:"flex-start" }}>
+                              <span style={{ fontSize:9, padding:"1px 5px", borderRadius:4, background:`${sc}18`, color:sc, fontWeight:700, flexShrink:0, marginTop:1 }}>
+                                {iss.severity === "critical" ? "P1" : iss.severity === "info" ? "P3" : "P2"}
+                              </span>
+                              <div>
+                                <div style={{ fontSize:11, color:txt }}>{iss.detail || iss.label || iss.type?.replace(/_/g," ")}</div>
+                                {iss.fix && <div style={{ fontSize:10, color:"#059669" }}>→ {iss.fix}</div>}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Speed data per page */}
+            {perfTab === "speed" && (
+              <div>
+                {withTime.length === 0 && (
+                  <div style={{ padding:24, textAlign:"center", background:bg2, border:`1px solid ${bdr}`, borderRadius:10, color:txt2, fontSize:12 }}>
+                    No response time data yet. Re-run the A2 audit to collect page speed data.
+                  </div>
+                )}
+                {withTime.length > 0 && (
+                  <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, overflow:"hidden" }}>
+                    <div style={{ display:"grid", gridTemplateColumns:"2fr 100px 100px 80px", padding:"8px 14px", background:bg3, borderBottom:`1px solid ${bdr}`, fontSize:10, fontWeight:700, color:txt2, textTransform:"uppercase" }}>
+                      <span>PAGE</span><span style={{ textAlign:"center" }}>RESPONSE</span><span style={{ textAlign:"center" }}>WORDS</span><span style={{ textAlign:"center" }}>ISSUES</span>
+                    </div>
+                    {withTime.map((p, i) => {
+                      const rc = p.responseTime < 800 ? "#059669" : p.responseTime < 2000 ? "#D97706" : "#DC2626";
+                      let pagePath = p.url;
+                      try { pagePath = new URL(p.url).pathname; } catch {}
+                      return (
+                        <div key={i} style={{ display:"grid", gridTemplateColumns:"2fr 100px 100px 80px", padding:"9px 14px", borderBottom:`1px solid ${bdr}`, alignItems:"center", background: i%2===0?bg2:bg3 }}>
+                          <div style={{ overflow:"hidden" }}>
+                            <div style={{ fontSize:11, color:txt, fontWeight:500, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{p.title && p.title !== "(missing)" ? p.title : pagePath}</div>
+                            <div style={{ fontSize:9, color:txt2, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{pagePath}</div>
+                          </div>
+                          <div style={{ textAlign:"center", fontSize:12, fontWeight:700, color:rc }}>{p.responseTime}ms</div>
+                          <div style={{ textAlign:"center", fontSize:11, color: p.wordCount < 300 ? "#D97706" : txt2 }}>{p.wordCount || "—"}</div>
+                          <div style={{ textAlign:"center", fontSize:11, fontWeight:700, color: (p.issues||[]).length > 0 ? "#D97706" : "#059669" }}>
+                            {(p.issues||[]).length > 0 ? (p.issues||[]).length : "✅"}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                <div style={{ marginTop:8, fontSize:11, color:txt2 }}>
+                  💡 Response times are server-side — measured during the A2 audit crawl. For full CWV (LCP, CLS, FID), add a Google API key and re-run.
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -3906,13 +4025,13 @@ function PagesView({ clientId, dark, bg2, bg3, bdr, txt, txt2, getToken, API, on
             <div key={i} style={{ borderBottom:`1px solid ${bdr}` }}>
               {/* Main row */}
               <div
-                onClick={() => hasIssues && setExpanded(isOpen ? null : page.url)}
-                style={{ display:"grid", gridTemplateColumns:"2fr 80px 80px 100px 1fr", gap:0, padding:"12px 16px", alignItems:"center", cursor: hasIssues ? "pointer" : "default", background: isOpen ? `${sc}08` : "transparent" }}
+                onClick={() => setExpanded(isOpen ? null : page.url)}
+                style={{ display:"grid", gridTemplateColumns:"2fr 80px 80px 100px 1fr", gap:0, padding:"12px 16px", alignItems:"center", cursor:"pointer", background: isOpen ? `${sc}08` : "transparent" }}
               >
                 {/* Page URL + title */}
                 <div>
                   <div style={{ fontSize:12, fontWeight:600, color:txt, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                    {hasIssues && <span style={{ marginRight:6, fontSize:10, color:sc }}>{isOpen ? "▼" : "▶"}</span>}
+                    <span style={{ marginRight:6, fontSize:10, color:sc }}>{isOpen ? "▼" : "▶"}</span>
                     {page.title || page.path}
                     {page.isHomepage && <span style={{ marginLeft:6, fontSize:9, padding:"1px 5px", borderRadius:4, background:"#443DCB22", color:"#443DCB", fontWeight:700 }}>Homepage</span>}
                   </div>
@@ -3950,26 +4069,47 @@ function PagesView({ clientId, dark, bg2, bg3, bdr, txt, txt2, getToken, API, on
                 </div>
               </div>
 
-              {/* Expanded issues panel */}
-              {isOpen && hasIssues && (
-                <div style={{ padding:"0 16px 14px 32px", background:`${sc}06` }}>
-                  <div style={{ fontSize:11, fontWeight:700, color:txt2, marginBottom:8, textTransform:"uppercase", letterSpacing:1 }}>Issues on this page</div>
-                  <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
-                    {page.issues.map((issue, j) => {
-                      const sev = issue.severity === "critical" ? "#DC2626" : "#D97706";
-                      return (
-                        <div key={j} style={{ padding:"8px 12px", borderRadius:8, border:`1px solid ${sev}33`, background:`${sev}08` }}>
-                          <div style={{ display:"flex", gap:8, alignItems:"flex-start" }}>
-                            <span style={{ fontSize:10, padding:"2px 6px", borderRadius:4, background:`${sev}22`, color:sev, fontWeight:700, flexShrink:0 }}>{issue.severity === "critical" ? "P1" : "P2"}</span>
-                            <div style={{ flex:1 }}>
-                              <div style={{ fontSize:12, fontWeight:600, color:txt }}>{issue.detail || issue.type}</div>
-                              {issue.fix && <div style={{ fontSize:11, color:txt2, marginTop:3 }}>Fix: {issue.fix}</div>}
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
+              {/* Expanded detail panel */}
+              {isOpen && (
+                <div style={{ padding:"0 16px 14px 16px", background:`${sc}06`, borderTop:`1px solid ${sc}20` }}>
+
+                  {/* Page signals row */}
+                  <div style={{ display:"flex", gap:8, flexWrap:"wrap", padding:"10px 0 8px" }}>
+                    {page.title && <div style={{ fontSize:11, background:bg2, border:`1px solid ${bdr}`, borderRadius:6, padding:"5px 10px" }}><span style={{ color:txt2 }}>Title: </span><span style={{ color:txt, fontWeight:600 }}>{page.title.slice(0,60)}{page.title.length>60?"…":""}</span><span style={{ color: page.titleLength>=50&&page.titleLength<=70?"#059669":"#D97706", marginLeft:6, fontSize:10 }}>({page.titleLength} chars)</span></div>}
+                    {page.metaDescription && <div style={{ fontSize:11, background:bg2, border:`1px solid ${bdr}`, borderRadius:6, padding:"5px 10px" }}><span style={{ color:txt2 }}>Meta: </span><span style={{ color:txt }}>{page.metaDescription.slice(0,80)}{page.metaDescription.length>80?"…":""}</span></div>}
+                    {page.wordCount > 0 && <div style={{ fontSize:11, background:bg2, border:`1px solid ${bdr}`, borderRadius:6, padding:"5px 10px" }}><span style={{ color:txt2 }}>Words: </span><span style={{ color: page.wordCount>=300?"#059669":"#D97706", fontWeight:600 }}>{page.wordCount}</span></div>}
+                    {page.responseTime && <div style={{ fontSize:11, background:bg2, border:`1px solid ${bdr}`, borderRadius:6, padding:"5px 10px" }}><span style={{ color:txt2 }}>Response: </span><span style={{ color: page.responseTime<800?"#059669":page.responseTime<2000?"#D97706":"#DC2626", fontWeight:600 }}>{page.responseTime}ms</span></div>}
+                    {page.crawlDepth > 0 && <div style={{ fontSize:10, background:bg3, border:`1px solid ${bdr}`, borderRadius:6, padding:"5px 8px", color:txt2 }}>Depth {page.crawlDepth}</div>}
                   </div>
+
+                  {/* Issues list */}
+                  {hasIssues && (
+                    <>
+                      <div style={{ fontSize:11, fontWeight:700, color:txt2, marginBottom:6, textTransform:"uppercase", letterSpacing:1 }}>
+                        {page.issueCount} Issue{page.issueCount !== 1 ? "s" : ""} Found
+                      </div>
+                      <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                        {page.issues.map((issue, j) => {
+                          const sev = issue.severity === "critical" ? "#DC2626" : issue.severity === "info" ? "#6B7280" : "#D97706";
+                          const label = issue.severity === "critical" ? "P1" : issue.severity === "info" ? "P3" : "P2";
+                          return (
+                            <div key={j} style={{ padding:"8px 12px", borderRadius:8, border:`1px solid ${sev}33`, background:`${sev}08` }}>
+                              <div style={{ display:"flex", gap:8, alignItems:"flex-start" }}>
+                                <span style={{ fontSize:10, padding:"2px 6px", borderRadius:4, background:`${sev}22`, color:sev, fontWeight:700, flexShrink:0 }}>{label}</span>
+                                <div style={{ flex:1 }}>
+                                  <div style={{ fontSize:12, fontWeight:600, color:txt }}>{issue.detail || issue.label || issue.type?.replace(/_/g," ")}</div>
+                                  {issue.fix && <div style={{ fontSize:11, color:"#059669", marginTop:3 }}>→ Fix: {issue.fix}</div>}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
+                  {!hasIssues && (
+                    <div style={{ fontSize:12, color:"#059669", fontWeight:600, padding:"6px 0" }}>✅ No issues found on this page</div>
+                  )}
                 </div>
               )}
             </div>
