@@ -31,7 +31,7 @@ async function checkPositionsDDG(domain, keywords, country) {
   const results = {};
   for (const kw of keywords) {
     try {
-      const serp  = await getSERP(kw, { location: loc });
+      const serp  = await getSERP(kw, { location: loc, num: 30 });
       const found = (serp.results || []).findIndex(r => {
         const u = (r.url || r.link || "").toLowerCase();
         return u.includes(cleanDomain);

@@ -62,7 +62,7 @@ function parseDDGResults(html, keyword) {
 
   let position = 0;
   let lm;
-  while ((lm = linkPattern.exec(html)) !== null && position < 10) {
+  while ((lm = linkPattern.exec(html)) !== null && position < 30) {
     const rawUrl  = lm[1];
     const rawTitle = lm[2].replace(/<[^>]+>/g, "").trim();
 
@@ -105,7 +105,7 @@ function parseDDGResults(html, keyword) {
 
   return {
     keyword,
-    results: results.slice(0, 10),
+    results: results.slice(0, 30),
     features,
     paaQuestions,
     relatedSearches,
@@ -153,7 +153,7 @@ function parseBingResults(html, keyword) {
   let bm;
   let position = 0;
 
-  while ((bm = blockRegex.exec(html)) !== null && position < 10) {
+  while ((bm = blockRegex.exec(html)) !== null && position < 30) {
     const block   = bm[1];
     const urlM    = /<a[^>]+href=["'](https?:\/\/[^"'\s]+)["']/i.exec(block);
     const titleM  = /<a[^>]+href=["']https?[^>]+>([\s\S]*?)<\/a>/i.exec(block);
@@ -182,7 +182,7 @@ function parseBingResults(html, keyword) {
 
   return {
     keyword,
-    results: results.slice(0, 10),
+    results: results.slice(0, 30),
     features,
     paaQuestions:   extractPAA(html),
     relatedSearches: extractRelated(html),

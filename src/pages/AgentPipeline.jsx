@@ -1168,6 +1168,44 @@ function ActionPlanView({ state, bg2, bg3, bdr, txt, txt2, txt3, clientId, getTo
   const report   = state.A9_report     || {};
   const brief    = state.A1_brief      || {};
 
+  // ── Issue-specific "Why it matters" + SEO impact map ─
+  const ISSUE_WHY_MAP = {
+    too_many_requests:    { why: "Excessive HTTP requests slow page load and hurt Core Web Vitals (LCP) — a confirmed Google ranking factor since 2021.",                 impact: "PageSpeed −10 to −25 pts" },
+    high_request_count:   { why: "Too many requests increase time-to-interactive. Google penalises slow pages with lower rankings in mobile-first indexing.",               impact: "Mobile ranking −5 to −15 pts" },
+    slow_ttfb:            { why: "Server response time is the first thing Google measures. TTFB > 600ms delays crawling and reduces crawl budget.",                        impact: "Direct PageSpeed −10 to −20 pts" },
+    ttfb_warning:         { why: "Slow TTFB reduces crawl efficiency and signals poor infrastructure to Google — affecting how often your site is re-crawled.",             impact: "Crawl frequency reduced" },
+    no_ssl:               { why: "HTTPS is a Google ranking signal since 2014. HTTP sites show 'Not Secure' in Chrome, increasing bounce rate by up to 23%.",              impact: "−1 to −5 ranking positions confirmed" },
+    missing_title:        { why: "Title tags are one of Google's top 3 on-page ranking factors. Without one Google generates its own — usually just the URL — destroying CTR.", impact: "CTR drops 30–60%" },
+    short_title:          { why: "Short titles leave keyword opportunity on the table. Google needs 50–60 chars to fully understand page intent.",                          impact: "Keyword relevance score reduced" },
+    long_title:           { why: "Titles over 60 chars get truncated in SERPs. Truncated titles break the search snippet and reduce click-through rate.",                  impact: "CTR drops 10–20% from truncation" },
+    missing_h1:           { why: "H1 is the primary topical signal Google uses to understand keyword relevance. Missing H1 = no clear topic signal for the page.",         impact: "Keyword ranking reduced for target terms" },
+    multiple_h1:          { why: "Multiple H1s confuse Google's understanding of the page's primary topic, diluting authority across all of them.",                        impact: "Keyword focus diluted" },
+    missing_meta_desc:    { why: "Meta descriptions control your SERP snippet. Google auto-generates poor ones when missing, reducing CTR by 5–10%.",                      impact: "CTR −5 to −10%" },
+    missing_canonical:    { why: "Without canonicals, Google may index duplicate URL variants and split link authority across them instead of concentrating it on one URL.", impact: "Link equity diluted across duplicate URLs" },
+    no_viewport:          { why: "Missing viewport tag breaks mobile rendering. Google uses mobile-first indexing — poor mobile = lower rankings for all devices.",          impact: "Mobile ranking −10 to −20 pts" },
+    noindex_detected:     { why: "noindex tells Google NOT to show this page in search results. If set accidentally, the page receives zero organic traffic forever.",       impact: "100% traffic loss for this page" },
+    thin_content:         { why: "Pages under 300 words are flagged as 'thin content' — a direct Google Panda trigger that can suppress an entire domain's rankings.",     impact: "Domain-wide suppression risk" },
+    robots_blocking_all:  { why: "'Disallow: /' blocks ALL crawlers — your entire site becomes invisible to Google. Zero pages can be indexed.",                            impact: "Zero organic traffic — full deindex" },
+    robots_blocking:      { why: "Broad robots.txt rules may block important pages. Google skips blocked pages entirely even if they have strong backlinks.",               impact: "Blocked pages get zero rankings" },
+    no_sitemap:           { why: "Sitemaps tell Google which pages to crawl and how often. Without one, new content can take weeks longer to appear in search results.",    impact: "20–40% slower indexing of new pages" },
+    broken_links:         { why: "Broken links waste crawl budget and create dead ends for users. Each 404 signals poor site maintenance to Google.",                       impact: "Crawl budget wasted on dead pages" },
+    duplicate_titles:     { why: "Pages sharing a title cause Google to pick just one to rank — often not the one you want. The others lose all ranking potential.",        impact: "Authority diluted across duplicate pages" },
+    duplicate_meta_desc:  { why: "Duplicate meta descriptions make every SERP result look identical, significantly reducing CTR across all affected pages.",               impact: "CTR reduced across all duplicate pages" },
+    weak_eeat:            { why: "After Google's Helpful Content updates, E-E-A-T signals (About, Contact, Privacy, Schema) directly affect domain trust and rankings.",    impact: "Major trust gap vs. competitors" },
+    eeat_improvements:    { why: "Strengthening E-E-A-T signals helps Google rank your content higher for competitive and YMYL (health, finance, legal) queries.",          impact: "Competitive trust signal gap" },
+    missing_alt_text:     { why: "Alt text is the only way Google 'reads' images. Missing alt text loses image search traffic and hurts accessibility scores.",              impact: "Image search traffic lost" },
+    non_webp_images:      { why: "WebP images are 25–35% smaller than JPG/PNG. Larger images slow LCP — Google's most heavily-weighted Core Web Vital.",                   impact: "LCP +0.3–1.5s slower" },
+    missing_image_dimensions: { why: "Images without width/height cause Cumulative Layout Shift (CLS) as they load — CLS is a Core Web Vital that directly affects rankings.", impact: "CLS score worsened — ranking signal" },
+    missing_og_tags:      { why: "Open Graph tags control how pages appear when shared on LinkedIn, Facebook, and WhatsApp. Poor previews drastically reduce social CTR.",  impact: "Social traffic CTR reduced 30–50%" },
+    redirect_chain:       { why: "Each redirect hop loses ~15% of link equity (PageRank). A 3-hop chain can lose up to 40% of the authority passed to the final URL.",      impact: "Up to 40% link equity loss per chain" },
+    inner_pages_no_title: { why: "Inner pages without titles cannot rank for any keywords — Google requires a title to understand page topic and keyword relevance.",        impact: "Zero ranking potential for affected pages" },
+    inner_pages_no_h1:    { why: "Inner pages without H1 send no topical signal to Google, making it nearly impossible to rank those pages for competitive keywords.",      impact: "Keyword relevance score near zero" },
+    redirect:             { why: "Inconsistent canonical URL signals split link equity. All external links, internal links and GSC should reference the exact same URL.",    impact: "Link equity diluted across URL variants" },
+    site_unreachable:     { why: "If Google cannot reach your site, it cannot crawl or index any pages. Persistent crawl errors can trigger a complete deindex.",            impact: "Complete indexing failure" },
+    unminified_assets:    { why: "Unminified JS and CSS add unnecessary bytes that slow page load. Google measures render-blocking resources as part of PageSpeed score.",   impact: "PageSpeed −5 to −15 pts" },
+    stale_content:        { why: "Google's freshness algorithm favours recently-updated content for time-sensitive queries. Stale pages lose ranking over time.",            impact: "Ranking decay for time-sensitive keywords" },
+  };
+
   // ── Priority Score Formula ─────────────────────────
   // score = (rankingImpact × 0.4) + (trafficPotential × 0.3) − (effortCost × 0.3)
   function calcPriority(ri, tp, effort) {
@@ -1179,9 +1217,12 @@ function ActionPlanView({ state, bg2, bg3, bdr, txt, txt2, txt3, clientId, getTo
   const allTasks = [];
 
   (audit.issues?.p1 || []).forEach((issue, i) => {
-    const ri = Math.max(92 - i * 3, 78), tp = Math.max(75 - i * 3, 55);
+    const ri   = Math.max(92 - i * 3, 78), tp = Math.max(75 - i * 3, 55);
+    const meta = ISSUE_WHY_MAP[issue.type] || {};
     allTasks.push({ id:`p1_${i}`, category:"critical",
-      label:issue.detail, why:"This is a critical technical issue that directly blocks search engine crawling and hurts your rankings.",
+      label:issue.detail,
+      why: meta.why || "This is a critical technical issue that directly blocks search engine crawling and hurts your rankings.",
+      seoImpact: meta.impact || null,
       fix:issue.fix, impact:"High", effort:"Easy",
       impactColor:"#DC2626", effortColor:"#059669",
       priority:calcPriority(ri, tp, "easy"), color:"#DC2626", catLabel:"Critical" });
@@ -1208,10 +1249,12 @@ function ActionPlanView({ state, bg2, bg3, bdr, txt, txt2, txt3, clientId, getTo
   });
 
   (audit.issues?.p2 || []).slice(0, 6).forEach((issue, i) => {
-    const ri = Math.max(58 - i * 3, 35), tp = Math.max(52 - i * 3, 30);
+    const ri   = Math.max(58 - i * 3, 35), tp = Math.max(52 - i * 3, 30);
+    const meta = ISSUE_WHY_MAP[issue.type] || {};
     allTasks.push({ id:`p2_${i}`, category:"important",
       label:issue.detail,
-      why:"An important SEO issue that affects your search visibility and page experience scores.",
+      why: meta.why || "An important SEO issue that affects your search visibility and page experience scores.",
+      seoImpact: meta.impact || null,
       fix:issue.fix, impact:"Medium", effort:"Medium", impactColor:"#D97706", effortColor:"#D97706",
       priority:calcPriority(ri, tp, "medium"), color:"#D97706", catLabel:"Important" });
   });
@@ -1294,6 +1337,11 @@ function ActionPlanView({ state, bg2, bg3, bdr, txt, txt2, txt3, clientId, getTo
         {/* Why it matters */}
         <div style={{ fontSize:12, color:txt2, marginBottom:10, lineHeight:1.6, padding:"8px 12px", background:bg3, borderRadius:6 }}>
           <span style={{ color:task.color, fontWeight:700 }}>Why it matters: </span>{task.why}
+          {task.seoImpact && (
+            <div style={{ marginTop:5, fontSize:11, fontWeight:700, color:task.color, display:"flex", alignItems:"center", gap:4 }}>
+              📊 SEO Impact: <span style={{ background:`${task.color}18`, padding:"1px 8px", borderRadius:6 }}>{task.seoImpact}</span>
+            </div>
+          )}
         </div>
         {/* Fix suggestion */}
         {task.fix && (
@@ -1462,8 +1510,10 @@ function ActionPlanView({ state, bg2, bg3, bdr, txt, txt2, txt3, clientId, getTo
         <div>
           <div style={{ fontSize:11, fontWeight:700, color:txt2, textTransform:"uppercase", letterSpacing:1, marginBottom:12 }}>All Actions by Category</div>
           {CATEGORIES.map(cat => {
-            const catTasks = allTasks.filter(t => t.category === cat.id);
-            if (!catTasks.length) return null;
+            const topIds   = new Set(topTasks.map(t => t.id));
+            const catTasks = allTasks.filter(t => t.category === cat.id && !topIds.has(t.id));
+            const topCount = allTasks.filter(t => t.category === cat.id && topIds.has(t.id)).length;
+            if (!catTasks.length && !topCount) return null;
             const isOpen  = expanded === cat.id;
             const doneCat = catTasks.filter(t => done.has(t.id)).length;
             return (
@@ -1475,7 +1525,8 @@ function ActionPlanView({ state, bg2, bg3, bdr, txt, txt2, txt3, clientId, getTo
                   <div style={{ display:"flex", alignItems:"center", gap:10 }}>
                     <span>{cat.icon}</span>
                     <span style={{ fontSize:13, fontWeight:700, color:txt }}>{cat.label}</span>
-                    <span style={{ fontSize:11, padding:"2px 8px", borderRadius:10, background:`${cat.color}20`, color:cat.color, fontWeight:700 }}>{catTasks.length}</span>
+                    <span style={{ fontSize:11, padding:"2px 8px", borderRadius:10, background:`${cat.color}20`, color:cat.color, fontWeight:700 }}>{catTasks.length + topCount}</span>
+                    {topCount > 0 && <span style={{ fontSize:10, color:txt2 }}>({topCount} shown above)</span>}
                   </div>
                   <div style={{ display:"flex", alignItems:"center", gap:10 }}>
                     {doneCat>0 && <span style={{ fontSize:11, color:"#059669", fontWeight:600 }}>✅ {doneCat}/{catTasks.length}</span>}
@@ -1484,6 +1535,9 @@ function ActionPlanView({ state, bg2, bg3, bdr, txt, txt2, txt3, clientId, getTo
                 </div>
                 {isOpen && (
                   <div style={{ padding:"12px 12px 2px", border:`1px solid ${cat.color}`, borderTop:"none", borderRadius:"0 0 10px 10px", background:bg3 }}>
+                    {topCount > 0 && catTasks.length === 0 && (
+                      <div style={{ fontSize:12, color:txt2, padding:"10px 4px", textAlign:"center" }}>All {topCount} item(s) from this category are shown in "Fix These First" above.</div>
+                    )}
                     {catTasks.map((task, i) => <TaskCard key={task.id} task={task} taskKey={`cat_${cat.id}_${i}`} />)}
                   </div>
                 )}
