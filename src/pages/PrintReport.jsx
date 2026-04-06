@@ -706,8 +706,8 @@ export default function PrintReport({ client, state, brand = {} }) {
                   marginBottom:10, background:"#fafafa",
                 }}>
                   <div style={{ fontSize:13.5, fontWeight:700, color:DK, marginBottom:5 }}>{i+1}. {a.action}</div>
-                  <div style={{ fontSize:12.5, color:MT, marginBottom: a.how ? 5 : 0, lineHeight:1.6 }}>{a.why}</div>
-                  {a.how && <div style={{ fontSize:12, color:B }}>→ {a.how}</div>}
+                  <div style={{ fontSize:12.5, color:MT, marginBottom: a.expectedOutcome ? 5 : 0, lineHeight:1.6 }}>{a.why}</div>
+                  {a.expectedOutcome && <div style={{ fontSize:12, color:B }}>→ Expected: {a.expectedOutcome}</div>}
                 </div>
               ))}
             </div>

@@ -1498,8 +1498,8 @@ function ActionPlanView({ state, bg2, bg3, bdr, txt, txt2, txt3, clientId, getTo
           {report.reportData.next3Actions.map((a, i) => (
             <div key={i} style={{ padding:"12px 14px", background:bg3, borderRadius:8, marginBottom:8, borderLeft:"3px solid #0891B2" }}>
               <div style={{ fontSize:13, fontWeight:700, color:txt, marginBottom:4 }}>{i+1}. {a.action}</div>
-              <div style={{ fontSize:12, color:txt2, marginBottom:a.how?4:0 }}>{a.why}</div>
-              {a.how && <div style={{ fontSize:11, color:"#0891B2" }}>→ {a.how}</div>}
+              <div style={{ fontSize:12, color:txt2, marginBottom:a.expectedOutcome?4:0 }}>{a.why}</div>
+              {a.expectedOutcome && <div style={{ fontSize:11, color:"#0891B2" }}>→ Expected: {a.expectedOutcome}</div>}
             </div>
           ))}
         </div>
@@ -1630,7 +1630,22 @@ function GeoSummary({ geo, txt, txt2 }) {
 }
 
 function ReportSummary({ report, txt, txt2 }) {
-  return <div style={{ fontSize:12, color:txt2 }}>{report.reportData?.verdict} — Approval ID: {report.approvalId}</div>;
+  const verdict = report.reportData?.verdict || "";
+  const shortVerdict = verdict.split(".")[0] + (verdict.includes(".") ? "." : "");
+  const shortId = report.approvalId ? report.approvalId.slice(0, 8).toUpperCase() : null;
+  return (
+    <div>
+      <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:shortVerdict ? 4 : 0 }}>
+        <span style={{ fontSize:11, padding:"2px 8px", borderRadius:8, background:"#05966918", color:"#059669", fontWeight:700 }}>
+          ✅ Report Ready
+        </span>
+        {shortId && (
+          <span style={{ fontSize:10, color:txt2 }}>#{shortId}</span>
+        )}
+      </div>
+      {shortVerdict && <div style={{ fontSize:12, color:txt2, lineHeight:1.5 }}>{shortVerdict}</div>}
+    </div>
+  );
 }
 
 // ── Full view components ────────────────────────────
@@ -2093,37 +2108,70 @@ function FullKeywordsView({ kw, bg2, bg3, bdr, txt, txt2 }) {
 }
 
 function FullCompetitorView({ comp, bg2, bg3, bdr, txt, txt2 }) {
-  const [tab, setTab] = useState("gaps"); // gaps | keywords | competitors
+  const [tab, setTab]   = useState("competitors");
+  const [openComp, setOpenComp] = useState(null);
   const opp = { not_ranking:"#DC2626", top_3:"#059669", page_1:"#D97706", below_fold:"#6B7280", ranking_well:"#059669" };
+  const threat = { high:"#DC2626", medium:"#D97706", low:"#059669" };
 
-  const quickWins   = comp.analysis?.quickWins   || [];
-  const contentGaps = comp.analysis?.contentGaps || [];
-  const competitors = comp.analysis?.topCompetitors || [];
-  const rankMatrix  = comp.rankingMatrix || [];
-  const notRanking  = rankMatrix.filter(r => r.opportunity === "not_ranking");
-  const ranking     = rankMatrix.filter(r => r.opportunity !== "not_ranking");
+  const quickWins           = comp.analysis?.quickWins           || [];
+  const contentGaps         = comp.analysis?.contentGaps         || [];
+  const topCompetitors      = comp.analysis?.topCompetitors      || [];
+  const keywordOpportunities= comp.analysis?.keywordOpportunities|| [];
+  const discoveredComps     = comp.discoveredCompetitors         || [];
+  const rankMatrix          = comp.rankingMatrix                 || [];
+  const notRanking          = rankMatrix.filter(r => r.opportunity === "not_ranking");
+  const ranking             = rankMatrix.filter(r => r.opportunity !== "not_ranking");
+
+  // Merge crawl profiles with AI analysis
+  const mergedCompetitors = discoveredComps.map(dc => {
+    const ai = topCompetitors.find(t => t.domain === dc.domain) || {};
+    return { ...dc, ...ai };
+  });
+  // If A4 was run with manual competitors (no crawl data), fall back to AI topCompetitors
+  const displayCompetitors = mergedCompetitors.length > 0 ? mergedCompetitors : topCompetitors;
+
+  const tabs = [
+    { id:"competitors", label:`Competitors (${displayCompetitors.length || comp.summary?.competitorsAnalysed || 0})` },
+    { id:"gaps",        label:`Quick Wins (${quickWins.length})` },
+    { id:"content",     label:`Content Gaps (${contentGaps.length})` },
+    { id:"keywords",    label:`Keyword Status (${rankMatrix.length})` },
+    ...(keywordOpportunities.length > 0 ? [{ id:"opportunities", label:`Opportunities (${keywordOpportunities.length})` }] : []),
+  ];
 
   return (
     <div>
-      {/* Context banner — explains what this data means */}
+      {/* Context banner */}
       <div style={{ background:"#443DCB0d", border:"1px solid #443DCB22", borderRadius:10, padding:"12px 16px", marginBottom:16 }}>
-        <div style={{ fontSize:12, fontWeight:700, color:"#443DCB", marginBottom:4 }}>What this analysis means</div>
-        <div style={{ fontSize:12, color:txt2, lineHeight:1.6 }}>
-          AI compared your website against top competitors for your target keywords. Keywords you don't rank for are opportunities — your competitors are getting that traffic instead.
-          {!comp.analysis?.serpDataUsed && <span style={{ color:"#D97706" }}> Add a SerpAPI key in Settings for real live competitor positions.</span>}
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
+          <div>
+            <div style={{ fontSize:12, fontWeight:700, color:"#443DCB", marginBottom:4 }}>
+              {comp.autoDiscovered ? "🔍 Competitors Auto-Discovered from SERP" : "📋 Competitor Analysis"}
+            </div>
+            <div style={{ fontSize:12, color:txt2, lineHeight:1.6 }}>
+              {comp.autoDiscovered
+                ? `No competitor list was provided — ${displayCompetitors.length} competitors were automatically discovered by scanning your target keywords in search results. Their pages were crawled for real SEO factors.`
+                : "AI compared your website against your provided competitors across target keywords."}
+            </div>
+          </div>
+          {comp.autoDiscovered && (
+            <span style={{ fontSize:10, padding:"3px 10px", borderRadius:8, background:"#443DCB18", color:"#443DCB", fontWeight:700, whiteSpace:"nowrap", marginLeft:12 }}>
+              AUTO-DISCOVERED
+            </span>
+          )}
         </div>
       </div>
 
       {/* Summary stats */}
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:10, marginBottom:16 }}>
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:10, marginBottom:16 }}>
         {[
-          { l:"Not Ranking",    v: comp.summary?.notRanking     || notRanking.length, c:"#DC2626", desc:"keywords where you're invisible" },
-          { l:"In Top 3",       v: comp.summary?.rankingTop3    || ranking.filter(r=>r.opportunity==="top_3").length, c:"#059669", desc:"keywords you dominate" },
-          { l:"Content Gaps",   v: comp.summary?.contentGapsFound || contentGaps.length, c:"#D97706", desc:"topics competitors cover, you don't" },
-          { l:"Quick Wins",     v: quickWins.length,             c:"#443DCB", desc:"easy keywords to target now" },
+          { l:"Competitors",    v: comp.summary?.competitorsAnalysed || displayCompetitors.length, c:"#443DCB", desc:"analysed from SERP" },
+          { l:"Not Ranking",    v: comp.summary?.notRanking || notRanking.length,    c:"#DC2626", desc:"keywords you're invisible for" },
+          { l:"In Top 3",       v: comp.summary?.rankingTop3 || ranking.filter(r=>r.opportunity==="top_3").length, c:"#059669", desc:"keywords you dominate" },
+          { l:"Content Gaps",   v: comp.summary?.contentGapsFound || contentGaps.length, c:"#D97706", desc:"topics competitors cover" },
+          { l:"Quick Wins",     v: comp.summary?.quickWinsFound || quickWins.length, c:"#0891B2", desc:"easy wins available now" },
         ].map(i=>(
-          <div key={i.l} style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, padding:"12px 14px", textAlign:"center", borderTop:`3px solid ${i.c}` }}>
-            <div style={{ fontSize:24, fontWeight:800, color:i.c }}>{i.v}</div>
+          <div key={i.l} style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, padding:"12px 10px", textAlign:"center", borderTop:`3px solid ${i.c}` }}>
+            <div style={{ fontSize:22, fontWeight:800, color:i.c }}>{i.v}</div>
             <div style={{ fontSize:11, color:txt, fontWeight:600 }}>{i.l}</div>
             <div style={{ fontSize:10, color:txt2, marginTop:2 }}>{i.desc}</div>
           </div>
@@ -2138,72 +2186,275 @@ function FullCompetitorView({ comp, bg2, bg3, bdr, txt, txt2 }) {
       )}
 
       {/* Tabs */}
-      <div style={{ display:"flex", gap:8, marginBottom:14 }}>
-        {[
-          { id:"gaps",        label:`Quick Wins (${quickWins.length})` },
-          { id:"content",     label:`Content Gaps (${contentGaps.length})` },
-          { id:"keywords",    label:`Keyword Status (${rankMatrix.length})` },
-        ].map(t => (
+      <div style={{ display:"flex", gap:8, marginBottom:14, flexWrap:"wrap" }}>
+        {tabs.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)} style={{ padding:"6px 14px", borderRadius:8, fontSize:12, fontWeight:600, cursor:"pointer", border:`1px solid ${tab===t.id?"#443DCB":bdr}`, background:tab===t.id?"#443DCB":"transparent", color:tab===t.id?"#fff":txt2 }}>{t.label}</button>
         ))}
       </div>
 
-      {/* Quick Wins tab */}
+      {/* ── Competitors Tab ── */}
+      {tab === "competitors" && (
+        <div>
+          {displayCompetitors.length === 0 && (
+            <div style={{ padding:32, textAlign:"center", background:bg2, border:`1px solid ${bdr}`, borderRadius:10, color:txt2, fontSize:12 }}>
+              No competitor data yet. Re-run A4 to auto-discover competitors from SERP.
+            </div>
+          )}
+          {displayCompetitors.map((c, i) => {
+            const isOpen = openComp === i;
+            const crawl  = c.crawl || null;
+            const tc     = threat[c.threat] || "#6B7280";
+            return (
+              <div key={i} style={{ background:bg2, border:`1px solid ${isOpen ? "#443DCB" : bdr}`, borderRadius:10, marginBottom:10, overflow:"hidden" }}>
+                {/* Header row */}
+                <div onClick={() => setOpenComp(isOpen ? null : i)}
+                  style={{ padding:"14px 16px", cursor:"pointer", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+                    <div style={{ width:36, height:36, borderRadius:8, background:`${tc}18`, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                      <span style={{ fontSize:14, fontWeight:800, color:tc }}>{(c.domain||"?")[0].toUpperCase()}</span>
+                    </div>
+                    <div>
+                      <div style={{ fontSize:13, fontWeight:700, color:txt }}>{c.domain}</div>
+                      <div style={{ display:"flex", gap:8, marginTop:3 }}>
+                        {c.serpCount != null && (
+                          <span style={{ fontSize:10, color:txt2 }}>Appeared {c.serpCount}× in SERP</span>
+                        )}
+                        {c.avgPosition != null && (
+                          <span style={{ fontSize:10, color:"#443DCB", fontWeight:600 }}>Avg position #{c.avgPosition}</span>
+                        )}
+                        {crawl?.wordCount && (
+                          <span style={{ fontSize:10, color:txt2 }}>~{crawl.wordCount.toLocaleString()} words</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                    {c.threat && (
+                      <span style={{ fontSize:10, padding:"2px 10px", borderRadius:8, background:`${tc}18`, color:tc, fontWeight:700 }}>
+                        {c.threat?.toUpperCase()} THREAT
+                      </span>
+                    )}
+                    <span style={{ fontSize:12, color:txt2 }}>{isOpen ? "▲" : "▼"}</span>
+                  </div>
+                </div>
+
+                {/* Expanded detail */}
+                {isOpen && (
+                  <div style={{ borderTop:`1px solid ${bdr}`, background:bg3, padding:"16px" }}>
+
+                    {/* Real crawl data row */}
+                    {crawl && (
+                      <div style={{ marginBottom:14 }}>
+                        <div style={{ fontSize:10, fontWeight:700, color:txt2, textTransform:"uppercase", letterSpacing:1, marginBottom:8 }}>🔍 Real Page Data (crawled)</div>
+                        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))", gap:8 }}>
+                          {crawl.title && (
+                            <div style={{ background:bg2, borderRadius:8, padding:"8px 10px" }}>
+                              <div style={{ fontSize:9, color:txt2, fontWeight:700, textTransform:"uppercase", marginBottom:3 }}>Title ({crawl.titleLen} chars)</div>
+                              <div style={{ fontSize:11, color:crawl.titleLen >= 30 && crawl.titleLen <= 70 ? "#059669" : "#D97706" }}>{crawl.title}</div>
+                            </div>
+                          )}
+                          {crawl.meta && (
+                            <div style={{ background:bg2, borderRadius:8, padding:"8px 10px" }}>
+                              <div style={{ fontSize:9, color:txt2, fontWeight:700, textTransform:"uppercase", marginBottom:3 }}>Meta ({crawl.metaLen} chars)</div>
+                              <div style={{ fontSize:11, color:txt2 }}>{crawl.meta}</div>
+                            </div>
+                          )}
+                          {crawl.h1 && (
+                            <div style={{ background:bg2, borderRadius:8, padding:"8px 10px" }}>
+                              <div style={{ fontSize:9, color:txt2, fontWeight:700, textTransform:"uppercase", marginBottom:3 }}>H1</div>
+                              <div style={{ fontSize:11, color:txt }}>{crawl.h1}</div>
+                            </div>
+                          )}
+                        </div>
+                        {crawl.h2s?.length > 0 && (
+                          <div style={{ marginTop:8 }}>
+                            <div style={{ fontSize:9, color:txt2, fontWeight:700, textTransform:"uppercase", marginBottom:4 }}>H2 Subheadings</div>
+                            <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+                              {crawl.h2s.map((h,j) => (
+                                <span key={j} style={{ fontSize:10, padding:"2px 10px", borderRadius:8, background:`${bg2}`, border:`1px solid ${bdr}`, color:txt2 }}>{h}</span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        <div style={{ display:"flex", gap:10, marginTop:8, flexWrap:"wrap" }}>
+                          <span style={{ fontSize:10, padding:"2px 8px", borderRadius:6, background: crawl.isHttps?"#05966918":"#DC262618", color: crawl.isHttps?"#059669":"#DC2626", fontWeight:600 }}>
+                            {crawl.isHttps ? "✅ HTTPS" : "❌ HTTP"}
+                          </span>
+                          <span style={{ fontSize:10, padding:"2px 8px", borderRadius:6, background: crawl.hasCanonical?"#05966918":"#D9770618", color: crawl.hasCanonical?"#059669":"#D97706", fontWeight:600 }}>
+                            {crawl.hasCanonical ? "✅ Canonical" : "⚠️ No Canonical"}
+                          </span>
+                          <span style={{ fontSize:10, padding:"2px 8px", borderRadius:6, background: crawl.hasOG?"#05966918":"#D9770618", color: crawl.hasOG?"#059669":"#D97706", fontWeight:600 }}>
+                            {crawl.hasOG ? "✅ OG Tags" : "⚠️ No OG Tags"}
+                          </span>
+                          {crawl.schemaTypes?.length > 0 && (
+                            <span style={{ fontSize:10, padding:"2px 8px", borderRadius:6, background:"#443DCB18", color:"#443DCB", fontWeight:600 }}>
+                              Schema: {crawl.schemaTypes.join(", ")}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* AI analysis */}
+                    {(c.strengths?.length > 0 || c.weaknesses?.length > 0 || c.contentFocus || c.keyTakeaway) && (
+                      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:12 }}>
+                        {c.strengths?.length > 0 && (
+                          <div>
+                            <div style={{ fontSize:10, fontWeight:700, color:"#DC2626", textTransform:"uppercase", marginBottom:6 }}>⚠️ Their Strengths</div>
+                            {c.strengths.map((s,j) => <div key={j} style={{ fontSize:11, color:txt2, padding:"3px 0", borderBottom:`1px solid ${bdr}` }}>• {s}</div>)}
+                          </div>
+                        )}
+                        {c.weaknesses?.length > 0 && (
+                          <div>
+                            <div style={{ fontSize:10, fontWeight:700, color:"#059669", textTransform:"uppercase", marginBottom:6 }}>✅ Their Weaknesses (your opportunity)</div>
+                            {c.weaknesses.map((w,j) => <div key={j} style={{ fontSize:11, color:txt2, padding:"3px 0", borderBottom:`1px solid ${bdr}` }}>• {w}</div>)}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {c.seoTechnique && (
+                      <div style={{ fontSize:11, color:txt2, marginBottom:6 }}>
+                        <span style={{ fontWeight:700, color:txt }}>SEO Approach: </span>{c.seoTechnique}
+                      </div>
+                    )}
+                    {c.titleStrategy && (
+                      <div style={{ fontSize:11, color:txt2, marginBottom:6 }}>
+                        <span style={{ fontWeight:700, color:txt }}>Title Strategy: </span>{c.titleStrategy}
+                      </div>
+                    )}
+                    {c.keyTakeaway && (
+                      <div style={{ background:"#443DCB0d", border:"1px solid #443DCB22", borderRadius:8, padding:"8px 12px", marginTop:8, fontSize:12, color:"#443DCB", fontWeight:600 }}>
+                        💡 Key Takeaway: {c.keyTakeaway}
+                      </div>
+                    )}
+
+                    {/* Keyword positions for this competitor */}
+                    {rankMatrix.filter(r => r.competitors?.some(cp => cp.competitor === c.domain && cp.position)).length > 0 && (
+                      <div style={{ marginTop:12 }}>
+                        <div style={{ fontSize:10, fontWeight:700, color:txt2, textTransform:"uppercase", marginBottom:6 }}>Keyword Positions vs You</div>
+                        <div style={{ background:bg2, borderRadius:8, overflow:"hidden" }}>
+                          <div style={{ display:"grid", gridTemplateColumns:"2fr 100px 100px", padding:"6px 10px", background:bg3, fontSize:9, fontWeight:700, color:txt2, textTransform:"uppercase" }}>
+                            <span>KEYWORD</span><span style={{ textAlign:"center" }}>YOU</span><span style={{ textAlign:"center" }}>THEM</span>
+                          </div>
+                          {rankMatrix.slice(0,8).map((r,j) => {
+                            const cp = r.competitors?.find(cp => cp.competitor === c.domain);
+                            return (
+                              <div key={j} style={{ display:"grid", gridTemplateColumns:"2fr 100px 100px", padding:"7px 10px", borderBottom:`1px solid ${bdr}`, alignItems:"center", background: j%2===0?bg2:bg3 }}>
+                                <span style={{ fontSize:11, color:txt }}>{r.keyword}</span>
+                                <span style={{ textAlign:"center", fontSize:11, fontWeight:700, color: r.clientRank?"#443DCB":"#DC2626" }}>{r.clientRank?`#${r.clientRank}`:"NR"}</span>
+                                <span style={{ textAlign:"center", fontSize:11, fontWeight:700, color: cp?.position?"#D97706":"#6B7280" }}>{cp?.position?`#${cp.position}`:"NR"}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ── Quick Wins tab ── */}
       {tab === "gaps" && (
         <div>
-          {quickWins.length === 0 && <div style={{ padding:24, textAlign:"center", color:txt2, fontSize:12 }}>No quick wins detected — add SerpAPI key for live competitor data</div>}
+          {quickWins.length === 0 && (
+            <div style={{ padding:32, textAlign:"center", background:bg2, border:`1px solid ${bdr}`, borderRadius:10, color:txt2, fontSize:12 }}>
+              No quick wins detected yet. Run A4 to analyse competitors and discover opportunities.
+            </div>
+          )}
           {quickWins.map((w, i) => (
             <div key={i} style={{ background:bg2, border:`1px solid ${bdr}`, borderLeft:"4px solid #059669", borderRadius:10, padding:"12px 16px", marginBottom:10 }}>
-              <div style={{ display:"flex", gap:8, marginBottom:6 }}>
+              <div style={{ display:"flex", justifyContent:"space-between", marginBottom:6 }}>
                 <span style={{ fontSize:10, padding:"2px 8px", borderRadius:8, background:"#05966918", color:"#059669", fontWeight:700 }}>Quick Win #{i+1}</span>
+                {w.effort && <span style={{ fontSize:10, padding:"2px 8px", borderRadius:8, background:w.effort==="low"?"#05966918":w.effort==="medium"?"#D9770618":"#DC262618", color:w.effort==="low"?"#059669":w.effort==="medium"?"#D97706":"#DC2626", fontWeight:600 }}>{w.effort} effort</span>}
               </div>
               <div style={{ fontSize:13, fontWeight:700, color:txt, marginBottom:4 }}>{w.action}</div>
               <div style={{ fontSize:12, color:txt2, marginBottom:6 }}>Target keyword: <strong style={{ color:"#443DCB" }}>{w.keyword}</strong></div>
-              {w.expectedOutcome && <div style={{ fontSize:11, color:"#059669" }}>Expected: {w.expectedOutcome}</div>}
+              {w.expectedOutcome && <div style={{ fontSize:11, color:"#059669" }}>→ Expected: {w.expectedOutcome}</div>}
             </div>
           ))}
         </div>
       )}
 
-      {/* Content Gaps tab */}
+      {/* ── Content Gaps tab ── */}
       {tab === "content" && (
         <div>
-          {contentGaps.length === 0 && <div style={{ padding:24, textAlign:"center", color:txt2, fontSize:12 }}>No content gaps found</div>}
+          {contentGaps.length === 0 && (
+            <div style={{ padding:32, textAlign:"center", background:bg2, border:`1px solid ${bdr}`, borderRadius:10, color:txt2, fontSize:12 }}>
+              No content gaps found.
+            </div>
+          )}
           {contentGaps.map((g, i) => (
             <div key={i} style={{ background:bg2, border:`1px solid ${bdr}`, borderLeft:"4px solid #D97706", borderRadius:10, padding:"12px 16px", marginBottom:10 }}>
-              <div style={{ fontSize:13, fontWeight:700, color:txt, marginBottom:4 }}>{g.topic}</div>
-              <div style={{ fontSize:12, color:txt2, marginBottom:4 }}>{g.description || "Your competitors rank for this topic. You have no page for it."}</div>
-              {g.recommendedAction && <div style={{ fontSize:11, color:"#D97706", fontWeight:600 }}>→ {g.recommendedAction}</div>}
+              <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
+                <div style={{ fontSize:13, fontWeight:700, color:txt }}>{g.topic}</div>
+                {g.estimatedDifficulty && (
+                  <span style={{ fontSize:10, padding:"2px 8px", borderRadius:8, background:g.estimatedDifficulty==="low"?"#05966918":g.estimatedDifficulty==="medium"?"#D9770618":"#DC262618", color:g.estimatedDifficulty==="low"?"#059669":g.estimatedDifficulty==="medium"?"#D97706":"#DC2626", fontWeight:600 }}>{g.estimatedDifficulty} difficulty</span>
+                )}
+              </div>
+              <div style={{ fontSize:12, color:txt2, marginBottom:6 }}>{g.description || "Your competitors rank for this topic. You have no page for it."}</div>
+              {g.competitorsCovering?.length > 0 && (
+                <div style={{ fontSize:11, color:txt2, marginBottom:4 }}>Covered by: {g.competitorsCovering.join(", ")}</div>
+              )}
+              {g.recommendedAction && (
+                <div style={{ fontSize:11, color:"#D97706", fontWeight:600 }}>→ {g.recommendedAction}</div>
+              )}
             </div>
           ))}
-          {contentGaps.length === 0 && comp.analysis?.strategicSummary && (
-            <div style={{ padding:16, background:bg2, border:`1px solid ${bdr}`, borderRadius:10, fontSize:12, color:txt2 }}>
-              Based on the strategic analysis, create content around your key service areas and target location keywords to fill gaps.
+        </div>
+      )}
+
+      {/* ── Keyword Status tab ── */}
+      {tab === "keywords" && (
+        <div>
+          {rankMatrix.length === 0 && (
+            <div style={{ padding:32, textAlign:"center", background:bg2, border:`1px solid ${bdr}`, borderRadius:10, color:txt2, fontSize:12 }}>
+              No keyword ranking data yet. A4 uses free SERP data — re-run to get positions.
+            </div>
+          )}
+          {rankMatrix.length > 0 && (
+            <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, overflow:"hidden" }}>
+              <div style={{ display:"grid", gridTemplateColumns:"2fr 110px 110px 1fr", padding:"8px 14px", background:bg3, borderBottom:`1px solid ${bdr}`, fontSize:10, fontWeight:700, color:txt2, textTransform:"uppercase" }}>
+                <span>KEYWORD</span>
+                <span style={{ textAlign:"center" }}>YOUR RANK</span>
+                <span style={{ textAlign:"center" }}>STATUS</span>
+                <span>TOP RESULT</span>
+              </div>
+              {rankMatrix.slice(0,20).map((r, i) => (
+                <div key={i} style={{ display:"grid", gridTemplateColumns:"2fr 110px 110px 1fr", padding:"10px 14px", borderBottom:`1px solid ${bdr}`, alignItems:"center", background: i%2===0?bg2:bg3 }}>
+                  <span style={{ fontSize:12, color:txt, fontWeight:500 }}>{r.keyword}</span>
+                  <span style={{ textAlign:"center", fontSize:12, fontWeight:700, color: r.clientRank ? "#443DCB" : "#DC2626" }}>
+                    {r.clientRank ? `#${r.clientRank}` : "Not ranking"}
+                  </span>
+                  <span style={{ textAlign:"center" }}>
+                    <span style={{ fontSize:10, padding:"2px 8px", borderRadius:8, background:`${opp[r.opportunity]||"#6B7280"}18`, color:opp[r.opportunity]||"#6B7280", fontWeight:600 }}>
+                      {(r.opportunity||"unknown").replace(/_/g," ")}
+                    </span>
+                  </span>
+                  <span style={{ fontSize:10, color:txt2, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                    {r.topResult?.domain || "—"}
+                  </span>
+                </div>
+              ))}
             </div>
           )}
         </div>
       )}
 
-      {/* Keyword Status tab */}
-      {tab === "keywords" && (
+      {/* ── Keyword Opportunities tab ── */}
+      {tab === "opportunities" && (
         <div>
-          {rankMatrix.length === 0 && <div style={{ padding:24, textAlign:"center", color:txt2, fontSize:12 }}>No keyword ranking data. Add SerpAPI key in Settings for live positions.</div>}
-          <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, overflow:"hidden" }}>
-            <div style={{ display:"grid", gridTemplateColumns:"2fr 120px 120px", padding:"8px 14px", background:bg3, borderBottom:`1px solid ${bdr}`, fontSize:10, fontWeight:700, color:txt2 }}>
-              <span>KEYWORD</span><span style={{ textAlign:"center" }}>YOUR POSITION</span><span style={{ textAlign:"center" }}>STATUS</span>
+          {keywordOpportunities.map((o, i) => (
+            <div key={i} style={{ background:bg2, border:`1px solid ${bdr}`, borderLeft:"4px solid #443DCB", borderRadius:10, padding:"12px 16px", marginBottom:10 }}>
+              <div style={{ fontSize:13, fontWeight:700, color:txt, marginBottom:4 }}>{o.keyword}</div>
+              <div style={{ fontSize:12, color:txt2, marginBottom:4 }}>{o.reason}</div>
+              {o.currentLeader && <div style={{ fontSize:11, color:txt2 }}>Currently led by: <strong>{o.currentLeader}</strong></div>}
+              {o.approach && <div style={{ fontSize:11, color:"#443DCB", fontWeight:600, marginTop:4 }}>→ {o.approach}</div>}
             </div>
-            {rankMatrix.slice(0,20).map((r, i) => (
-              <div key={i} style={{ display:"grid", gridTemplateColumns:"2fr 120px 120px", padding:"10px 14px", borderBottom:`1px solid ${bdr}`, alignItems:"center", background: i%2===0?bg2:bg3 }}>
-                <span style={{ fontSize:12, color:txt, fontWeight:500 }}>{r.keyword}</span>
-                <span style={{ textAlign:"center", fontSize:12, fontWeight:700, color: r.clientRank ? "#443DCB" : "#DC2626" }}>{r.clientRank ? `#${r.clientRank}` : "Not ranking"}</span>
-                <span style={{ textAlign:"center" }}>
-                  <span style={{ fontSize:10, padding:"2px 8px", borderRadius:8, background:`${opp[r.opportunity]||"#6B7280"}18`, color:opp[r.opportunity]||"#6B7280", fontWeight:600 }}>
-                    {(r.opportunity||"unknown").replace(/_/g," ")}
-                  </span>
-                </span>
-              </div>
-            ))}
-          </div>
+          ))}
         </div>
       )}
     </div>
@@ -2838,6 +3089,16 @@ function FullReportView({ report, bg2, bg3, bdr, txt, txt2 }) {
   const gsc = report.gscSummary;
   const statusColor = { green:"#059669", amber:"#D97706", red:"#DC2626" };
 
+  if (!report.reportData) {
+    return (
+      <div style={{ textAlign:"center", padding:"48px 24px", background:bg2, border:`1px solid ${bdr}`, borderRadius:14 }}>
+        <div style={{ fontSize:32, marginBottom:12 }}>📊</div>
+        <div style={{ fontSize:14, fontWeight:700, color:txt, marginBottom:6 }}>Report data not available</div>
+        <div style={{ fontSize:12, color:txt2 }}>Re-run A9 Monitoring to regenerate the report.</div>
+      </div>
+    );
+  }
+
   return (
     <div>
       {/* What this report is */}
@@ -2858,8 +3119,16 @@ function FullReportView({ report, bg2, bg3, bdr, txt, txt2 }) {
 
       {/* Approval Status Banner */}
       <div style={{ padding:"10px 14px", borderRadius:8, background:"#D9770611", border:"1px solid #D9770633", marginBottom:14, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-        <div style={{ fontSize:12, color:"#D97706" }}>⏳ Draft report — review before sending to client. Add your own observations and context.</div>
-        <div style={{ fontSize:10, color:txt2 }}>ID: {report.approvalId}</div>
+        <div>
+          <div style={{ fontSize:12, fontWeight:700, color:"#D97706", marginBottom:2 }}>⏳ Pending Review — Draft Report</div>
+          <div style={{ fontSize:11, color:txt2 }}>Review and add your observations before sending to the client.</div>
+        </div>
+        {report.approvalId && (
+          <div style={{ textAlign:"right" }}>
+            <div style={{ fontSize:10, color:txt2 }}>Approval Ref</div>
+            <div style={{ fontSize:11, fontWeight:700, color:txt, fontFamily:"monospace" }}>#{report.approvalId.slice(0,8).toUpperCase()}</div>
+          </div>
+        )}
       </div>
 
       {/* GSC Performance Card */}
@@ -2924,7 +3193,7 @@ function FullReportView({ report, bg2, bg3, bdr, txt, txt2 }) {
                     <td style={{ padding:"8px", color:txt2 }}>{row.vs}</td>
                     <td style={{ padding:"8px" }}>
                       <span style={{ fontSize:10, padding:"2px 8px", borderRadius:10, background:(statusColor[row.status]||"#6B7280")+"22", color:statusColor[row.status]||"#6B7280" }}>
-                        {row.status==="green"?"✅":row.status==="amber"?"⚠️":"❌"} {row.status}
+                        {row.status==="green"?"✅ On Track":row.status==="amber"?"⚠️ Warning":"❌ At Risk"}
                       </span>
                     </td>
                     <td style={{ padding:"8px", color:txt2, fontSize:10 }}>{row.notes}</td>
