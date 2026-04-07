@@ -115,7 +115,7 @@ function extractSignals({ brief, audit, keywords, competitor, onpage, technical,
   signals.hasContentGaps = signals.contentGaps > 2;
 
   // KPI selection
-  signals.kpi = brief?.kpiSelection || ["Organic Traffic Growth"];
+  signals.kpi = [].concat(brief?.kpiSelection || ["Organic Traffic Growth"]);
 
   return signals;
 }
@@ -125,8 +125,8 @@ function buildCMOPrompt(brief, signals) {
   return `You are the CMO Agent for an SEO AI platform. Your job is to analyse the signals below and decide the single most impactful next action for this client.
 
 Client: ${brief.businessName} (${brief.websiteUrl})
-Primary KPIs: ${(brief.kpiSelection || ["Organic Traffic Growth"]).join(", ")}
-Goals: ${(brief.goals || []).join(", ")}
+Primary KPIs: ${[].concat(brief.kpiSelection || ["Organic Traffic Growth"]).join(", ")}
+Goals: ${[].concat(brief.goals || []).join(", ")}
 
 ## Current SEO Signals
 - Technical health score: ${signals.healthPoor ? "POOR (<50)" : "OK"}
@@ -159,7 +159,7 @@ Return ONLY valid JSON:
 
 // ── Rule-based fallback ───────────────────────────
 function ruleBasedDecision(signals, brief) {
-  const kpi = (brief?.kpiSelection || ["Organic Traffic Growth"])[0];
+  const kpi = [].concat(brief?.kpiSelection || ["Organic Traffic Growth"])[0];
 
   if (signals.hasCriticalIssues || signals.healthPoor) {
     return {

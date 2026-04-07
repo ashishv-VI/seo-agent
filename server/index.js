@@ -193,20 +193,94 @@ setInterval(async () => {
         const keys = await getUserKeys(data.ownerId).catch(() => null);
         if (!keys) continue;
 
-        // Pull GSC data and store weekly snapshot
         const { getState } = require("./shared-state/stateManager");
         const brief = await getState(doc.id, "A1_brief").catch(() => null);
-        if (!brief) continue;
+        if (!brief?.websiteUrl) continue;
 
-        // Store weekly timestamp so we know last pull happened
-        await db.collection("weekly_pulls").add({
+        const weekLabel = `${now.getUTCFullYear()}-W${String(Math.ceil((now.getUTCDate() - now.getUTCDay() + 1) / 7)).padStart(2,"0")}`;
+        const gscToken  = keys?.gscToken || null;
+        const ga4Id     = keys?.gaPropertyId || null;
+
+        let gscData = null;
+        let ga4Data = null;
+
+        // ── Pull GSC data ─────────────────────────────────
+        if (gscToken && brief.websiteUrl) {
+          try {
+            const endDate   = new Date().toISOString().split("T")[0];
+            const startDate = new Date(Date.now() - 7*24*60*60*1000).toISOString().split("T")[0];
+            const gscUrl    = `https://searchconsole.googleapis.com/webmasters/v3/sites/${encodeURIComponent(brief.websiteUrl)}/searchAnalytics/query`;
+            const gscRes    = await fetch(gscUrl, {
+              method:  "POST",
+              headers: { "Content-Type": "application/json", Authorization: `Bearer ${gscToken}` },
+              body:    JSON.stringify({ startDate, endDate, dimensions: ["query","page"], rowLimit: 25 }),
+              signal:  AbortSignal.timeout(20000),
+            });
+            const gscJson = await gscRes.json();
+            if (gscJson.rows?.length) {
+              const rows = gscJson.rows;
+              gscData = {
+                totalClicks:   rows.reduce((s, r) => s + r.clicks, 0),
+                totalImpress:  rows.reduce((s, r) => s + r.impressions, 0),
+                avgCtr:        rows.length ? (rows.reduce((s,r) => s + r.ctr, 0) / rows.length) : 0,
+                avgPos:        rows.length ? (rows.reduce((s,r) => s + r.position, 0) / rows.length) : 0,
+                topKeywords:   rows.slice(0, 10).map(r => ({ keyword: r.keys[0], page: r.keys[1], clicks: r.clicks, position: parseFloat(r.position.toFixed(1)) })),
+                period:        `${startDate} → ${endDate}`,
+              };
+            }
+          } catch (e) { console.error(`[weekly-pull] GSC error for ${doc.id}:`, e.message); }
+        }
+
+        // ── Pull GA4 data ─────────────────────────────────
+        if (ga4Id && gscToken) {
+          try {
+            const endDate   = new Date().toISOString().split("T")[0];
+            const startDate = new Date(Date.now() - 7*24*60*60*1000).toISOString().split("T")[0];
+            const ga4Url    = `https://analyticsdata.googleapis.com/v1beta/properties/${ga4Id}:runReport`;
+            const ga4Res    = await fetch(ga4Url, {
+              method:  "POST",
+              headers: { "Content-Type": "application/json", Authorization: `Bearer ${gscToken}` },
+              body:    JSON.stringify({
+                dateRanges: [{ startDate, endDate }],
+                dimensions: [{ name: "sessionDefaultChannelGroup" }],
+                metrics: [
+                  { name: "sessions" },
+                  { name: "activeUsers" },
+                  { name: "bounceRate" },
+                  { name: "averageSessionDuration" },
+                ],
+              }),
+              signal: AbortSignal.timeout(20000),
+            });
+            const ga4Json = await ga4Res.json();
+            if (ga4Json.rows?.length) {
+              const organicRow = ga4Json.rows.find(r => (r.dimensionValues[0]?.value || "").toLowerCase().includes("organic"));
+              ga4Data = {
+                organicSessions:  organicRow ? parseInt(organicRow.metricValues[0]?.value || 0) : 0,
+                organicUsers:     organicRow ? parseInt(organicRow.metricValues[1]?.value || 0) : 0,
+                bounceRate:       organicRow ? parseFloat(organicRow.metricValues[2]?.value || 0) : 0,
+                avgSessionSec:    organicRow ? parseFloat(organicRow.metricValues[3]?.value || 0) : 0,
+                period:           `${startDate} → ${endDate}`,
+              };
+            }
+          } catch (e) { console.error(`[weekly-pull] GA4 error for ${doc.id}:`, e.message); }
+        }
+
+        // ── Store weekly snapshot ─────────────────────────
+        const snapDoc = {
           clientId:  doc.id,
           ownerId:   data.ownerId,
+          week:      weekLabel,
           pulledAt:  new Date().toISOString(),
-          week:      `${now.getUTCFullYear()}-W${String(Math.ceil((now.getUTCDate() - now.getUTCDay() + 1) / 7)).padStart(2,"0")}`,
-        });
+          gsc:       gscData,
+          ga4:       ga4Data,
+          hasData:   !!(gscData || ga4Data),
+        };
+        await db.collection("weekly_snapshots").doc(`${doc.id}_${weekLabel}`).set(snapDoc);
+        // Legacy compat: also write to weekly_pulls
+        await db.collection("weekly_pulls").add({ clientId: doc.id, ownerId: data.ownerId, pulledAt: snapDoc.pulledAt, week: weekLabel });
 
-        console.log(`[weekly-pull] Queued pull for ${data.name}`);
+        console.log(`[weekly-pull] Done for ${data.name} — GSC: ${gscData ? "ok" : "skip"}, GA4: ${ga4Data ? "ok" : "skip"}`);
       } catch { /* skip client */ }
     }
   } catch (err) {

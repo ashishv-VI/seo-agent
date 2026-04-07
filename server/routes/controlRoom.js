@@ -25,7 +25,7 @@ router.get("/:clientId/control-room", verifyToken, async (req, res) => {
     // Fetch all data in parallel — one failure should not crash the room
     const [
       brief, audit, report, keywords, competitor,
-      baseline, scoreHistory, latestScore, weeklyPulls,
+      baseline, scoreHistory, latestScore, weeklyPulls, reviewerData,
     ] = await Promise.all([
       getState(clientId, "A1_brief").catch(() => null),
       getState(clientId, "A2_audit").catch(() => null),
@@ -35,10 +35,11 @@ router.get("/:clientId/control-room", verifyToken, async (req, res) => {
       getState(clientId, "baseline").catch(() => null),
       getScoreHistory(clientId, 12).catch(() => []),
       getLatestScore(clientId).catch(() => null),
-      db.collection("weekly_pulls").where("clientId","==",clientId).orderBy && false
-        ? [] // skip if no composite index
-        : db.collection("weekly_pulls").where("clientId","==",clientId).limit(4).get()
-            .then(s => s.docs.map(d => d.data())).catch(() => []),
+      db.collection("weekly_snapshots").where("clientId","==",clientId).limit(4).get()
+        .then(s => s.docs.map(d => d.data()))
+        .catch(() => db.collection("weekly_pulls").where("clientId","==",clientId).limit(4).get()
+          .then(s => s.docs.map(d => d.data())).catch(() => [])),
+      getState(clientId, "A17_review").catch(() => null),
     ]);
 
     const clientDoc = await db.collection("clients").doc(clientId).get();
@@ -130,6 +131,11 @@ router.get("/:clientId/control-room", verifyToken, async (req, res) => {
       beforeAfter,
       competitorCount,
       weeklyPulls: Array.isArray(weeklyPulls) ? weeklyPulls.slice(0, 4) : [],
+      reviewerScore: reviewerData ? {
+        overallConfidence: reviewerData.overallConfidence,
+        grade:             reviewerData.grade,
+        lowConfidence:     (reviewerData.agentScores || []).filter(a => a.confidence < 0.6).map(a => a.agent),
+      } : null,
       lastUpdated: new Date().toISOString(),
     });
 

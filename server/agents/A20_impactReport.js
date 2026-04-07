@@ -60,7 +60,7 @@ async function buildImpactReport(clientId) {
   const gsc = report?.gscSummary || {};
 
   // ── ROI estimate ───────────────────────────────────
-  const avgOrderValue = parseFloat((brief.avgOrderValue || "0").replace(/[^0-9.]/g, "")) || 0;
+  const avgOrderValue = parseFloat(String(brief.avgOrderValue || "0").replace(/[^0-9.]/g, "")) || 0;
   const estMonthlyLeads = Math.round((gsc.totalClicks || 0) * 0.03);
   const estRevenue      = avgOrderValue > 0 ? Math.round(estMonthlyLeads * avgOrderValue) : null;
 

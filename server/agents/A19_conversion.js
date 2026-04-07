@@ -20,7 +20,7 @@ async function runA19(clientId, keys) {
   if (!brief) return { success: false, error: "No brief found — run A1 first" };
 
   const siteUrl = brief.websiteUrl;
-  const kpis    = brief.kpiSelection || ["Lead Generation"];
+  const kpis    = [].concat(brief.kpiSelection || ["Lead Generation"]);
 
   // ── Crawl homepage for CRO signals ─────────────────
   const croSignals = await crawlForCRO(siteUrl);
