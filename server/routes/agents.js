@@ -1615,4 +1615,143 @@ router.get("/:clientId/gtm-guide", verifyToken, async (req, res) => {
   }
 });
 
+// ────────────────────────────────────────────────────
+// SPRINT 6 — CMO DECISIONS (approval-queue style)
+// ────────────────────────────────────────────────────
+
+// GET all CMO decisions for client
+router.get("/:clientId/cmo-decisions", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const snap = await db.collection("cmo_queue")
+      .where("clientId", "==", req.params.clientId)
+      .limit(20)
+      .get();
+    const decisions = snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
+    return res.json({ decisions });
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
+// POST approve/reject a CMO decision (optionally trigger agents)
+router.post("/:clientId/cmo-decisions/:decisionId", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const { action } = req.body; // "approve" | "reject"
+    if (!["approve", "reject"].includes(action)) return res.status(400).json({ error: "action must be approve or reject" });
+
+    await db.collection("cmo_queue").doc(req.params.decisionId).update({
+      status:     action === "approve" ? "approved" : "rejected",
+      reviewedAt: new Date().toISOString(),
+      reviewedBy: req.uid,
+    });
+
+    // If approved, trigger the listed agents in the background
+    if (action === "approve") {
+      const decSnap  = await db.collection("cmo_queue").doc(req.params.decisionId).get();
+      const decision = decSnap.data() || {};
+      const agentsToRun = decision.nextAgents || [];
+
+      const RUNNABLE = {
+        A3: async (id, k) => { const { runA3 } = require("../agents/A3_keywords"); return runA3(id, k); },
+        A5: async (id, k) => { const { runA5 } = require("../agents/A5_content"); return runA5(id, k); },
+        A6: async (id, k) => { const { runA6 } = require("../agents/A6_onpage"); return runA6(id, k); },
+        A7: async (id, k) => { const { runA7 } = require("../agents/A7_technical"); return runA7(id, k); },
+        A11: async (id, k) => { const { runA11 } = require("../agents/A11_linkBuilder"); return runA11(id, k); },
+        A14: async (id, k) => { const { runA14 } = require("../agents/A14_contentAutopilot"); return runA14(id, k); },
+      };
+
+      const keys = await getUserKeys(req.uid);
+      for (const agentId of agentsToRun) {
+        const fn = RUNNABLE[agentId];
+        if (fn) {
+          fn(req.params.clientId, keys).then(result => {
+            console.log(`[cmo-decision] ${agentId} auto-triggered → ${result.success ? "ok" : result.error}`);
+          }).catch(e => {
+            console.error(`[cmo-decision] ${agentId} failed:`, e.message);
+          });
+        }
+      }
+    }
+
+    return res.json({ message: `Decision ${action}d`, triggeredAgents: action === "approve" ? (await db.collection("cmo_queue").doc(req.params.decisionId).get()).data()?.nextAgents || [] : [] });
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
+// ────────────────────────────────────────────────────
+// SPRINT 6 — FIX VERIFICATION HISTORY
+// ────────────────────────────────────────────────────
+
+// GET fix verification docs for a client — shows outcome of past fixes
+router.get("/:clientId/fix-verification", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const snap = await db.collection("fix_verification")
+      .where("clientId", "==", req.params.clientId)
+      .limit(50)
+      .get();
+    const fixes = snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => (b.pushedAt || "").localeCompare(a.pushedAt || ""));
+    const pending  = fixes.filter(f => f.status === "pending").length;
+    const improved = fixes.filter(f => f.outcome === "improved").length;
+    const degraded = fixes.filter(f => f.outcome === "degraded").length;
+    return res.json({ fixes, stats: { total: fixes.length, pending, improved, degraded, successRate: fixes.length > 0 ? Math.round(improved / (fixes.filter(f=>f.status==="checked").length||1) * 100) : null } });
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
+// ────────────────────────────────────────────────────
+// SPRINT 6 — A22 PREDICTIVE INTELLIGENCE
+// ────────────────────────────────────────────────────
+
+router.post("/:clientId/A22/run", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const { runA22 } = require("../agents/A22_predictive");
+    const keys = await getUserKeys(req.uid);
+    await db.collection("clients").doc(req.params.clientId).update({ "agents.A22": "running" });
+    const result = await runA22(req.params.clientId, keys);
+    await db.collection("clients").doc(req.params.clientId).update({ "agents.A22": result.success ? "complete" : "failed" });
+    return res.json(result);
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
+router.get("/:clientId/A22/forecast", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const data = await getState(req.params.clientId, "A22_predictive");
+    return res.json(data || {});
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
+// ────────────────────────────────────────────────────
+// SPRINT 6 — AUDIT PATTERNS (A2 site-wide patterns)
+// ────────────────────────────────────────────────────
+
+router.get("/:clientId/A2/patterns", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const data = await getState(req.params.clientId, "A2_patterns");
+    if (data) return res.json(data);
+
+    // If no cached patterns, compute live from subcollection
+    const { detectSitePatterns } = require("../utils/auditPatterns");
+    const patterns = await detectSitePatterns(req.params.clientId);
+    return res.json(patterns);
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
 module.exports = router;

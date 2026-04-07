@@ -82,17 +82,24 @@ function getImpact(type) {
 
 export default function ApprovalQueue({ dark, clientId }) {
   const { user, API } = useAuth();
-  const [items,       setItems]       = useState([]);
-  const [loading,     setLoading]     = useState(true);
-  const [acting,      setActing]      = useState(null);
-  const [expanded,    setExpanded]    = useState(null);   // item id for content expand
-  const [showOutcome, setShowOutcome] = useState({});      // itemId → bool: show "what happens next"
-  const [showStatus,  setShowStatus]  = useState(null);    // itemId for status explanation
-  const [revising,    setRevising]    = useState(null);
-  const [feedback,    setFeedback]    = useState({});
-  const [undoQueue,   setUndoQueue]   = useState({});      // itemId → countdown seconds
-  const [selected,    setSelected]    = useState(new Set()); // for batch approve
-  const [justApproved, setJustApproved] = useState({});    // itemId → outcome to show
+  const [items,        setItems]        = useState([]);
+  const [loading,      setLoading]      = useState(true);
+  const [acting,       setActing]       = useState(null);
+  const [expanded,     setExpanded]     = useState(null);
+  const [showOutcome,  setShowOutcome]  = useState({});
+  const [showStatus,   setShowStatus]   = useState(null);
+  const [revising,     setRevising]     = useState(null);
+  const [feedback,     setFeedback]     = useState({});
+  const [undoQueue,    setUndoQueue]    = useState({});
+  const [selected,     setSelected]     = useState(new Set());
+  const [justApproved, setJustApproved] = useState({});
+  // CMO decisions
+  const [decisions,    setDecisions]    = useState([]);
+  const [actingDec,    setActingDec]    = useState(null);
+  const [activeTab,    setActiveTab]    = useState("approvals"); // "approvals" | "cmo" | "verification"
+  // Fix verification
+  const [verifications, setVerifications] = useState([]);
+  const [verifyStats,   setVerifyStats]   = useState(null);
 
   const bg   = dark ? "#0a0a0a" : "#f5f5f0";
   const bg2  = dark ? "#111"    : "#ffffff";
@@ -107,11 +114,18 @@ export default function ApprovalQueue({ dark, clientId }) {
   async function load() {
     setLoading(true);
     const token = await getToken();
-    const res   = await fetch(`${API}/api/agents/${clientId}/approvals`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    const data = await res.json();
-    setItems(data.items || []);
+    const [appRes, decRes, verRes] = await Promise.all([
+      fetch(`${API}/api/agents/${clientId}/approvals`, { headers: { Authorization: `Bearer ${token}` } }),
+      fetch(`${API}/api/agents/${clientId}/cmo-decisions`, { headers: { Authorization: `Bearer ${token}` } }),
+      fetch(`${API}/api/agents/${clientId}/fix-verification`, { headers: { Authorization: `Bearer ${token}` } }),
+    ]);
+    const appData = await appRes.json();
+    const decData = await decRes.json().catch(() => ({}));
+    const verData = await verRes.json().catch(() => ({}));
+    setItems(appData.items || []);
+    setDecisions(decData.decisions || []);
+    setVerifications(verData.fixes || []);
+    setVerifyStats(verData.stats || null);
     setLoading(false);
   }
 
@@ -164,11 +178,26 @@ export default function ApprovalQueue({ dark, clientId }) {
     setActing(null);
   }
 
+  async function actOnDecision(decisionId, action) {
+    setActingDec(decisionId);
+    const token = await getToken();
+    await fetch(`${API}/api/agents/${clientId}/cmo-decisions/${decisionId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ action }),
+    });
+    await load();
+    setActingDec(null);
+  }
+
   const typeLabel = { homepage_optimisation: "Homepage Optimisation", new_page_brief: "New Page Brief", client_report: "Client Report" };
   const typeIcon  = { homepage_optimisation: "🏠", new_page_brief: "📄", client_report: "📊" };
 
   const pending  = items.filter(i => ["pending", "revision_requested"].includes(i.status));
   const reviewed = items.filter(i => !["pending", "revision_requested"].includes(i.status));
+
+  const pendingDecisions = decisions.filter(d => d.status === "pending");
+  const reviewedDecisions = decisions.filter(d => d.status !== "pending");
 
   if (loading) return <div style={{ padding: 24, color: txt3 }}>Loading approvals...</div>;
 
@@ -176,12 +205,194 @@ export default function ApprovalQueue({ dark, clientId }) {
     <div style={{ padding: 24, background: bg }}>
 
       {/* ── Header ────────────────────────────────────────── */}
-      <div style={{ marginBottom: 20 }}>
+      <div style={{ marginBottom: 16 }}>
         <div style={{ fontSize: 15, fontWeight: 700, color: txt, marginBottom: 4 }}>✅ Approval Queue</div>
         <div style={{ fontSize: 12, color: txt2 }}>
-          Review AI-generated changes before anything goes live on your website. Nothing deploys without your approval.
+          Review AI-generated changes, CMO strategic decisions, and verify past fix outcomes.
         </div>
       </div>
+
+      {/* ── Tabs ──────────────────────────────────────────── */}
+      <div style={{ display: "flex", gap: 4, marginBottom: 20, borderBottom: `1px solid ${bdr}`, paddingBottom: 0 }}>
+        {[
+          { id: "approvals",    label: `Content Approvals (${pending.length})` },
+          { id: "cmo",          label: `CMO Decisions (${pendingDecisions.length})` },
+          { id: "verification", label: `Fix Outcomes${verifyStats ? ` (${verifyStats.successRate ?? "?"}% success)` : ""}` },
+        ].map(t => (
+          <button key={t.id} onClick={() => setActiveTab(t.id)} style={{
+            padding: "8px 16px", border: "none", borderRadius: "8px 8px 0 0",
+            background: activeTab === t.id ? bg2 : "transparent",
+            color: activeTab === t.id ? B : txt2,
+            fontWeight: activeTab === t.id ? 700 : 400,
+            fontSize: 12, cursor: "pointer",
+            borderBottom: activeTab === t.id ? `2px solid ${B}` : "2px solid transparent",
+          }}>{t.label}</button>
+        ))}
+      </div>
+
+      {/* ════════════════════════════════════════════════════
+          TAB: CMO DECISIONS
+          ════════════════════════════════════════════════════ */}
+      {activeTab === "cmo" && (
+        <div>
+          {pendingDecisions.length === 0 && reviewedDecisions.length === 0 && (
+            <div style={{ textAlign: "center", padding: 48, background: bg2, border: `1px solid ${bdr}`, borderRadius: 12 }}>
+              <div style={{ fontSize: 36, marginBottom: 12 }}>🧠</div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: txt, marginBottom: 8 }}>No CMO decisions yet</div>
+              <div style={{ fontSize: 12, color: txt2 }}>Run the CMO Agent from the Pipeline tab to generate strategic decisions.</div>
+            </div>
+          )}
+
+          {pendingDecisions.length > 0 && (
+            <>
+              <div style={{ fontSize: 11, fontWeight: 700, color: "#D97706", marginBottom: 12, textTransform: "uppercase", letterSpacing: 1 }}>
+                Awaiting Your Approval ({pendingDecisions.length})
+              </div>
+              {pendingDecisions.map(dec => (
+                <div key={dec.id} style={{ background: bg2, border: `1px solid ${bdr}`, borderLeft: `4px solid ${B}`, borderRadius: 12, padding: 20, marginBottom: 14 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: txt, marginBottom: 6 }}>🧠 {dec.decision}</div>
+                      <div style={{ fontSize: 11, color: txt2, lineHeight: 1.6, marginBottom: 10 }}>{dec.reasoning}</div>
+                    </div>
+                    <div style={{ fontSize: 11, padding: "3px 10px", borderRadius: 10, background: `${B}18`, color: B, fontWeight: 700, flexShrink: 0, marginLeft: 12 }}>
+                      {Math.round((dec.confidence || 0) * 100)}% confidence
+                    </div>
+                  </div>
+
+                  {/* Agents to trigger */}
+                  {(dec.nextAgents || []).length > 0 && (
+                    <div style={{ marginBottom: 12 }}>
+                      <div style={{ fontSize: 10, color: txt2, fontWeight: 700, marginBottom: 6 }}>WILL TRIGGER</div>
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                        {dec.nextAgents.map(a => (
+                          <span key={a} style={{ fontSize: 11, padding: "3px 10px", background: "#05966918", color: "#059669", borderRadius: 8, fontWeight: 700 }}>{a}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* KPI impact */}
+                  {(dec.kpiImpact || []).map((k, i) => (
+                    <div key={i} style={{ fontSize: 11, color: txt2, padding: "6px 10px", background: bg3, borderRadius: 8, marginBottom: 6, borderLeft: `3px solid ${B}` }}>
+                      <span style={{ color: B, fontWeight: 700 }}>{k.kpi}: </span>
+                      <span style={{ color: "#059669", fontWeight: 700 }}>{k.expectedLift}</span>
+                      {k.mechanism && <span> — {k.mechanism}</span>}
+                    </div>
+                  ))}
+
+                  <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                    <button onClick={() => actOnDecision(dec.id, "reject")} disabled={actingDec === dec.id}
+                      style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: "#DC2626", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                      ❌ Reject
+                    </button>
+                    <button onClick={() => actOnDecision(dec.id, "approve")} disabled={actingDec === dec.id}
+                      style={{ padding: "8px 20px", borderRadius: 8, border: "none", background: "linear-gradient(135deg,#059669,#047857)", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer", boxShadow: "0 2px 8px #05966944" }}>
+                      {actingDec === dec.id ? "⏳ Triggering..." : "✅ Approve & Run Agents"}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
+
+          {reviewedDecisions.length > 0 && (
+            <>
+              <div style={{ fontSize: 11, fontWeight: 700, color: txt2, marginBottom: 12, marginTop: 28, textTransform: "uppercase", letterSpacing: 1 }}>
+                Past Decisions ({reviewedDecisions.length})
+              </div>
+              {reviewedDecisions.map(dec => (
+                <div key={dec.id} style={{ background: bg2, border: `1px solid ${bdr}`, borderLeft: `4px solid ${dec.status === "approved" ? "#059669" : "#DC2626"}`, borderRadius: 10, padding: 14, marginBottom: 8 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div style={{ fontSize: 12, color: txt, fontWeight: 600 }}>{dec.decision}</div>
+                    <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 8, background: dec.status === "approved" ? "#05966918" : "#DC262618", color: dec.status === "approved" ? "#059669" : "#DC2626", fontWeight: 700 }}>
+                      {dec.status === "approved" ? "✅ Approved" : "❌ Rejected"}
+                    </span>
+                  </div>
+                  {(dec.nextAgents || []).length > 0 && dec.status === "approved" && (
+                    <div style={{ fontSize: 11, color: txt2, marginTop: 4 }}>Triggered: {dec.nextAgents.join(", ")}</div>
+                  )}
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ════════════════════════════════════════════════════
+          TAB: FIX VERIFICATION OUTCOMES
+          ════════════════════════════════════════════════════ */}
+      {activeTab === "verification" && (
+        <div>
+          {/* Stats bar */}
+          {verifyStats && verifyStats.total > 0 && (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 20 }}>
+              {[
+                { label: "Total Fixes Tracked", value: verifyStats.total, color: txt },
+                { label: "Pending Check (21d)", value: verifyStats.pending, color: "#D97706" },
+                { label: "Confirmed Improved", value: verifyStats.improved, color: "#059669" },
+                { label: "Success Rate",        value: verifyStats.successRate != null ? `${verifyStats.successRate}%` : "—", color: B },
+              ].map(s => (
+                <div key={s.label} style={{ background: bg2, border: `1px solid ${bdr}`, borderRadius: 10, padding: "12px 14px" }}>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: s.color }}>{s.value}</div>
+                  <div style={{ fontSize: 10, color: txt2, marginTop: 2 }}>{s.label}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {verifications.length === 0 && (
+            <div style={{ textAlign: "center", padding: 48, background: bg2, border: `1px solid ${bdr}`, borderRadius: 12 }}>
+              <div style={{ fontSize: 36, marginBottom: 12 }}>🔬</div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: txt, marginBottom: 8 }}>No fixes tracked yet</div>
+              <div style={{ fontSize: 12, color: txt2 }}>When fixes are pushed to WordPress via A13, they are automatically queued for a 21-day outcome check. Results appear here.</div>
+            </div>
+          )}
+
+          {verifications.map(fix => {
+            const outcomeColor = fix.outcome === "improved" ? "#059669" : fix.outcome === "degraded" ? "#DC2626" : fix.outcome === "no_change" ? "#D97706" : txt2;
+            const outcomeIcon  = fix.outcome === "improved" ? "📈" : fix.outcome === "degraded" ? "📉" : fix.outcome === "no_change" ? "➡️" : "⏳";
+            const outcomeLabel = fix.outcome === "improved" ? "Improved" : fix.outcome === "degraded" ? "Degraded" : fix.outcome === "no_change" ? "No Change" : `Check due ${new Date(fix.checkAfter).toLocaleDateString()}`;
+
+            return (
+              <div key={fix.id} style={{ background: bg2, border: `1px solid ${bdr}`, borderLeft: `4px solid ${outcomeColor}`, borderRadius: 10, padding: 14, marginBottom: 10 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: txt, marginBottom: 4 }}>{fix.field} — {fix.wpPostTitle || fix.wpPostUrl}</div>
+                    <div style={{ fontSize: 11, color: txt2, marginBottom: 6 }}>
+                      Pushed: {fix.pushedAt ? new Date(fix.pushedAt).toLocaleDateString() : "—"} · Issue: {fix.issueType}
+                    </div>
+                    {fix.oldValue && fix.newValue && (
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 6 }}>
+                        <div style={{ fontSize: 10, padding: "4px 8px", background: "#DC262608", borderRadius: 6, color: txt2 }}>
+                          <span style={{ color: "#DC2626", fontWeight: 700 }}>Before: </span>{String(fix.oldValue).slice(0, 80)}
+                        </div>
+                        <div style={{ fontSize: 10, padding: "4px 8px", background: "#05966908", borderRadius: 6, color: txt2 }}>
+                          <span style={{ color: "#059669", fontWeight: 700 }}>After: </span>{String(fix.newValue).slice(0, 80)}
+                        </div>
+                      </div>
+                    )}
+                    {fix.gscResult && (
+                      <div style={{ fontSize: 11, color: txt2 }}>
+                        CTR: {(fix.gscResult.ctrBefore * 100).toFixed(1)}% → {(fix.gscResult.ctrAfter * 100).toFixed(1)}%
+                        {fix.gscResult.posBefore && ` · Position: ${fix.gscResult.posBefore?.toFixed(1)} → ${fix.gscResult.posAfter?.toFixed(1)}`}
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 12, padding: "4px 12px", borderRadius: 8, background: `${outcomeColor}18`, color: outcomeColor, fontWeight: 700, flexShrink: 0, marginLeft: 12 }}>
+                    {outcomeIcon} {outcomeLabel}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ════════════════════════════════════════════════════
+          TAB: CONTENT APPROVALS (original)
+          ════════════════════════════════════════════════════ */}
+      {activeTab === "approvals" && <>
 
       {/* ── Empty state ───────────────────────────────────── */}
       {pending.length === 0 && reviewed.length === 0 && (
@@ -509,6 +720,8 @@ export default function ApprovalQueue({ dark, clientId }) {
           })}
         </>
       )}
+
+      </> /* end activeTab === "approvals" */}
     </div>
   );
 }

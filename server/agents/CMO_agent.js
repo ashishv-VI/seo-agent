@@ -33,11 +33,32 @@ async function runCMO(clientId, keys) {
 
   if (!brief) return { success: false, error: "No brief — run A1 first" };
 
+  // ── Load client fix history (A16 memory) ─────────
+  const clientMemory = await db.collection("client_memory").doc(clientId).get()
+    .then(d => d.exists ? d.data() : null).catch(() => null);
+
+  // ── Load cross-client global patterns (Sprint 5) ──
+  // What fix types have worked for similar clients — improves CMO decision quality
+  const clientDoc  = await db.collection("clients").doc(clientId).get().catch(() => null);
+  const ownerId    = clientDoc?.data()?.ownerId || null;
+  let globalPatterns = [];
+  if (ownerId) {
+    globalPatterns = await db.collection("global_patterns")
+      .where("ownerId", "==", ownerId)
+      .limit(30)
+      .get()
+      .then(s => s.docs.map(d => d.data()))
+      .catch(() => []);
+  }
+
+  // Summarise patterns into a prompt-friendly string
+  const patternSummary = buildPatternSummary(globalPatterns, clientMemory);
+
   // ── Rule-based signal extraction ─────────────────
   const signals = extractSignals({ brief, audit, keywords, competitor, onpage, technical, geo, report, rankings });
 
   // ── LLM decision ──────────────────────────────────
-  const prompt = buildCMOPrompt(brief, signals);
+  const prompt = buildCMOPrompt(brief, signals, patternSummary);
   let decision;
   try {
     const raw = await callLLM(prompt, keys, { maxTokens: 2000, temperature: 0.2 });
@@ -120,8 +141,43 @@ function extractSignals({ brief, audit, keywords, competitor, onpage, technical,
   return signals;
 }
 
+// ── Cross-client pattern summary for CMO prompt ───
+function buildPatternSummary(globalPatterns, clientMemory) {
+  if (!globalPatterns.length && !clientMemory?.fixOutcomes?.length) return null;
+
+  const lines = [];
+
+  // Global patterns — what works across clients
+  if (globalPatterns.length > 0) {
+    const byType = {};
+    for (const p of globalPatterns) {
+      if (!byType[p.fixType]) byType[p.fixType] = { improved: 0, total: 0 };
+      byType[p.fixType].total++;
+      if (p.outcome === "improved") byType[p.fixType].improved++;
+    }
+    const sorted = Object.entries(byType).sort((a, b) => (b[1].improved / b[1].total) - (a[1].improved / a[1].total));
+    lines.push("Cross-client fix success rates (your other clients):");
+    for (const [fixType, counts] of sorted.slice(0, 5)) {
+      const rate = Math.round((counts.improved / counts.total) * 100);
+      lines.push(`  - ${fixType}: ${rate}% success (${counts.improved}/${counts.total})`);
+    }
+  }
+
+  // This client's fix history
+  const fixOutcomes = clientMemory?.fixOutcomes || [];
+  if (fixOutcomes.length > 0) {
+    const recent = fixOutcomes.slice(-10);
+    const worked  = recent.filter(f => f.outcome === "improved").map(f => f.field);
+    const failed  = recent.filter(f => f.outcome === "degraded" || f.outcome === "no_change").map(f => f.field);
+    if (worked.length > 0) lines.push(`This client — fixes that worked: ${[...new Set(worked)].join(", ")}`);
+    if (failed.length > 0) lines.push(`This client — fixes that didn't work: ${[...new Set(failed)].join(", ")}`);
+  }
+
+  return lines.length > 0 ? lines.join("\n") : null;
+}
+
 // ── LLM prompt ────────────────────────────────────
-function buildCMOPrompt(brief, signals) {
+function buildCMOPrompt(brief, signals, patternSummary = null) {
   return `You are the CMO Agent for an SEO AI platform. Your job is to analyse the signals below and decide the single most impactful next action for this client.
 
 Client: ${brief.businessName} (${brief.websiteUrl})
@@ -144,7 +200,7 @@ Goals: ${[].concat(brief.goals || []).join(", ")}
 - A7: Technical/speed fix (if PageSpeed poor)
 - A11: Link building (if keywords stuck on page 2)
 - A14: Content creation (if content gaps found)
-
+${patternSummary ? `\n## Learning — What Has Worked (use this to improve confidence)\n${patternSummary}\n` : ""}
 Return ONLY valid JSON:
 {
   "decision": "one sentence describing the strategic focus",

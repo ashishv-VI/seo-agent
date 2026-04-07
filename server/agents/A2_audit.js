@@ -489,8 +489,60 @@ async function runA2(clientId) {
     auditedAt: new Date().toISOString(),
   };
 
+  // ── Remove large pageAudits array from doc before saving ─────────────────
+  // Firestore 1MB doc limit: store per-page data in subcollection instead
+  // Keep only the count so downstream agents can check if data exists
+  const pageAuditsCount = pageAudits.length;
+  delete auditResult.checks.pageAudits; // remove from doc — stored in subcollection below
+  auditResult.checks.pageAuditCount = pageAuditsCount;
+
   // Save to shared state
   await saveState(clientId, "A2_audit", auditResult);
+
+  // ── Write per-page docs to subcollection (non-blocking) ──────────────────
+  // Each URL gets its own Firestore doc: audits/{clientId}/pages/{urlHash}
+  // This enables site-wide pattern detection without hitting the 1MB doc limit
+  if (pageAudits.length > 5) {
+    const { db: fdb } = require("../config/firebase");
+    const crawledAt = new Date().toISOString();
+    const batch = fdb.batch();
+    let batchCount = 0;
+
+    for (const page of pageAudits) {
+      const urlHash = Buffer.from(page.url || "").toString("base64").replace(/[/+=]/g, "_").slice(0, 50);
+      const ref = fdb.collection("audits").doc(clientId).collection("pages").doc(urlHash);
+      batch.set(ref, {
+        url:             page.url,
+        title:           page.title   || null,
+        metaDescription: page.metaDescription || null,
+        h1:              page.h1       || null,
+        hasH1:           !!page.hasH1,
+        hasMeta:         !!(page.hasMeta || page.metaDescription),
+        hasCanonical:    !!page.hasCanonical,
+        hasSchema:       !!page.hasSchema,
+        wordCount:       page.wordCount || 0,
+        altMissing:      page.altMissing || 0,
+        responseTime:    page.responseTime || null,
+        statusCode:      page.statusCode || 200,
+        issueCount:      (page.issues || []).length,
+        issues:          (page.issues || []).slice(0, 10), // cap to stay under 1MB per doc
+        clientId,
+        crawledAt,
+      });
+      batchCount++;
+      // Firestore batch limit is 500
+      if (batchCount >= 490) break;
+    }
+
+    batch.commit().then(() => {
+      // After pages are written, run pattern detection and cache it
+      const { detectSitePatterns } = require("../utils/auditPatterns");
+      const { saveState: ss } = require("../shared-state/stateManager");
+      detectSitePatterns(clientId)
+        .then(patterns => ss(clientId, "A2_patterns", patterns))
+        .catch(() => {});
+    }).catch(() => {});
+  }
 
   // Emit tool suggestion for missing sitemap (non-blocking)
   if (!checks.sitemap?.exists) {

@@ -215,6 +215,27 @@ async function runA13(clientId, keys) {
           rankingAfter:  null,
         });
 
+        // ── Fix Verification: schedule a 21-day outcome check ─────────────
+        // Cron reads this collection daily and checks GSC to see if the fix worked
+        db.collection("fix_verification").add({
+          clientId,
+          ownerId:       clientData.ownerId || null,
+          approvalId:    item.id,
+          wpPostId:      wpItem.id,
+          wpPostUrl:     wpItem.url,
+          wpPostTitle:   wpItem.title,
+          field:         fieldPushed,
+          issueType,
+          oldValue:      fieldPushed === "seo_title" ? oldTitle : fieldPushed === "meta_description" ? oldMeta : null,
+          newValue:      data.suggestedFix || data.codeSnippet || null,
+          pushedAt:      new Date().toISOString(),
+          checkAfter:    new Date(Date.now() + 21 * 24 * 60 * 60 * 1000).toISOString(),
+          status:        "pending",       // pending → checked
+          gscSnapshot:   null,            // filled by cron when status transitions
+          gscResult:     null,            // filled after checkAfter
+          outcome:       null,            // "improved" | "no_change" | "degraded" | "no_data"
+        }).catch(() => {}); // non-blocking
+
         pushed.push({
           approvalId: item.id,
           issue:      issueType,

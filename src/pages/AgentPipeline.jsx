@@ -11,6 +11,8 @@ import GA4Panel from "../components/GA4Panel";
 import TrackingVerifier from "../components/TrackingVerifier";
 import RankTrackerPanel from "../components/RankTrackerPanel";
 import ControlRoom from "./ControlRoom";
+import AttributionDashboard from "../components/AttributionDashboard";
+import PredictiveForecastPanel from "../components/PredictiveForecastPanel";
 
 const ALL_AGENTS = [
   { id:"A1",  label:"Client Brief",       icon:"📋", phase:1 },
@@ -380,6 +382,8 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
           {isComplete("A9") && <div style={{...s.tab(activeTab==="cmo"), background:activeTab==="cmo"?"#443DCB":"transparent", color:activeTab==="cmo"?"#fff":txt2, border:`1px solid ${activeTab==="cmo"?"#443DCB":bdr}`}} onClick={()=>setActiveTab("cmo")}>🧠 CMO Agent</div>}
           {isComplete("A2") && <div style={s.tab(activeTab==="conversion")} onClick={()=>setActiveTab("conversion")}>🎯 Conversion</div>}
           {isComplete("A9") && <div style={s.tab(activeTab==="impactreport")} onClick={()=>setActiveTab("impactreport")}>📑 Impact Report</div>}
+          <div style={s.tab(activeTab==="attribution")} onClick={()=>setActiveTab("attribution")}>🔗 Attribution</div>
+          {isComplete("A3") && <div style={s.tab(activeTab==="forecast")} onClick={()=>setActiveTab("forecast")}>🔮 Forecast</div>}
         </div>
 
       </div>
@@ -648,6 +652,18 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
       {activeTab==="impactreport" && (
         <ImpactReportTab dark={dark} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2}
           clientId={clientId} getToken={getToken} API={API} />
+      )}
+
+      {/* ── Attribution Tab (keyword → lead tracking) ── */}
+      {activeTab==="attribution" && (
+        <AttributionDashboard dark={dark} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2}
+          clientId={clientId} />
+      )}
+
+      {/* ── Predictive Forecast Tab ── */}
+      {activeTab==="forecast" && (
+        <PredictiveForecastPanel dark={dark} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2}
+          clientId={clientId} />
       )}
 
       {/* ── Level 1: WordPress Integration Tab ── */}

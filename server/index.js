@@ -29,6 +29,7 @@ const toolsRoutes        = require("./routes/tools");
 const crawlerRoutes      = require("./routes/crawlerRoutes");
 const controlRoomRoutes  = require("./routes/controlRoom");
 const agencyRoutes       = require("./routes/agency");
+const attributionRoutes  = require("./routes/attribution");
 
 const app  = express();
 const PORT = process.env.PORT || 5000;
@@ -116,6 +117,7 @@ app.use("/api/tools",        agentLimiter, toolsRoutes);
 app.use("/api/crawler",      apiLimiter,   crawlerRoutes);
 app.use("/api/control-room", apiLimiter,   controlRoomRoutes);
 app.use("/api/agency",       apiLimiter,   agencyRoutes);
+app.use("/api/attribution",  apiLimiter,   attributionRoutes);
 
 // ── Daily alert monitoring ─────────────────────────
 // Runs A9.checkAlerts for every active client — detects new technical issues,
@@ -401,6 +403,146 @@ setInterval(async () => {
     console.error("[monthly-report] Error:", err.message);
   }
 }, 60 * 60 * 1000);
+
+// ── Fix Verification Loop — runs daily at 03:00 UTC ───────────────────────────
+// For each pending fix_verification doc where checkAfter < now:
+//   1. Pull GSC data for the specific URL (before vs after)
+//   2. Compare CTR / position
+//   3. Mark outcome: improved | no_change | degraded | no_data
+//   4. Write to client_memory so CMO learns what works
+//   5. Write to global_patterns for cross-client intelligence
+setInterval(async () => {
+  const now = new Date();
+  if (now.getUTCHours() !== 3) return; // 03:00 UTC window
+
+  console.log("[fix-verify] Starting daily fix verification check...");
+  try {
+    const snap = await db.collection("fix_verification")
+      .where("status", "==", "pending")
+      .limit(50)
+      .get();
+
+    const dueDocs = snap.docs.filter(d => new Date(d.data().checkAfter) < now);
+    console.log(`[fix-verify] ${dueDocs.length} fix(es) due for verification`);
+
+    for (const doc of dueDocs) {
+      const fix = doc.data();
+      try {
+        const { getUserKeys } = require("./utils/getUserKeys");
+        const keys = await getUserKeys(fix.ownerId).catch(() => null);
+        const gscToken = keys?.gscToken || null;
+
+        let outcome = "no_data";
+        let gscResult = null;
+
+        // ── Pull GSC for this specific URL ─────────────
+        if (gscToken && fix.wpPostUrl) {
+          try {
+            const clientDoc  = await db.collection("clients").doc(fix.clientId).get();
+            const siteUrl    = clientDoc.data()?.websiteUrl || fix.wpPostUrl;
+
+            // Window 1: 28 days BEFORE the push (baseline)
+            const pushDate   = new Date(fix.pushedAt);
+            const beforeEnd  = new Date(pushDate.getTime() - 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+            const beforeStart= new Date(pushDate.getTime() - 29 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+
+            // Window 2: last 28 days (after the push)
+            const afterEnd   = now.toISOString().split("T")[0];
+            const afterStart = new Date(now.getTime() - 28 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+
+            const gscBase = `https://searchconsole.googleapis.com/webmasters/v3/sites/${encodeURIComponent(siteUrl)}/searchAnalytics/query`;
+            const pageFilter = { dimensionFilterGroups: [{ filters: [{ dimension: "page", operator: "contains", expression: fix.wpPostUrl.replace(/^https?:\/\/[^/]+/, "") }] }] };
+
+            const [beforeRes, afterRes] = await Promise.all([
+              fetch(gscBase, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${gscToken}` },
+                body: JSON.stringify({ startDate: beforeStart, endDate: beforeEnd, dimensions: ["page"], rowLimit: 5, ...pageFilter }),
+                signal: AbortSignal.timeout(15000),
+              }),
+              fetch(gscBase, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${gscToken}` },
+                body: JSON.stringify({ startDate: afterStart, endDate: afterEnd, dimensions: ["page"], rowLimit: 5, ...pageFilter }),
+                signal: AbortSignal.timeout(15000),
+              }),
+            ]);
+
+            const beforeData = await beforeRes.json();
+            const afterData  = await afterRes.json();
+
+            const beforeRow  = beforeData.rows?.[0];
+            const afterRow   = afterData.rows?.[0];
+
+            if (beforeRow || afterRow) {
+              const ctrBefore  = beforeRow?.ctr     || 0;
+              const ctrAfter   = afterRow?.ctr      || 0;
+              const posBefore  = beforeRow?.position || null;
+              const posAfter   = afterRow?.position  || null;
+              const ctrDelta   = ctrAfter - ctrBefore;
+              const posDelta   = posBefore && posAfter ? posBefore - posAfter : null; // positive = improved
+
+              outcome = ctrDelta > 0.005 || (posDelta !== null && posDelta > 1)
+                ? "improved"
+                : ctrDelta < -0.005 || (posDelta !== null && posDelta < -1)
+                  ? "degraded"
+                  : "no_change";
+
+              gscResult = { ctrBefore, ctrAfter, ctrDelta, posBefore, posAfter, posDelta, checkedAt: now.toISOString() };
+            }
+          } catch (e) {
+            console.error(`[fix-verify] GSC error for ${doc.id}:`, e.message);
+          }
+        }
+
+        // ── Write outcome to fix_verification ──────────
+        await db.collection("fix_verification").doc(doc.id).update({
+          status: "checked",
+          outcome,
+          gscResult,
+          checkedAt: now.toISOString(),
+        });
+
+        // ── Write to client_memory (A16) ───────────────
+        try {
+          const memRef  = db.collection("client_memory").doc(fix.clientId);
+          const memSnap = await memRef.get();
+          const mem     = memSnap.exists ? memSnap.data() : {};
+          const fixLog  = mem.fixOutcomes || [];
+          fixLog.push({ field: fix.field, issueType: fix.issueType, outcome, checkedAt: now.toISOString(), url: fix.wpPostUrl });
+          await memRef.set({ ...mem, fixOutcomes: fixLog.slice(-50), lastUpdated: now.toISOString() }, { merge: true });
+        } catch { /* non-blocking */ }
+
+        // ── Write to global_patterns (Sprint 5 — cross-client) ─
+        if (outcome !== "no_data") {
+          try {
+            const clientDoc = await db.collection("clients").doc(fix.clientId).get();
+            const cData     = clientDoc.data() || {};
+            await db.collection("global_patterns").add({
+              fixType:      fix.field,
+              issueType:    fix.issueType,
+              outcome,
+              ownerId:      fix.ownerId,
+              industry:     cData.industry   || null,
+              businessType: cData.businessType || null,
+              ctrBefore:    gscResult?.ctrBefore  || null,
+              ctrAfter:     gscResult?.ctrAfter   || null,
+              posBefore:    gscResult?.posBefore  || null,
+              posAfter:     gscResult?.posAfter   || null,
+              recordedAt:   now.toISOString(),
+            });
+          } catch { /* non-blocking */ }
+        }
+
+        console.log(`[fix-verify] ${fix.field} on ${fix.wpPostUrl} → ${outcome}`);
+      } catch (e) {
+        console.error(`[fix-verify] Error on doc ${doc.id}:`, e.message);
+      }
+    }
+  } catch (err) {
+    console.error("[fix-verify] Error:", err.message);
+  }
+}, 60 * 60 * 1000); // check every hour — guarded to run at 03:00 UTC only
 
 // ── 404 Handler ────────────────────────────────────
 app.use((req, res) => {
