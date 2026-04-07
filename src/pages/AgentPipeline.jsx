@@ -10,6 +10,7 @@ import ROIDashboard from "../components/ROIDashboard";
 import GA4Panel from "../components/GA4Panel";
 import TrackingVerifier from "../components/TrackingVerifier";
 import RankTrackerPanel from "../components/RankTrackerPanel";
+import ControlRoom from "./ControlRoom";
 
 const ALL_AGENTS = [
   { id:"A1",  label:"Client Brief",       icon:"📋", phase:1 },
@@ -369,12 +370,16 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
         {/* Row 4 — Tools & Settings */}
         <div style={{ display:"flex", gap:6, flexWrap:"wrap", alignItems:"center" }}>
           <span style={{ fontSize:9, fontWeight:700, color:txt3, textTransform:"uppercase", letterSpacing:"0.08em", minWidth:38 }}>Tools</span>
+          <div style={{...s.tab(activeTab==="controlroom"), background:activeTab==="controlroom"?"#059669":"transparent", color:activeTab==="controlroom"?"#fff":txt2, border:`1px solid ${activeTab==="controlroom"?"#059669":bdr}`}} onClick={()=>setActiveTab("controlroom")}>🏠 Control Room</div>
           <div style={s.tab(activeTab==="localseo")} onClick={()=>setActiveTab("localseo")}>🏪 Local SEO</div>
           {isComplete("A10") && <div style={s.tab(activeTab==="roi")} onClick={()=>setActiveTab("roi")}>💰 ROI</div>}
           <div style={s.tab(activeTab==="analytics")} onClick={()=>setActiveTab("analytics")}>📊 Analytics</div>
           <div style={s.tab(activeTab==="tracking")} onClick={()=>setActiveTab("tracking")}>🔍 Tracking</div>
           {isComplete("A3") && <div style={s.tab(activeTab==="autopilot")} onClick={()=>setActiveTab("autopilot")}>📝 Autopilot</div>}
           <div style={s.tab(activeTab==="integrations")} onClick={()=>setActiveTab("integrations")}>🔌 Integrations</div>
+          {isComplete("A9") && <div style={{...s.tab(activeTab==="cmo"), background:activeTab==="cmo"?"#443DCB":"transparent", color:activeTab==="cmo"?"#fff":txt2, border:`1px solid ${activeTab==="cmo"?"#443DCB":bdr}`}} onClick={()=>setActiveTab("cmo")}>🧠 CMO Agent</div>}
+          {isComplete("A2") && <div style={s.tab(activeTab==="conversion")} onClick={()=>setActiveTab("conversion")}>🎯 Conversion</div>}
+          {isComplete("A9") && <div style={s.tab(activeTab==="impactreport")} onClick={()=>setActiveTab("impactreport")}>📑 Impact Report</div>}
         </div>
 
       </div>
@@ -620,6 +625,29 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
       {/* Before/After Rankings Comparison Tab */}
       {activeTab==="comparison" && (
         <RankComparisonView clientId={clientId} dark={dark} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2} getToken={getToken} API={API} />
+      )}
+
+      {/* ── Control Room ── */}
+      {activeTab==="controlroom" && (
+        <ControlRoom dark={dark} clientId={clientId} clientName={client?.name || brief?.businessName} />
+      )}
+
+      {/* ── CMO Agent Decision Tab ── */}
+      {activeTab==="cmo" && (
+        <CMOAgentTab dark={dark} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2}
+          clientId={clientId} getToken={getToken} API={API} />
+      )}
+
+      {/* ── A19 Conversion Analysis Tab ── */}
+      {activeTab==="conversion" && (
+        <ConversionTab dark={dark} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2}
+          clientId={clientId} getToken={getToken} API={API} />
+      )}
+
+      {/* ── A20 Impact Report Tab ── */}
+      {activeTab==="impactreport" && (
+        <ImpactReportTab dark={dark} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2}
+          clientId={clientId} getToken={getToken} API={API} />
       )}
 
       {/* ── Level 1: WordPress Integration Tab ── */}
@@ -5118,6 +5146,476 @@ function KwResearchTab({ dark, clientId, getToken, API, state }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// CMO AGENT TAB — Autonomous decision layer
+// ─────────────────────────────────────────────────────────────────────────────
+function CMOAgentTab({ dark, bg2, bg3, bdr, txt, txt2, clientId, getToken, API }) {
+  const [decision, setDecision] = useState(null);
+  const [queue,    setQueue]    = useState([]);
+  const [loading,  setLoading]  = useState(true);
+  const [running,  setRunning]  = useState(false);
+  const [error,    setError]    = useState("");
+  const B = "#443DCB";
+
+  async function load() {
+    setLoading(true);
+    try {
+      const token = await getToken();
+      const [dRes, qRes] = await Promise.all([
+        fetch(`${API}/api/agents/${clientId}/cmo/decision`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${API}/api/agents/${clientId}/cmo/queue`,    { headers: { Authorization: `Bearer ${token}` } }),
+      ]);
+      const [d, q] = await Promise.all([dRes.json(), qRes.json()]);
+      setDecision(d?.decision ? d : null);
+      setQueue(q?.queue || []);
+    } catch (e) { setError(e.message); }
+    setLoading(false);
+  }
+
+  async function runCMO() {
+    setRunning(true); setError("");
+    try {
+      const token = await getToken();
+      const res = await fetch(`${API}/api/agents/${clientId}/cmo/run`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "CMO run failed");
+      await load();
+    } catch (e) { setError(e.message); }
+    setRunning(false);
+  }
+
+  useEffect(() => { load(); }, [clientId]);
+
+  const confidenceColor = c => c >= 0.8 ? "#059669" : c >= 0.5 ? "#D97706" : "#DC2626";
+  const priorityColor   = p => ({ high:"#DC2626", medium:"#D97706", low:"#059669" })[p] || txt2;
+
+  if (loading) return <div style={{ padding:40, textAlign:"center", color:txt2 }}>Loading CMO analysis...</div>;
+
+  return (
+    <div style={{ padding:24, maxWidth:900 }}>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:20 }}>
+        <div>
+          <div style={{ fontSize:11, fontWeight:700, color:txt2, textTransform:"uppercase", letterSpacing:1, marginBottom:3 }}>Strategy Layer</div>
+          <div style={{ fontSize:20, fontWeight:800, color:txt }}>🧠 CMO Agent</div>
+          <div style={{ fontSize:12, color:txt2, marginTop:2 }}>Autonomous decision engine — analyzes all signals and decides what to fix next</div>
+        </div>
+        <button onClick={runCMO} disabled={running}
+          style={{ padding:"10px 20px", borderRadius:8, border:"none", background:B, color:"#fff", fontWeight:700, fontSize:13, cursor:running?"wait":"pointer", opacity:running?0.7:1 }}>
+          {running ? "Analyzing..." : decision ? "Re-run Analysis" : "Run CMO Analysis"}
+        </button>
+      </div>
+
+      {error && <div style={{ color:"#DC2626", fontSize:13, marginBottom:16 }}>{error}</div>}
+
+      {!decision && !running && (
+        <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:12, padding:40, textAlign:"center" }}>
+          <div style={{ fontSize:32, marginBottom:12 }}>🧠</div>
+          <div style={{ fontSize:15, fontWeight:700, color:txt, marginBottom:8 }}>No CMO analysis yet</div>
+          <div style={{ fontSize:13, color:txt2 }}>Click "Run CMO Analysis" to let the AI decide what to focus on next.</div>
+        </div>
+      )}
+
+      {decision && (
+        <>
+          {/* Decision banner */}
+          <div style={{ background:bg2, border:`2px solid ${B}`, borderRadius:12, padding:20, marginBottom:16 }}>
+            <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:16 }}>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:11, fontWeight:700, color:B, textTransform:"uppercase", letterSpacing:1, marginBottom:6 }}>Decision</div>
+                <div style={{ fontSize:17, fontWeight:800, color:txt, marginBottom:8 }}>{decision.decision}</div>
+                <div style={{ fontSize:13, color:txt2, lineHeight:1.6 }}>{decision.reasoning}</div>
+              </div>
+              <div style={{ textAlign:"center", minWidth:80 }}>
+                <div style={{ fontSize:26, fontWeight:800, color:confidenceColor(decision.confidence) }}>
+                  {Math.round((decision.confidence || 0) * 100)}%
+                </div>
+                <div style={{ fontSize:10, color:txt2 }}>Confidence</div>
+              </div>
+            </div>
+            {decision.decidedAt && (
+              <div style={{ fontSize:11, color:txt2, marginTop:10, borderTop:`1px solid ${bdr}`, paddingTop:8 }}>
+                Last analyzed: {new Date(decision.decidedAt).toLocaleString()}
+              </div>
+            )}
+          </div>
+
+          {/* Next agents */}
+          {decision.nextAgents?.length > 0 && (
+            <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:12, padding:20, marginBottom:16 }}>
+              <div style={{ fontSize:12, fontWeight:700, color:txt2, textTransform:"uppercase", letterSpacing:1, marginBottom:12 }}>Recommended Next Actions</div>
+              <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                {decision.nextAgents.map((a, i) => (
+                  <div key={i} style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px", background:bg3, borderRadius:8 }}>
+                    <div style={{ width:22, height:22, borderRadius:"50%", background:B, color:"#fff", display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:800, flexShrink:0 }}>{i+1}</div>
+                    <span style={{ fontSize:13, fontWeight:600, color:txt }}>{a.agent || a}</span>
+                    {a.reason && <span style={{ fontSize:12, color:txt2 }}>— {a.reason}</span>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* KPI impact */}
+          {decision.kpiImpact?.length > 0 && (
+            <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:12, padding:20, marginBottom:16 }}>
+              <div style={{ fontSize:12, fontWeight:700, color:txt2, textTransform:"uppercase", letterSpacing:1, marginBottom:12 }}>Expected KPI Impact</div>
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))", gap:10 }}>
+                {decision.kpiImpact.map((k, i) => (
+                  <div key={i} style={{ background:bg3, borderRadius:8, padding:"10px 14px" }}>
+                    <div style={{ fontSize:11, fontWeight:700, color:txt2, textTransform:"uppercase", marginBottom:4 }}>{k.kpi}</div>
+                    <div style={{ fontSize:13, color:txt }}>{k.expectedChange || k.impact}</div>
+                    {k.timeframe && <div style={{ fontSize:11, color:txt2, marginTop:2 }}>{k.timeframe}</div>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Signals */}
+          {decision.signals && (
+            <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:12, padding:20 }}>
+              <div style={{ fontSize:12, fontWeight:700, color:txt2, textTransform:"uppercase", letterSpacing:1, marginBottom:12 }}>Signals Analyzed</div>
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(180px,1fr))", gap:8 }}>
+                {Object.entries(decision.signals).map(([k, v]) => (
+                  <div key={k} style={{ background:bg3, borderRadius:8, padding:"8px 12px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                    <span style={{ fontSize:12, color:txt2 }}>{k.replace(/([A-Z])/g," $1").trim()}</span>
+                    <span style={{ fontSize:12, fontWeight:700, color: v === true ? "#DC2626" : v === false ? "#059669" : txt }}>
+                      {typeof v === "boolean" ? (v ? "⚠️ Yes" : "✅ No") : String(v)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* CMO Queue */}
+      {queue.length > 0 && (
+        <div style={{ marginTop:16, background:bg2, border:`1px solid ${bdr}`, borderRadius:12, padding:20 }}>
+          <div style={{ fontSize:12, fontWeight:700, color:txt2, textTransform:"uppercase", letterSpacing:1, marginBottom:12 }}>Scheduled Actions ({queue.length})</div>
+          {queue.map((item, i) => (
+            <div key={i} style={{ padding:"10px 0", borderBottom: i < queue.length-1 ? `1px solid ${bdr}` : "none", display:"flex", justifyContent:"space-between" }}>
+              <div>
+                <span style={{ fontSize:13, fontWeight:600, color:txt }}>{item.agentId}</span>
+                {item.reason && <span style={{ fontSize:12, color:txt2, marginLeft:8 }}>{item.reason}</span>}
+              </div>
+              <span style={{ fontSize:11, color:txt2 }}>{item.scheduledFor ? new Date(item.scheduledFor).toLocaleDateString() : "Pending"}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CONVERSION TAB — A19 CRO analysis
+// ─────────────────────────────────────────────────────────────────────────────
+function ConversionTab({ dark, bg2, bg3, bdr, txt, txt2, clientId, getToken, API }) {
+  const [data,    setData]    = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [running, setRunning] = useState(false);
+  const [error,   setError]   = useState("");
+  const B = "#443DCB";
+
+  async function load() {
+    setLoading(true);
+    try {
+      const token = await getToken();
+      const res = await fetch(`${API}/api/agents/${clientId}/A19/state`, { headers: { Authorization: `Bearer ${token}` } });
+      const json = await res.json();
+      if (res.ok && json.overallCRO != null) setData(json);
+    } catch {}
+    setLoading(false);
+  }
+
+  async function runA19() {
+    setRunning(true); setError("");
+    try {
+      const token = await getToken();
+      const res = await fetch(`${API}/api/agents/${clientId}/A19/run`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "A19 run failed");
+      setData(json);
+    } catch (e) { setError(e.message); }
+    setRunning(false);
+  }
+
+  useEffect(() => { load(); }, [clientId]);
+
+  const croColor = s => s === "good" ? "#059669" : s === "warning" ? "#D97706" : "#DC2626";
+  const sevColor = s => ({ critical:"#DC2626", high:"#DC2626", medium:"#D97706", low:"#059669", info:"#0891B2" })[s] || txt2;
+
+  if (loading) return <div style={{ padding:40, textAlign:"center", color:txt2 }}>Loading conversion analysis...</div>;
+
+  return (
+    <div style={{ padding:24, maxWidth:900 }}>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:20 }}>
+        <div>
+          <div style={{ fontSize:11, fontWeight:700, color:txt2, textTransform:"uppercase", letterSpacing:1, marginBottom:3 }}>Conversion Optimization</div>
+          <div style={{ fontSize:20, fontWeight:800, color:txt }}>🎯 CRO Analysis</div>
+          <div style={{ fontSize:12, color:txt2, marginTop:2 }}>Landing page, CTA, and form optimization analysis</div>
+        </div>
+        <button onClick={runA19} disabled={running}
+          style={{ padding:"10px 20px", borderRadius:8, border:"none", background:B, color:"#fff", fontWeight:700, fontSize:13, cursor:running?"wait":"pointer", opacity:running?0.7:1 }}>
+          {running ? "Analyzing..." : data ? "Re-run Analysis" : "Run CRO Analysis"}
+        </button>
+      </div>
+
+      {error && <div style={{ color:"#DC2626", fontSize:13, marginBottom:16 }}>{error}</div>}
+
+      {!data && !running && (
+        <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:12, padding:40, textAlign:"center" }}>
+          <div style={{ fontSize:32, marginBottom:12 }}>🎯</div>
+          <div style={{ fontSize:15, fontWeight:700, color:txt, marginBottom:8 }}>No conversion analysis yet</div>
+          <div style={{ fontSize:13, color:txt2 }}>Run the analysis to detect CTA gaps, form issues, and conversion blockers.</div>
+        </div>
+      )}
+
+      {data && (
+        <>
+          {/* Score banner */}
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))", gap:10, marginBottom:16 }}>
+            {[
+              { l:"CRO Score",      v: data.overallCRO != null ? `${data.overallCRO}/100` : "—", c: croColor(data.overallCROStatus) },
+              { l:"Est. CR Lift",   v: data.estimatedCRLift || "—",  c: "#059669" },
+              { l:"Blockers",       v: data.conversionBlockers?.length || 0, c: "#DC2626" },
+              { l:"Quick Wins",     v: data.quickWins?.length || 0,          c: "#D97706" },
+            ].map(s => (
+              <div key={s.l} style={{ background:bg2, border:`1px solid ${bdr}`, borderTop:`3px solid ${s.c}`, borderRadius:10, padding:"12px 14px" }}>
+                <div style={{ fontSize:22, fontWeight:800, color:s.c }}>{s.v}</div>
+                <div style={{ fontSize:11, color:txt2, marginTop:2 }}>{s.l}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Conversion blockers */}
+          {data.conversionBlockers?.length > 0 && (
+            <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:12, padding:20, marginBottom:16 }}>
+              <div style={{ fontSize:12, fontWeight:700, color:txt2, textTransform:"uppercase", letterSpacing:1, marginBottom:12 }}>Conversion Blockers</div>
+              <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                {data.conversionBlockers.map((b, i) => (
+                  <div key={i} style={{ background:bg3, borderRadius:8, padding:"12px 14px", borderLeft:`3px solid ${sevColor(b.severity)}` }}>
+                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:4 }}>
+                      <span style={{ fontSize:13, fontWeight:700, color:txt }}>{b.issue || b.title}</span>
+                      <span style={{ fontSize:10, fontWeight:700, color:sevColor(b.severity), background:sevColor(b.severity)+"18", padding:"2px 7px", borderRadius:6 }}>
+                        {(b.severity||"").toUpperCase()}
+                      </span>
+                    </div>
+                    {b.detail && <div style={{ fontSize:12, color:txt2, marginBottom:4 }}>{b.detail}</div>}
+                    {b.fix && <div style={{ fontSize:12, color:"#059669", fontWeight:600 }}>Fix: {b.fix}</div>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Quick wins */}
+          {data.quickWins?.length > 0 && (
+            <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:12, padding:20, marginBottom:16 }}>
+              <div style={{ fontSize:12, fontWeight:700, color:txt2, textTransform:"uppercase", letterSpacing:1, marginBottom:12 }}>Quick Wins</div>
+              <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                {data.quickWins.map((w, i) => (
+                  <div key={i} style={{ display:"flex", alignItems:"flex-start", gap:10, padding:"8px 12px", background:bg3, borderRadius:8 }}>
+                    <span style={{ color:"#059669", fontSize:14, flexShrink:0 }}>✅</span>
+                    <div>
+                      <div style={{ fontSize:13, fontWeight:600, color:txt }}>{w.win || w.title || w}</div>
+                      {w.impact && <div style={{ fontSize:12, color:txt2, marginTop:2 }}>Expected impact: {w.impact}</div>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Landing page audit */}
+          {data.landingPageAudit && (
+            <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:12, padding:20 }}>
+              <div style={{ fontSize:12, fontWeight:700, color:txt2, textTransform:"uppercase", letterSpacing:1, marginBottom:12 }}>Landing Page Audit</div>
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(180px,1fr))", gap:8 }}>
+                {Object.entries(data.landingPageAudit).map(([k, v]) => (
+                  <div key={k} style={{ background:bg3, borderRadius:8, padding:"8px 12px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                    <span style={{ fontSize:12, color:txt2 }}>{k.replace(/_/g," ")}</span>
+                    <span style={{ fontSize:12, fontWeight:700, color: v === true ? "#059669" : v === false ? "#DC2626" : txt }}>
+                      {typeof v === "boolean" ? (v ? "✅" : "❌") : String(v)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// IMPACT REPORT TAB — A20 6-month before/after report
+// ─────────────────────────────────────────────────────────────────────────────
+function ImpactReportTab({ dark, bg2, bg3, bdr, txt, txt2, clientId, getToken, API }) {
+  const [report,  setReport]  = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState("");
+  const B = "#443DCB";
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const token = await getToken();
+        const res = await fetch(`${API}/api/agents/${clientId}/A20/impact-report`, { headers: { Authorization: `Bearer ${token}` } });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error);
+        setReport(json.report);
+      } catch (e) { setError(e.message); }
+      setLoading(false);
+    })();
+  }, [clientId]);
+
+  const deltaColor = v => v > 0 ? "#059669" : v < 0 ? "#DC2626" : txt2;
+  const deltaLabel = v => v > 0 ? `+${v}` : String(v);
+
+  if (loading) return <div style={{ padding:40, textAlign:"center", color:txt2 }}>Building impact report...</div>;
+  if (error)   return <div style={{ padding:24, color:"#DC2626", fontSize:13 }}>{error}</div>;
+  if (!report) return <div style={{ padding:40, textAlign:"center", color:txt2 }}>No impact data yet — complete at least one pipeline run first.</div>;
+
+  const { executiveSummary, beforeAfter, workCompleted, trafficVisibility, keywordMovement, roi, next3Months } = report;
+
+  return (
+    <div style={{ padding:24, maxWidth:900 }}>
+      {/* Header */}
+      <div style={{ marginBottom:24 }}>
+        <div style={{ fontSize:11, fontWeight:700, color:txt2, textTransform:"uppercase", letterSpacing:1, marginBottom:3 }}>Impact Report</div>
+        <div style={{ fontSize:22, fontWeight:800, color:txt }}>📑 {executiveSummary?.clientName || "Client"} — SEO Impact</div>
+        {executiveSummary?.reportPeriod && (
+          <div style={{ fontSize:12, color:txt2, marginTop:4 }}>Period: {executiveSummary.reportPeriod}</div>
+        )}
+      </div>
+
+      {/* Headline + key wins */}
+      {executiveSummary && (
+        <div style={{ background: `linear-gradient(135deg,${B}22,${B}08)`, border:`1px solid ${B}44`, borderRadius:12, padding:20, marginBottom:16 }}>
+          <div style={{ fontSize:16, fontWeight:800, color:txt, marginBottom:10 }}>{executiveSummary.headline}</div>
+          {executiveSummary.keyWins?.length > 0 && (
+            <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+              {executiveSummary.keyWins.map((w, i) => (
+                <div key={i} style={{ display:"flex", alignItems:"center", gap:8, fontSize:13, color:txt }}>
+                  <span style={{ color:"#059669" }}>✅</span>{w}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Before / After */}
+      {beforeAfter && (
+        <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:12, padding:20, marginBottom:16 }}>
+          <div style={{ fontSize:12, fontWeight:700, color:txt2, textTransform:"uppercase", letterSpacing:1, marginBottom:14 }}>Before vs After</div>
+          <div style={{ overflowX:"auto" }}>
+            <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
+              <thead>
+                <tr style={{ borderBottom:`1px solid ${bdr}` }}>
+                  {["Metric","Before","After","Change"].map(h => (
+                    <th key={h} style={{ textAlign:"left", padding:"6px 10px", fontSize:11, fontWeight:700, color:txt2, textTransform:"uppercase" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {Object.entries(beforeAfter).map(([key, row]) => (
+                  <tr key={key} style={{ borderBottom:`1px solid ${bdr}` }}>
+                    <td style={{ padding:"8px 10px", color:txt, fontWeight:600 }}>{key.replace(/_/g," ")}</td>
+                    <td style={{ padding:"8px 10px", color:txt2 }}>{row.before ?? "—"}</td>
+                    <td style={{ padding:"8px 10px", color:txt, fontWeight:700 }}>{row.after ?? "—"}</td>
+                    <td style={{ padding:"8px 10px", fontWeight:700, color: deltaColor(row.delta) }}>
+                      {row.delta != null ? deltaLabel(row.delta) : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Work completed */}
+      {workCompleted && (
+        <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:12, padding:20, marginBottom:16 }}>
+          <div style={{ fontSize:12, fontWeight:700, color:txt2, textTransform:"uppercase", letterSpacing:1, marginBottom:12 }}>Work Completed</div>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))", gap:10 }}>
+            {[
+              { l:"Fixes Pushed",     v: workCompleted.fixesPushed || 0,     c:B },
+              { l:"P1 Issues Fixed",  v: workCompleted.p1Fixed || 0,         c:"#059669" },
+              { l:"Content Pieces",   v: workCompleted.contentPieces || 0,   c:"#D97706" },
+              { l:"Links Built",      v: workCompleted.linksBuilt || 0,      c:"#0891B2" },
+              { l:"Pipeline Runs",    v: workCompleted.pipelineRuns || 0,    c:txt2 },
+            ].map(s => (
+              <div key={s.l} style={{ background:bg3, borderTop:`3px solid ${s.c}`, borderRadius:10, padding:"12px 14px" }}>
+                <div style={{ fontSize:22, fontWeight:800, color:s.c }}>{s.v}</div>
+                <div style={{ fontSize:11, color:txt2, marginTop:2 }}>{s.l}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Keyword movement */}
+      {keywordMovement && (
+        <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:12, padding:20, marginBottom:16 }}>
+          <div style={{ fontSize:12, fontWeight:700, color:txt2, textTransform:"uppercase", letterSpacing:1, marginBottom:12 }}>Keyword Movement</div>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))", gap:10 }}>
+            {[
+              { l:"Top 3",     v: keywordMovement.top3    || 0, c:"#059669" },
+              { l:"Top 10",    v: keywordMovement.top10   || 0, c:"#D97706" },
+              { l:"Top 20",    v: keywordMovement.top20   || 0, c:txt2 },
+              { l:"New Rankings", v: keywordMovement.newRankings || 0, c:B },
+            ].map(s => (
+              <div key={s.l} style={{ background:bg3, borderTop:`3px solid ${s.c}`, borderRadius:10, padding:"12px 14px" }}>
+                <div style={{ fontSize:22, fontWeight:800, color:s.c }}>{s.v}</div>
+                <div style={{ fontSize:11, color:txt2, marginTop:2 }}>{s.l}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ROI */}
+      {roi && (
+        <div style={{ background:`linear-gradient(135deg,#05996922,#05996908)`, border:`1px solid #05996944`, borderRadius:12, padding:20, marginBottom:16 }}>
+          <div style={{ fontSize:12, fontWeight:700, color:"#059669", textTransform:"uppercase", letterSpacing:1, marginBottom:12 }}>ROI Estimate</div>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))", gap:12 }}>
+            {roi.estimatedRevenue && <div><div style={{ fontSize:22, fontWeight:800, color:"#059669" }}>{roi.estimatedRevenue}</div><div style={{ fontSize:11, color:txt2 }}>Est. Revenue Impact</div></div>}
+            {roi.trafficValue     && <div><div style={{ fontSize:22, fontWeight:800, color:"#059669" }}>{roi.trafficValue}</div><div style={{ fontSize:11, color:txt2 }}>Traffic Value</div></div>}
+            {roi.summary          && <div style={{ fontSize:13, color:txt, lineHeight:1.6, gridColumn:"1/-1" }}>{roi.summary}</div>}
+          </div>
+        </div>
+      )}
+
+      {/* Next 3 months */}
+      {next3Months?.targets?.length > 0 && (
+        <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:12, padding:20 }}>
+          <div style={{ fontSize:12, fontWeight:700, color:txt2, textTransform:"uppercase", letterSpacing:1, marginBottom:12 }}>Next 3 Months — Targets</div>
+          <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+            {next3Months.targets.map((t, i) => (
+              <div key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 12px", background:bg3, borderRadius:8 }}>
+                <span style={{ fontSize:13, color:txt }}>{t.kpi || t.metric}</span>
+                <span style={{ fontSize:13, fontWeight:700, color:B }}>{t.target}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // LOCAL SEO TAB — NAP Checker, Schema, GBP Signals
 // ─────────────────────────────────────────────────────────────────────────────
 function LocalSeoTab({ dark, state, client }) {

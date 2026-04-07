@@ -1335,4 +1335,273 @@ router.get("/:clientId/cwv-history", verifyToken, async (req, res) => {
   }
 });
 
+// ────────────────────────────────────────────────────
+// SPRINT 4 — A17 Reviewer Agent
+// ────────────────────────────────────────────────────
+router.post("/:clientId/A17/run", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const { runA17 } = require("../agents/A17_reviewer");
+    const result = await runA17(req.params.clientId);
+    return res.json(result);
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
+router.get("/:clientId/A17/review", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const data = await getState(req.params.clientId, "A17_review");
+    return res.json(data || {});
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
+// ────────────────────────────────────────────────────
+// SPRINT 4 — A19 Conversion Agent
+// ────────────────────────────────────────────────────
+router.post("/:clientId/A19/run", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const { runA19 } = require("../agents/A19_conversion");
+    const keys = await getUserKeys(req.uid);
+    const result = await runA19(req.params.clientId, keys);
+    return res.json(result);
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
+router.get("/:clientId/A19/state", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const data = await getState(req.params.clientId, "A19_conversion");
+    return res.json(data || {});
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
+// ────────────────────────────────────────────────────
+// SPRINT 4 — A20 Impact Report
+// ────────────────────────────────────────────────────
+router.get("/:clientId/A20/impact-report", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const { buildImpactReport } = require("../agents/A20_impactReport");
+    const report = await buildImpactReport(req.params.clientId);
+    return res.json({ report });
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
+// ────────────────────────────────────────────────────
+// SPRINT 3 — CMO Agent (autonomous decision layer)
+// ────────────────────────────────────────────────────
+
+router.post("/:clientId/cmo/run", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const { runCMO } = require("../agents/CMO_agent");
+    const keys = await getUserKeys(req.uid);
+    const result = await runCMO(req.params.clientId, keys);
+    return res.json(result);
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
+router.get("/:clientId/cmo/decision", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const data = await getState(req.params.clientId, "CMO_decision");
+    return res.json(data || {});
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
+// ── GET CMO queue (scheduled next actions) ─────────
+router.get("/:clientId/cmo/queue", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const snap = await db.collection("cmo_queue")
+      .where("clientId", "==", req.params.clientId)
+      .where("status", "==", "pending")
+      .limit(5)
+      .get();
+    const queue = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    return res.json({ queue });
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
+// ────────────────────────────────────────────────────
+// SPRINT 3 — Keyword → Lead Attribution
+// ────────────────────────────────────────────────────
+
+router.get("/:clientId/attribution", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const clientId = req.params.clientId;
+
+    const [brief, keywords, report] = await Promise.all([
+      getState(clientId, "A1_brief"),
+      getState(clientId, "A3_keywords"),
+      getState(clientId, "A9_report"),
+    ]);
+
+    if (!keywords) return res.json({ attribution: [], message: "Run keyword research first" });
+
+    // Build keyword → estimated traffic → estimated leads chain
+    const gsc    = report?.gscSummary || {};
+    const avgCtr = gsc.avgCtr || 0.03;
+    const avgPos = gsc.avgPos || 10;
+
+    // CTR curve by position
+    const ctrByPos = p => p <= 1 ? 0.25 : p <= 3 ? 0.12 : p <= 5 ? 0.06 : p <= 10 ? 0.02 : 0.005;
+
+    const allKw = Object.values(keywords.clusters || {}).flat().slice(0, 50);
+    const convRate = 0.03; // 3% default — improved with GA4 data
+
+    const attribution = allKw
+      .filter(k => k.searchVolume || k.volume)
+      .map(k => {
+        const vol  = k.searchVolume || k.volume || 0;
+        const pos  = k.currentPosition || k.difficulty || 15;
+        const ctr  = ctrByPos(pos);
+        const monthlyClicks = Math.round(vol * ctr);
+        const estLeads = Math.round(monthlyClicks * convRate);
+        return {
+          keyword:       k.keyword,
+          searchVolume:  vol,
+          position:      pos,
+          estimatedCtr:  (ctr * 100).toFixed(1) + "%",
+          monthlyClicks,
+          estimatedLeads: estLeads,
+          kpiContribution: estLeads > 5 ? "high" : estLeads > 1 ? "medium" : "low",
+        };
+      })
+      .sort((a, b) => b.estimatedLeads - a.estimatedLeads);
+
+    const totalEstLeads = attribution.reduce((s, k) => s + k.estimatedLeads, 0);
+    const avgOrderValue = parseFloat((brief?.avgOrderValue || "0").replace(/[^0-9.]/g, "")) || 0;
+
+    return res.json({
+      attribution: attribution.slice(0, 30),
+      summary: {
+        totalKeywords:    attribution.length,
+        totalEstLeads,
+        avgOrderValue,
+        estimatedRevenue: avgOrderValue > 0 ? Math.round(totalEstLeads * avgOrderValue) : null,
+        conversionRate:   (convRate * 100).toFixed(1) + "%",
+        note:             "Estimates based on GSC CTR data + industry benchmarks. Connect GA4 for real conversion data.",
+      },
+    });
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
+// ────────────────────────────────────────────────────
+// SPRINT 3 — GTM Setup Guide Generator
+// ────────────────────────────────────────────────────
+
+router.get("/:clientId/gtm-guide", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const brief = await getState(req.params.clientId, "A1_brief");
+    const kpis  = brief?.kpiSelection || ["Organic Traffic Growth"];
+    const conversionGoal = brief?.conversionGoal || "";
+
+    const triggers = [];
+
+    // Always include form submissions
+    triggers.push({
+      name:     "Form Submission",
+      type:     "Trigger",
+      config:   "Trigger Type: Form Submission\nEnable: All Forms\nFire On: Forms",
+      ga4Event: "form_submit",
+      useCase:  "Track lead form fills — primary conversion event",
+    });
+
+    // Phone clicks (if lead gen or local)
+    if (kpis.some(k => k.includes("Lead") || k.includes("Local"))) {
+      triggers.push({
+        name:     "Phone Click",
+        type:     "Trigger",
+        config:   "Trigger Type: Click – Just Links\nThis trigger fires on: Some Link Clicks\nClick URL contains: tel:",
+        ga4Event: "phone_click",
+        useCase:  "Track phone calls from organic search — critical for lead gen",
+      });
+    }
+
+    // WhatsApp clicks
+    triggers.push({
+      name:     "WhatsApp Click",
+      type:     "Trigger",
+      config:   "Trigger Type: Click – Just Links\nThis trigger fires on: Some Link Clicks\nClick URL contains: wa.me",
+      ga4Event: "whatsapp_click",
+      useCase:  "Track WhatsApp enquiries — common mobile conversion",
+    });
+
+    // CTA button clicks
+    triggers.push({
+      name:     "CTA Button Click",
+      type:     "Trigger",
+      config:   "Trigger Type: All Elements\nThis trigger fires on: Some Clicks\nClick Text contains: Get Quote, Book Now, Contact Us, Buy Now (adjust to your CTAs)",
+      ga4Event: "cta_click",
+      useCase:  "Track primary CTA buttons — shows intent without form fill",
+    });
+
+    // E-commerce
+    if (kpis.some(k => k.includes("Sales") || k.includes("E-commerce"))) {
+      triggers.push({
+        name:     "Purchase / Thank You Page",
+        type:     "Trigger",
+        config:   "Trigger Type: Page View\nThis trigger fires on: Some Page Views\nPage URL contains: /thank-you, /order-confirmation, /checkout/complete",
+        ga4Event: "purchase",
+        useCase:  "Track completed sales — required for ROI calculation",
+      });
+    }
+
+    // Scroll depth
+    triggers.push({
+      name:     "Scroll Depth (75%)",
+      type:     "Trigger (Built-in)",
+      config:   "Enable Scroll Depth in GA4 Enhanced Measurement — no GTM needed",
+      ga4Event: "scroll",
+      useCase:  "Measure content engagement — identifies high-value pages",
+    });
+
+    const guide = {
+      clientName:  brief?.businessName,
+      websiteUrl:  brief?.websiteUrl,
+      kpis,
+      gtmSteps: [
+        "Create GTM account at tagmanager.google.com",
+        "Install GTM snippet in <head> and <body> of website",
+        "Create GA4 Configuration Tag: Tag Type = Google Analytics: GA4 Configuration. Add your Measurement ID.",
+        "Create event tags below, each firing on the corresponding trigger",
+        "Test in Preview mode before publishing",
+        "Publish container when all events verified in GA4 DebugView",
+      ],
+      triggers,
+      conversionEvents: triggers.filter(t => ["form_submit","phone_click","purchase"].includes(t.ga4Event)).map(t => ({
+        event: t.ga4Event,
+        markAsConversion: true,
+        ga4Path: "GA4 → Admin → Events → Mark as conversion",
+      })),
+    };
+
+    return res.json({ guide });
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
 module.exports = router;

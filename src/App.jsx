@@ -32,6 +32,8 @@ import SitemapGenerator from "./SitemapGenerator";
 import UserPanel from "./pages/UserPanel";
 import GlobalChat from "./GlobalChat";
 import ClientPortal from "./pages/ClientPortal";
+import PreSalesAudit from "./pages/PreSalesAudit";
+import AgencyDashboard from "./pages/AgencyDashboard";
 
 const API = import.meta.env.VITE_API_URL || "https://seo-agent-backend-8m1z.onrender.com";
 
@@ -42,11 +44,17 @@ const gscConnected = _params.get("gsc_connected"); // clientId returned after GS
 const gscError     = _params.get("gsc_error");
 const ga4Connected = _params.get("ga4_connected"); // clientId returned after GA4 OAuth
 const ga4Error     = _params.get("ga4_error");
+const isPreSales   = window.location.pathname === "/audit" || _params.get("presales") === "1";
 
 // ── Main App wrapped with Auth ─────────────────────
 export default function App() {
   // White-label portal: bypass login entirely
   if (portalToken) return <ClientPortal token={portalToken} />;
+
+  // A21 Pre-Sales Audit: public page, no login
+  if (isPreSales) {
+    return <PreSalesAudit API={API} />;
+  }
 
   return (
     <AuthProvider>
@@ -499,7 +507,8 @@ function MainApp({ onLogout }) {
 
             <div style={s.secLabel}>Agency</div>
             <div onClick={()=>setPage("clients")} style={s.navItem(page==="clients", "#443DCB")}>🏢 <span>Client Manager</span></div>
-            <div onClick={()=>setPage("users")} style={s.navItem(page==="users", "#DC2626")}>👥 <span>User Management</span></div>
+            <div onClick={()=>setPage("agency")}  style={s.navItem(page==="agency",  "#059669")}>📊 <span>Agency Dashboard</span></div>
+            <div onClick={()=>setPage("users")}   style={s.navItem(page==="users",   "#DC2626")}>👥 <span>User Management</span></div>
 
             <div style={s.secLabel}>Main</div>
             <div onClick={()=>setPage("dashboard")}     style={s.navItem(page==="dashboard",     "#443DCB")}>🏠 <span>Dashboard</span></div>
@@ -608,6 +617,7 @@ function MainApp({ onLogout }) {
         {/* ── Pages ── */}
         <ErrorBoundary>
         {page==="clients"       && <ClientManager dark={dark} />}
+        {page==="agency"        && <AgencyDashboard dark={dark} onClientSelect={id => { setPage("clients"); }} />}
         {page==="users"         && <UserPanel dark={dark} />}
         {page==="dashboard"     && <Dashboard onToolSelect={selectTool} count={count} keys={keys} dark={dark} onPageSelect={setPage} />}
         {page==="promptcontent" && <PromptToContent dark={dark} keys={keys} model={model} />}

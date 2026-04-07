@@ -212,55 +212,63 @@ async function runA2(clientId) {
 
   if (checks.isAccessible) {
     try {
-      // Extract internal links from homepage HTML
-      const homepageHtml = checks._homepageHtml || "";
-      const domain       = new URL(siteUrl).hostname;
-      const linkMatches  = homepageHtml.matchAll(/href=["']([^"'#?][^"']*)["']/gi);
-      const foundLinks   = new Set();
-      for (const m of linkMatches) {
-        try {
-          const abs = new URL(m[1], siteUrl).href;
-          if (
-            new URL(abs).hostname === domain &&
-            abs !== siteUrl &&
-            !SKIP_EXTENSIONS.test(abs) &&
-            !SKIP_PATTERNS.some(p => p.test(abs))
-          ) {
-            foundLinks.add(abs);
-          }
-        } catch { /* skip malformed */ }
-      }
-      const pagesToCrawl = [...foundLinks].slice(0, 50);
-      discoveredUrls = [...foundLinks];
-      checks.internalLinksFound = pagesToCrawl.length;
+      const domain = new URL(siteUrl).hostname;
 
-      // ── Depth-2 crawl: also discover links from level-1 pages ────────────
-      // This finds pages linked from inner pages, not just from homepage.
-      // Capped at 80 total URLs to stay within 25-min pipeline timeout.
-      const depth2Links = new Set([...foundLinks]);
-      const depth1Sample = pagesToCrawl.slice(0, 10); // sample 10 inner pages for depth-2 links
-      await Promise.allSettled(
-        depth1Sample.map(async innerUrl => {
+      // ── Sprint 1: Sitemap-first URL discovery ────────────────────────────
+      // Try sitemap.xml (and sitemap index) to discover all URLs before
+      // falling back to homepage link extraction. This allows 500+ page sites.
+      const sitemapUrls = await discoverFromSitemap(siteUrl, domain, SKIP_EXTENSIONS, SKIP_PATTERNS);
+      checks.sitemapPagesFound = sitemapUrls.length;
+
+      // Fallback: extract links from homepage HTML if sitemap gave nothing
+      const homepageHtml = checks._homepageHtml || "";
+      const foundLinks   = new Set(sitemapUrls);
+      if (foundLinks.size === 0) {
+        const linkMatches = homepageHtml.matchAll(/href=["']([^"'#?][^"']*)["']/gi);
+        for (const m of linkMatches) {
           try {
-            const r = await fetch(innerUrl, { redirect:"follow", signal: AbortSignal.timeout(5000), headers:{ "User-Agent":"SEO-Agent-Audit/1.0" } });
-            if (!r.ok) return;
-            const h = await r.text();
-            const ms = h.matchAll(/href=["']([^"'#?][^"']*)["']/gi);
-            for (const m of ms) {
-              try {
-                const a = new URL(m[1], innerUrl).href;
-                if (new URL(a).hostname === domain && !depth2Links.has(a) &&
-                    !SKIP_EXTENSIONS.test(a) && !SKIP_PATTERNS.some(p => p.test(a))) {
-                  depth2Links.add(a);
-                  if (depth2Links.size >= 80) return;
-                }
-              } catch { /* skip */ }
+            const abs = new URL(m[1], siteUrl).href;
+            if (
+              new URL(abs).hostname === domain &&
+              abs !== siteUrl &&
+              !SKIP_EXTENSIONS.test(abs) &&
+              !SKIP_PATTERNS.some(p => p.test(abs))
+            ) {
+              foundLinks.add(abs);
             }
-          } catch { /* skip */ }
-        })
-      );
-      // Merge: original depth-1 pages first, then new depth-2 discoveries
-      const allPagesToCrawl = [...new Set([...pagesToCrawl, ...[...depth2Links].filter(u => !foundLinks.has(u))])].slice(0, 80);
+          } catch { /* skip malformed */ }
+        }
+      }
+
+      // If still thin (< 15 pages), augment with depth-2 link crawl
+      let allPagesToCrawl = [...foundLinks].filter(u => u !== siteUrl);
+      if (allPagesToCrawl.length < 15) {
+        const depth2Links = new Set(foundLinks);
+        const depth1Sample = allPagesToCrawl.slice(0, 10);
+        await Promise.allSettled(
+          depth1Sample.map(async innerUrl => {
+            try {
+              const r = await fetch(innerUrl, { redirect:"follow", signal: AbortSignal.timeout(5000), headers:{ "User-Agent":"SEO-Agent-Audit/1.0" } });
+              if (!r.ok) return;
+              const h = await r.text();
+              for (const m of h.matchAll(/href=["']([^"'#?][^"']*)["']/gi)) {
+                try {
+                  const a = new URL(m[1], innerUrl).href;
+                  if (new URL(a).hostname === domain && !depth2Links.has(a) &&
+                      !SKIP_EXTENSIONS.test(a) && !SKIP_PATTERNS.some(p => p.test(a))) {
+                    depth2Links.add(a);
+                    if (depth2Links.size >= 80) return;
+                  }
+                } catch { /* skip */ }
+              }
+            } catch { /* skip */ }
+          })
+        );
+        allPagesToCrawl = [...new Set([...allPagesToCrawl, ...[...depth2Links].filter(u => !foundLinks.has(u))])];
+      }
+
+      // Cap at 500 pages for audit (Firestore 1MB doc limit safety)
+      allPagesToCrawl = allPagesToCrawl.slice(0, 500);
       checks.internalLinksFound = allPagesToCrawl.length;
       discoveredUrls = allPagesToCrawl;
 
@@ -754,6 +762,63 @@ function parseOnPage(html, pageUrl, clientId) {
   }
 
   return { checks, issues };
+}
+
+/**
+ * Sprint 1 — Sitemap-based URL discovery.
+ * Supports sitemap index files (nested sitemaps) and standard sitemaps.
+ * Returns up to 500 filtered, same-domain URLs.
+ */
+async function discoverFromSitemap(siteUrl, domain, skipExt, skipPatterns) {
+  const urls = new Set();
+
+  async function parseSitemap(xmlUrl, depth = 0) {
+    if (depth > 2) return; // prevent infinite recursion on malformed sitemap indices
+    try {
+      const res = await fetch(xmlUrl, { signal: AbortSignal.timeout(10000), headers: { "User-Agent": "SEO-Agent-Audit/1.0" } });
+      if (!res.ok) return;
+      const xml = await res.text();
+
+      // Sitemap index — contains <sitemap><loc> pointing to child sitemaps
+      if (xml.includes("<sitemapindex")) {
+        const children = [...xml.matchAll(/<loc>\s*(https?:\/\/[^<]+)\s*<\/loc>/gi)].map(m => m[1].trim());
+        await Promise.allSettled(children.slice(0, 20).map(child => parseSitemap(child, depth + 1)));
+        return;
+      }
+
+      // Standard sitemap — contains <url><loc>
+      const locs = [...xml.matchAll(/<loc>\s*(https?:\/\/[^<]+)\s*<\/loc>/gi)].map(m => m[1].trim());
+      for (const loc of locs) {
+        try {
+          const u = new URL(loc);
+          if (
+            u.hostname === domain &&
+            !skipExt.test(loc) &&
+            !skipPatterns.some(p => p.test(loc))
+          ) {
+            urls.add(loc.split("?")[0]); // strip query strings
+            if (urls.size >= 500) return;
+          }
+        } catch { /* skip malformed */ }
+      }
+    } catch { /* non-blocking — sitemap unavailable */ }
+  }
+
+  // Try the three most common sitemap locations
+  const candidates = [
+    new URL("/sitemap.xml",       siteUrl).href,
+    new URL("/sitemap_index.xml", siteUrl).href,
+    new URL("/sitemap.xml.gz",    siteUrl).href, // some WP installs
+  ];
+
+  await Promise.allSettled(candidates.map(c => parseSitemap(c)));
+
+  // Remove the root URL itself — it's the homepage, already audited separately
+  urls.delete(siteUrl);
+  urls.delete(siteUrl.replace(/\/$/, ""));
+  urls.delete(siteUrl.endsWith("/") ? siteUrl : siteUrl + "/");
+
+  return [...urls];
 }
 
 module.exports = { runA2 };

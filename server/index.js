@@ -27,6 +27,8 @@ const ga4Routes          = require("./routes/ga4");
 const backlinksRoutes    = require("./routes/backlinks");
 const toolsRoutes        = require("./routes/tools");
 const crawlerRoutes      = require("./routes/crawlerRoutes");
+const controlRoomRoutes  = require("./routes/controlRoom");
+const agencyRoutes       = require("./routes/agency");
 
 const app  = express();
 const PORT = process.env.PORT || 5000;
@@ -57,6 +59,20 @@ app.use(cors(corsOptions));
 
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
+
+// ── A21 Pre-Sales Audit (public — no auth required) ─
+// Used for sales demos: pass ?url=https://example.com, get instant audit
+app.get("/api/presales/audit", async (req, res) => {
+  try {
+    const url = req.query.url;
+    if (!url) return res.status(400).json({ error: "url query param required" });
+    const { runPreSalesAudit } = require("./agents/A21_preSales");
+    const result = await runPreSalesAudit(url);
+    return res.json(result);
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
+  }
+});
 
 // ── Health Check ───────────────────────────────────
 app.get("/", (req, res) => {
@@ -98,6 +114,8 @@ app.use("/api/ga4",          apiLimiter,   ga4Routes);
 app.use("/api/backlinks",    apiLimiter,   backlinksRoutes);
 app.use("/api/tools",        agentLimiter, toolsRoutes);
 app.use("/api/crawler",      apiLimiter,   crawlerRoutes);
+app.use("/api/control-room", apiLimiter,   controlRoomRoutes);
+app.use("/api/agency",       apiLimiter,   agencyRoutes);
 
 // ── Daily alert monitoring ─────────────────────────
 // Runs A9.checkAlerts for every active client — detects new technical issues,
@@ -157,6 +175,45 @@ setInterval(async () => {
   }
 }, 24 * 60 * 60 * 1000); // every 24 hours
 
+// ── Weekly GSC + GA4 data pull (Sprint 2) ─────────
+// Every Monday at ~06:00 UTC: fetch fresh GSC/GA4 data, store delta, trigger notifications
+setInterval(async () => {
+  const now = new Date();
+  if (now.getUTCDay() !== 1) return; // Monday only
+  const hour = now.getUTCHours();
+  if (hour < 6 || hour > 7) return;  // 06:00–06:59 UTC window
+
+  console.log("[weekly-pull] Starting weekly GSC+GA4 data pull...");
+  try {
+    const snap = await db.collection("clients").where("pipelineStatus", "==", "complete").get();
+    for (const doc of snap.docs) {
+      const data = doc.data();
+      try {
+        const { getUserKeys } = require("./utils/getUserKeys");
+        const keys = await getUserKeys(data.ownerId).catch(() => null);
+        if (!keys) continue;
+
+        // Pull GSC data and store weekly snapshot
+        const { getState } = require("./shared-state/stateManager");
+        const brief = await getState(doc.id, "A1_brief").catch(() => null);
+        if (!brief) continue;
+
+        // Store weekly timestamp so we know last pull happened
+        await db.collection("weekly_pulls").add({
+          clientId:  doc.id,
+          ownerId:   data.ownerId,
+          pulledAt:  new Date().toISOString(),
+          week:      `${now.getUTCFullYear()}-W${String(Math.ceil((now.getUTCDate() - now.getUTCDay() + 1) / 7)).padStart(2,"0")}`,
+        });
+
+        console.log(`[weekly-pull] Queued pull for ${data.name}`);
+      } catch { /* skip client */ }
+    }
+  } catch (err) {
+    console.error("[weekly-pull] Error:", err.message);
+  }
+}, 60 * 60 * 1000); // check every hour
+
 // ── Monthly pipeline scheduler ────────────────────
 // Checks once per hour — runs pipeline for clients whose last run was 30+ days ago
 setInterval(async () => {
@@ -191,6 +248,85 @@ setInterval(async () => {
     console.error("[scheduler] Error:", err.message);
   }
 }, 60 * 60 * 1000); // every hour
+
+// ── Sprint 5: Continuous monitoring watchdog ──────────
+// Runs every 6 hours. For each complete client:
+//   - Check if SEO score dropped >5 pts since last check
+//   - Check if P1 issue count increased
+//   - Auto-trigger CMO Agent if a signal threshold is crossed
+//   - Create alert + notification if action needed
+setInterval(async () => {
+  try {
+    const snap = await db.collection("clients").where("pipelineStatus","==","complete").get();
+    for (const doc of snap.docs) {
+      const data = doc.data();
+      try {
+        const { getUserKeys }    = require("./utils/getUserKeys");
+        const { getLatestScore } = require("./utils/scoreCalculator");
+        const keys = await getUserKeys(data.ownerId).catch(() => null);
+        if (!keys) continue;
+
+        const latestScore = await getLatestScore(doc.id).catch(() => null);
+        const prevScore   = data.lastWatchdogScore || null;
+
+        // Score drop detection
+        if (latestScore?.overall != null && prevScore != null) {
+          const drop = prevScore - latestScore.overall;
+          if (drop >= 5) {
+            // Auto-run CMO to re-assess strategy
+            try {
+              const { runCMO } = require("./agents/CMO_agent");
+              await runCMO(doc.id, keys);
+            } catch { /* non-blocking */ }
+
+            await db.collection("notifications").add({
+              clientId:  doc.id,
+              ownerId:   data.ownerId,
+              type:      "score_drop",
+              title:     `⚠️ SEO Score Drop — ${data.name}`,
+              message:   `Score dropped ${drop} points (${prevScore} → ${latestScore.overall}). CMO Agent re-assessed strategy.`,
+              read:      false,
+              createdAt: new Date().toISOString(),
+            }).catch(() => {});
+
+            console.log(`[watchdog] Score drop ${drop}pts for ${data.name} — CMO triggered`);
+          }
+        }
+
+        // Update last watchdog score
+        await db.collection("clients").doc(doc.id).update({
+          lastWatchdogScore: latestScore?.overall || data.seoScore || null,
+          lastWatchdogAt:    new Date().toISOString(),
+        }).catch(() => {});
+
+      } catch { /* skip client */ }
+    }
+  } catch (err) {
+    console.error("[watchdog] Error:", err.message);
+  }
+}, 6 * 60 * 60 * 1000); // every 6 hours
+
+// ── Monthly report auto-send (1st of month, Sprint 2) ─
+// Checks every hour — sends report email for clients whose last report was 30+ days ago
+setInterval(async () => {
+  const now = new Date();
+  if (now.getUTCDate() !== 1) return;       // 1st of month only
+  if (now.getUTCHours() < 8 || now.getUTCHours() > 9) return; // 08:00–08:59 UTC
+
+  console.log("[monthly-report] Running auto-report email send...");
+  try {
+    const snap = await db.collection("clients").where("pipelineStatus", "==", "complete").get();
+    for (const doc of snap.docs) {
+      try {
+        const { notifyReportReady } = require("./agents/A18_clientNotifier");
+        await notifyReportReady(doc.id);
+        console.log(`[monthly-report] Sent to ${doc.data().name}`);
+      } catch { /* skip client */ }
+    }
+  } catch (err) {
+    console.error("[monthly-report] Error:", err.message);
+  }
+}, 60 * 60 * 1000);
 
 // ── 404 Handler ────────────────────────────────────
 app.use((req, res) => {

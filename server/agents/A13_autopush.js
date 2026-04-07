@@ -243,6 +243,14 @@ async function runA13(clientId, keys) {
   // Commit the push log batch
   try { await logBatch.commit(); } catch { /* non-blocking */ }
 
+  // Sprint 2 — A18: notify client when fixes are pushed
+  if (pushed.length > 0) {
+    try {
+      const { notifyFixPushed } = require("./A18_clientNotifier");
+      await notifyFixPushed(clientId, { fixes: pushed });
+    } catch { /* non-blocking — notification failure must never break push */ }
+  }
+
   return {
     success: true,
     pushed:  pushed.length,

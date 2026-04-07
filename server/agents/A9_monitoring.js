@@ -180,6 +180,13 @@ Write an 8-step SEO report. Return ONLY valid JSON:
   };
 
   await saveState(clientId, "A9_report", result);
+
+  // Sprint 2 — A18: notify that report is ready (non-blocking)
+  try {
+    const { notifyReportReady } = require("./A18_clientNotifier");
+    await notifyReportReady(clientId);
+  } catch { /* non-blocking */ }
+
   return { success: true, report: result };
 }
 
