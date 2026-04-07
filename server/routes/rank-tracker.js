@@ -28,23 +28,29 @@ async function checkPositionsDDG(domain, keywords, country) {
             : country === "AU" ? "au"
             : country === "CA" ? "ca" : "us";
 
+  const rootDomain = cleanDomain.split(".")[0]; // e.g. "example" from "example.co.uk"
+
   const results = {};
   for (const kw of keywords) {
     try {
-      const serp  = await getSERP(kw, { location: loc, num: 30 });
-      const found = (serp.results || []).findIndex(r => {
-        const u = (r.url || r.link || "").toLowerCase();
-        return u.includes(cleanDomain);
+      const serp       = await getSERP(kw, { location: loc, num: 30 });
+      const serpResults = serp.results || [];
+      const found = serpResults.findIndex(r => {
+        const u = (r.url    || r.link   || "").toLowerCase();
+        const d = (r.domain || "").toLowerCase();
+        return u.includes(cleanDomain) || d.includes(cleanDomain) ||
+               (rootDomain.length > 4 && (u.includes(rootDomain) || d.includes(rootDomain)));
       });
       results[kw.toLowerCase()] = {
         position: found >= 0 ? found + 1 : null,
-        url:      found >= 0 ? (serp.results[found].url || serp.results[found].link || null) : null,
+        url:      found >= 0 ? (serpResults[found].url || serpResults[found].link || null) : null,
+        source:   serp.source || "ddg",
       };
     } catch {
       results[kw.toLowerCase()] = { position: null, url: null };
     }
-    // Respectful delay — DDG rate-limits aggressive scrapers
-    await new Promise(r => setTimeout(r, 900));
+    // Respectful delay — DDG/Bing rate-limits aggressive scrapers
+    await new Promise(r => setTimeout(r, 800));
   }
   return results;
 }
@@ -167,13 +173,25 @@ router.get("/:clientId/competitors", verifyToken, async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 // POST — add keywords in bulk (100+)
-// Body: { keywords: ["kw1","kw2",...], category, location: { country, countryName, city }, targetUrl }
+// Body: { keywords: ["kw1","kw2",...], category, location, targetUrl, preload?: [{keyword, currentPosition, rankingUrl, source}] }
 router.post("/:clientId/tracked-keywords", verifyToken, async (req, res) => {
   try {
     await getClientDoc(req.params.clientId, req.uid);
-    const { keywords = [], category = "General", location = { country: "US", countryName: "United States", city: "" }, targetUrl = "" } = req.body;
+    const {
+      keywords = [],
+      category  = "General",
+      location  = { country: "US", countryName: "United States", city: "" },
+      targetUrl = "",
+      preload   = [],  // optional: pre-fill positions from A10 pipeline data
+    } = req.body;
 
     if (!keywords.length) return res.status(400).json({ error: "keywords array required" });
+
+    // Build preload map: keyword (lower) → { currentPosition, rankingUrl, source }
+    const preloadMap = {};
+    for (const p of preload) {
+      if (p.keyword) preloadMap[p.keyword.toLowerCase()] = p;
+    }
 
     const col   = db.collection("clients").doc(req.params.clientId).collection("tracked_keywords");
     const batch = db.batch();
@@ -181,30 +199,34 @@ router.post("/:clientId/tracked-keywords", verifyToken, async (req, res) => {
     let added   = 0;
 
     // Deduplicate against existing
-    const existing = await col.get();
+    const existing    = await col.get();
     const existingKeys = new Set(existing.docs.map(d => `${d.data().keyword?.toLowerCase()}__${d.data().location?.country}`));
 
     for (const kw of keywords) {
       const keyword = kw.trim();
       if (!keyword) continue;
       const key = `${keyword.toLowerCase()}__${location.country}`;
-      if (existingKeys.has(key)) continue; // skip duplicate
+      if (existingKeys.has(key)) continue;
 
+      const pre = preloadMap[keyword.toLowerCase()];
       const ref = col.doc();
       batch.set(ref, {
         keyword,
         category,
         location,
         targetUrl,
-        addedAt:         now,
-        lastChecked:     null,
-        currentPosition: null,
-        previousPosition:null,
-        change:          null,
-        rankingUrl:      null,
-        volume:          0,
-        difficulty:      0,
-        history:         [],
+        addedAt:          now,
+        lastChecked:      pre ? now : null,
+        currentPosition:  pre?.currentPosition  ?? null,
+        previousPosition: null,
+        change:           null,
+        rankingUrl:       pre?.rankingUrl        ?? null,
+        volume:           0,
+        difficulty:       0,
+        history:          pre?.currentPosition != null
+          ? [{ date: now.split("T")[0], position: pre.currentPosition, url: pre.rankingUrl || null }]
+          : [],
+        source:           pre?.source || null,
       });
       added++;
     }

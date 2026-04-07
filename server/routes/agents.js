@@ -593,6 +593,17 @@ router.post("/:clientId/run-a10", verifyToken, async (req, res) => {
   }
 });
 
+// GET A10 pipeline rankings (used by RankTrackerPanel for auto-import)
+router.get("/:clientId/A10/rankings", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const data = await getState(req.params.clientId, "A10_rankings");
+    return res.json(data || {});
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
 // ── A11 Link Builder ───────────────────────────────
 router.post("/:clientId/A11/run", verifyToken, async (req, res) => {
   try {

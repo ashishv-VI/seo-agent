@@ -93,7 +93,45 @@ export default function RankTrackerPanel({ dark, clientId, getToken, API }) {
       });
       const data  = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to load keywords");
-      setKeywords(data.keywords || []);
+      const tracked = data.keywords || [];
+      setKeywords(tracked);
+
+      // Auto-import A10 pipeline keywords if tracker is empty
+      if (tracked.length === 0) {
+        try {
+          const a10Res  = await fetch(`${API}/api/agents/${clientId}/A10/rankings`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (a10Res.ok) {
+            const a10 = await a10Res.json();
+            const a10Rankings = a10?.rankings?.rankings || a10?.rankings || [];
+            if (a10Rankings.length > 0) {
+              // Import top 30 into tracked keywords
+              const importRes = await fetch(`${API}/api/rank-tracker/${clientId}/tracked-keywords`, {
+                method:  "POST",
+                headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  keywords: a10Rankings.slice(0, 30).map(r => r.keyword),
+                  category: "Pipeline (A10)",
+                  location: { country: "US", countryName: "United States", city: "" },
+                  preload:  a10Rankings.slice(0, 30).map(r => ({
+                    keyword:         r.keyword,
+                    currentPosition: r.position || null,
+                    rankingUrl:      r.page     || null,
+                    source:          r.source   || "A10",
+                  })),
+                }),
+              });
+              if (importRes.ok) {
+                // Re-load after import
+                const r2   = await fetch(`${API}/api/rank-tracker/${clientId}/tracked-keywords`, { headers: { Authorization: `Bearer ${token}` } });
+                const d2   = await r2.json();
+                setKeywords(d2.keywords || []);
+              }
+            }
+          }
+        } catch { /* silent — auto-import is best-effort */ }
+      }
     } catch (e) { setError(e.message); }
     if (!silent) setLoading(false);
   }, [clientId, getToken, API]);
@@ -314,13 +352,13 @@ export default function RankTrackerPanel({ dark, clientId, getToken, API }) {
 
       {/* ── Rank Engine Status ── */}
       {!activeEngine && !showDfsSetup && (
-        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderRadius: 8, background: "#DC262611", border: "1px solid #DC262633", marginBottom: 12 }}>
-          <span style={{ fontSize: 15 }}>⚠️</span>
-          <div style={{ flex: 1, fontSize: 12, color: "#DC2626" }}>
-            <strong>No rank checking API found.</strong> Add a SerpAPI or DataForSEO key to check live positions.
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderRadius: 8, background: "#0891B211", border: "1px solid #0891B233", marginBottom: 12 }}>
+          <span style={{ fontSize: 15 }}>🌐</span>
+          <div style={{ flex: 1, fontSize: 12, color: "#0891B2" }}>
+            <strong>Free mode — DuckDuckGo/Bing/Yahoo scraper active.</strong> Rankings checked via free SERP scraping. For higher accuracy, add a SerpAPI or DataForSEO key.
           </div>
           <button onClick={() => setShowDfsSetup(true)}
-            style={{ padding: "6px 14px", borderRadius: 6, border: "none", background: "#DC2626", color: "#fff", fontWeight: 700, fontSize: 12, cursor: "pointer", whiteSpace: "nowrap" }}>
+            style={{ padding: "6px 14px", borderRadius: 6, border: "1px solid #0891B244", background: "transparent", color: "#0891B2", fontWeight: 700, fontSize: 12, cursor: "pointer", whiteSpace: "nowrap" }}>
             Add API Key
           </button>
         </div>
