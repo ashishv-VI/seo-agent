@@ -1,13 +1,24 @@
 # CLAUDE.md — SEO AI Agent Platform
+**Damco Digital · Internal · April 2026**
 
-## Project Overview
+---
 
-A full-stack, multi-agent SEO automation platform that mirrors real agency workflows.
-- **Frontend**: React 18 + Vite (inline styles, no CSS framework)
-- **Backend**: Express 5 + Firebase Firestore + Firebase Auth
-- **Agents**: A0–A16 pipeline with dependency management
-- **LLM**: Groq → Gemini → OpenRouter (3-provider fallback chain)
-- **Deployment**: Render (backend at `onrender.com`), Vite build (frontend)
+## Platform Vision
+
+An AI-powered SEO Operating System — not just an audit tool, but a system that:
+1. **Senses** — Collects data from GSC, GA4, crawler, rank tracker
+2. **Decides** — CMO Agent sees all data → decides what to fix (Sprint 3 goal)
+3. **Acts** — Pushes fixes automatically (WP autopush working)
+4. **Learns** — Tracks what worked, cross-client pattern learning (Sprint 5)
+
+**Current state**: Platform is 60% AI Agent, 40% advanced automation. SENSE + ACT + partial LEARN work. DECIDE step (CMO Agent) is Sprint 3.
+
+**3 User Types:**
+| User | Need | Platform Delivers |
+|------|------|-------------------|
+| SEO Executive | Manage 20 clients without missing anything | Auto-alerts, approval queue, weekly briefings |
+| Client | Proof that money is working, show growth | Control room, before/after, lead attribution |
+| Agency Head (HoM) | Scale without adding headcount | Agency dashboard, ROI per client, renewal reports |
 
 ---
 
@@ -30,176 +41,290 @@ git push origin main
 
 ---
 
-## Architecture
+## Complete Agent Architecture (21 Agents)
 
-### Agent Pipeline (A0–A16)
+### STRATEGY LAYER
+| Agent | Type | Purpose | Status |
+|-------|------|---------|--------|
+| **CMO Agent** | Strategy | Sees all data → decides: focus on Traffic or Conversion → auto-triggers next agent | **Build (Sprint 3)** |
+| **A17 Reviewer** | Quality | Quality gate — confidence score 0–1 per agent output | **Build (Sprint 4)** |
+| **A19 Conversion** | Revenue | Traffic coming but no leads? Analyses CTA, forms, landing pages | **Build (Sprint 4)** |
 
-Agents run in dependency order managed by `server/agents/A0_orchestrator.js`:
+### DISCOVERY LAYER
+| Agent | Type | Purpose | Status |
+|-------|------|---------|--------|
+| **A1** `A1_onboarding.js` | Input | Client brief: business info, goals, keywords, competitors, KPI selection → `A1_brief` | **Exists** |
+| **A2** `A2_audit.js` | Technical | 50–80 pages crawl, depth-2, JS rendering, 34 issue types → `A2_audit` | **Partial** (500+ page sitemap crawl in Sprint 1) |
+| **A3** `A3_keywords.js` | Research | 4 clusters: intent, difficulty, priority, suggestedPage → `A3_keywords` | **Exists** |
+| **A4** `A4_competitor.js` | Research | Auto-discover competitors from SERP, crawl, live positions, content gaps → `A4_competitor` | **Exists** |
+| **A21 Pre-Sales** | Sales | 60-second demo audit for sales meetings. No login needed. | **Build (Sprint 4)** |
 
+### EXECUTION LAYER
+| Agent | Type | Purpose | Status |
+|-------|------|---------|--------|
+| **A5** `A5_content.js` | Content | Homepage briefs, page plan, content gaps → `A5_content` | **Exists** |
+| **A6** `A6_onpage.js` | Technical | Schema, title, meta, internal links, OG tags → `A6_onpage` | **Exists** |
+| **A7** `A7_technical.js` | Technical | Real PageSpeed API — LCP, CLS, FCP, TTFB → `A7_technical` | **Exists** |
+| **A8** `A8_geo.js` | Local | GBP, NAP, Knowledge Graph, AI search visibility → `A8_geo` | **Exists** |
+| **A14** `A14_contentAutopilot.js` | Automation | AI writes blog posts, pushes as WordPress draft | **Exists** |
+
+### AUTOMATION LAYER
+| Agent | Type | Purpose | Status |
+|-------|------|---------|--------|
+| **A13** `A13_autopush.js` | Push | Backup → Push → Log. Rollback. Human gate required. | **Exists** |
+| **A10** `A10_rankingTracker.js` | Monitor | GSC real + DDG free fallback. History + alerts. | **Exists** |
+| **A11** `A11_linkBuilder.js` | Backlinks | 15 link prospects + outreach email drafts | **Exists** |
+| **A15** `A15_competitorMonitor.js` | Monitor | Daily sitemap diff. New competitor pages → alert. | **Exists** |
+| **A18 Client Notifier** | Comms | Fix pushed → email. Monthly report auto-send. | **Build (Sprint 2)** |
+
+### INTELLIGENCE LAYER
+| Agent | Type | Purpose | Status |
+|-------|------|---------|--------|
+| **A9** `A9_monitoring.js` | Report | 8-section synthesis. GSC data. Forecast. → `A9_report` | **Exists** |
+| **A16** `A16_memory.js` | Learn | Score history, fix log, what worked tracking → `client_memory` | **Exists** |
+| **ROI Attribution** | Revenue | Fix → rank → traffic → revenue chain | **Build (Sprint 3)** |
+| **A20 Impact Report** | Renewal | 6-month PDF. Before vs after. Renewal weapon. | **Build (Sprint 4)** |
+| **A12** `A12_autoExec.js` | Automation | CMO decision → schedules next agent run | **Exists** |
+
+### Pipeline Dependency Order (A0 Orchestrator)
 ```
-A1 (Brief) → A2 (Audit) + A7 (CWV) → A3 (Keywords) → A4 (Competitor)
+A1 (Brief) → A2 (Audit) + A7 (CWV)  → A3 (Keywords) → A4 (Competitor)
            → A5 (Content) + A11 (Links) → A6 (On-Page) + A8 (GEO)
            → A9 (Report) + A10 (Rankings)
 ```
+Every agent returns: `{ success: boolean, error?: string, ...data }`
 
-| Agent | File | Purpose |
-|-------|------|---------|
-| A0 | `A0_orchestrator.js` | Pipeline runner, dependency checker |
-| A1 | `A1_onboarding.js` | Structures client brief → `A1_brief` |
-| A2 | `A2_audit.js` | Technical SEO audit, depth-2 crawl, JS rendering → `A2_audit` |
-| A3 | `A3_keywords.js` | Keyword research + clustering → `A3_keywords` |
-| A4 | `A4_competitor.js` | Auto-discover competitors from SERP, crawl, analyse → `A4_competitor` |
-| A5 | `A5_content.js` | Content briefs + meta rewrites → `A5_content` |
-| A6 | `A6_onpage.js` | On-page fix queue (titles, schema, meta) → `A6_onpage` |
-| A7 | `A7_technical.js` | PageSpeed Insights / Core Web Vitals → `A7_technical` |
-| A8 | `A8_geo.js` | Local SEO, GBP, Knowledge Graph → `A8_geo` |
-| A9 | `A9_monitoring.js` | 8-step LLM report + GSC summary → `A9_report` |
-| A10 | `A10_rankingTracker.js` | Keyword position snapshots |
-| A11 | `A11_linkBuilder.js` | 15 link-building opportunities |
-| A12 | `A12_autoExec.js` | AI-generates fix implementations (Level 2) |
-| A13 | `A13_autopush.js` | Auto-pushes approved fixes to WordPress (Level 2) |
-| A14 | `A14_contentAutopilot.js` | Writes full articles for content gaps (Level 2) |
-| A15 | `A15_competitorMonitor.js` | Daily competitor sitemap monitoring (Level 3) |
-| A16 | `A16_memory.js` | Client AI memory enrichment (Level 3) |
+---
 
-**Every agent returns:** `{ success: boolean, error?: string, ...data }`
+## SEO KPIs — What the Platform Tracks
 
-**Shared state pattern** (all agent state persisted in Firestore):
+The platform measures: **1) Current state → 2) Benchmark → 3) Agent decision if gap exists**
+
+| KPI | Metric | Agent | Data Source | Success | Agent Decision if Below |
+|-----|--------|-------|-------------|---------|------------------------|
+| **KPI 1** | Keyword Rankings | A3 + A10 | GSC + DDG | Pos 1–10 = green, 11–20 = amber, 21+ = red | Keyword on page 2 → A11 backlinks. Drop → A2 re-run. |
+| **KPI 2** | Organic Traffic | A10 + GA4 | GSC + GA4 Free | Month 1: baseline, Month 3: +20–40%, Month 6: +80–150% | CTR low despite ranking → A5 title rewrite. High impressions, low clicks → meta optimize. |
+| **KPI 3** | Click-Through Rate | A5 + A6 | GSC Free | Pos 1: 25%+, Pos 3: 10%+, Pos 10: 2%+ | CTR 1.5% at pos 6 → title tag rewrite. Analyse competitor titles. |
+| **KPI 4** | Backlinks / DA | A11 + DataForSEO | DataForSEO (paid) | Month 1–3: 2–5 quality links, Month 6: DR +5–10 | DR stuck → A11 high-authority prospects priority. |
+| **KPI 5** | Technical Health | A2 + A7 | PageSpeed + Crawler | P1 issues: 0 target. LCP < 2.5s. Score 80+ | Score plateau → deeper crawl. Technical done → content layer focus. |
+| **KPI 6** | Content Performance | A5 + A14 | GSC + GA4 | Month 1: 2–3 new pages, Month 3: 30% pages get impressions | Blog no impressions after 3 months → refresh. Competitor ranking → update + depth add. |
+| **KPI 7** | Conversion Rate | A19 (Build) | GA4 + GTM | E-comm: 1–3%, Lead gen: 3–8%, Services: 2–5% | 500 traffic, 2 leads = 0.4% CR → landing page problem. CTA fix needed. |
+
+---
+
+## Client Control Room — Complete Plan
+
+**Concept**: When a client is added → automatically generate a live intelligence dashboard.
+
+### Data Sources
+| Source | Data | Cost | Setup |
+|--------|------|------|-------|
+| Google Search Console | Keyword positions, clicks, CTR, impressions, top pages | FREE | OAuth connect (1 time) |
+| Google Analytics 4 | Sessions, organic traffic, top landing pages, bounce rate, conversions | FREE | OAuth connect (1 time) |
+| GTM Custom Events | Form fills, phone clicks, WhatsApp clicks, CTA button clicks, scroll depth | FREE | GTM setup (1 time per client) |
+| Our Web Crawler | Page health, broken links, title/meta issues, speed changes, new pages | FREE | Auto runs in pipeline |
+| DataForSEO | Backlinks, referring domains, domain rating | PAID | Optional — only for backlink data |
+
+### Control Room Sections
+1. **This Week (GSC Data)** — Top performing page, best keyword, new keywords ranking, CTR, impressions. Week-over-week delta.
+2. **Traffic (GA4)** — Organic visitors, top landing pages, session duration, bounce rate, new vs returning.
+3. **Lead Tracking (GTM)** — Form fills count, top lead source page, phone clicks, WhatsApp clicks, keyword→lead attribution.
+4. **Site Health** — Overall score, critical issues, fixes pushed this month, competitor new pages alert.
+5. **Agent Suggestions** — CMO agent analyses all data → 3–5 priority suggestions with reasoning and expected impact.
+6. **Before/After Compare** — Day 1 vs today. Score, rankings, traffic, leads, fixes. 6-month trend graphs.
+
+### Lead + Call Tracking (All Free via GTM)
+| Track | How | Code Needed |
+|-------|-----|-------------|
+| Form fills | GTM → `form_submit` event → GA4 conversion | 1 GTM trigger |
+| Phone clicks | GTM → `tel:` link click → GA4 event | 1 GTM trigger |
+| WhatsApp clicks | GTM → outbound click (`wa.me`) → GA4 | 1 GTM trigger |
+| CTA button clicks | GTM → click element → GA4 event | 1 GTM trigger per CTA |
+| Keyword → Lead | GSC keyword + GA4 landing page + GA4 conversion join | Backend API join |
+| Scroll engagement | GA4 enhanced measurement ON | Zero — auto-track |
+| UTM attribution | Add UTM links to blog posts | URL parameter |
+
+---
+
+## API Strategy — Free Stack
+
+**Goal**: 80% capability runs FREE. Only DataForSEO (backlinks) needs paid API.
+
+| Feature | Old (Paid) | Free Alternative | Quality |
+|---------|-----------|-----------------|---------|
+| LLM Analysis | Groq (rate limited) | Gemini 1.5 Flash — generous free tier (already added) | Same quality |
+| Rank Tracking | SerpAPI | GSC (best!) + DDG scraper (built) | GSC better than SerpAPI |
+| Traffic Data | None | GA4 free API | 100% accurate |
+| Technical Audit | None | Our crawler + PageSpeed free API | Accurate |
+| SERP Data | SerpAPI | DDG scraper (built) | 70–80% accurate |
+| Keyword Volume | SE Ranking | DDG SERP signals estimate | ~60% accurate |
+| Backlinks | DataForSEO | No good free option | Need paid for accuracy |
+| Competitor Data | None | A4 uses DDG SERP + our crawler | Sufficient |
+
+**Free Stack**: GSC + GA4 + PageSpeed + DDG + Gemini = complete platform at zero cost.
+
+---
+
+## Build Roadmap — Sprint by Sprint
+
+### Sprint 1 — Week 1–2
+- [ ] Add 3 missing onboarding fields: avg order value, social links, past SEO history
+- [ ] Baseline snapshot at onboarding — save Day 1 state for before/after
+- [ ] KPI selection in A1 brief — client chooses: Traffic / Leads / Sales / Local
+- [ ] Full site audit — sitemap.xml parsing for 500+ pages (instead of 50–80)
+
+### Sprint 2 — Week 3–4
+- [ ] Weekly GSC + GA4 auto-pull job — every Monday: fetch + store + calculate delta
+- [ ] Control Room dashboard page — new React page: GSC, GA4, Health, Suggestions
+- [ ] A18: Fix pushed → client email notification
+- [ ] Monthly auto-report email — auto-send to client every 1st of month
+
+### Sprint 3 — Week 5–6
+- [ ] **CMO Agent** — decision layer: CTR low → fix titles, page 2 → backlinks, no leads → conversion
+- [ ] ROI attribution wire-up — fix → ranking → traffic → revenue chain properly connected
+- [ ] Keyword → Lead attribution API — `/api/attribution/:clientId` — GSC + GA4 join
+- [ ] GTM setup guide generator — auto-generate GTM instructions per client
+
+### Sprint 4 — Week 7–8
+- [ ] **A17 Reviewer Agent** — quality gate with confidence score per agent output
+- [ ] **A19 Conversion Agent** — landing page, CTA, form optimization analysis
+- [ ] **A20 Impact Report** — 6-month PDF, one click, renewal weapon
+- [ ] **A21 Pre-Sales Audit** — 60-second demo audit for sales meetings, no login
+
+### Sprint 5 — Week 9–10
+- [ ] Continuous monitoring loop — 24/7 watchdog: rank drop → auto-investigate → suggest fix
+- [ ] Cross-client pattern learning — what worked for client A → suggest for client B
+- [ ] Agency dashboard — all clients: total traffic, revenue, score trends
+- [ ] LLM reduction — replace LLM calls with rule-based logic where possible
+
+---
+
+## The 4-Step AI Agent Loop
+
+| Step | Name | Current State | Goal |
+|------|------|--------------|------|
+| 1 | **SENSE** | GSC, GA4, crawler, rank tracker collect data | All KPI data in one place, real-time |
+| 2 | **DECIDE** | Human decides manually | CMO Agent sees pattern and decides autonomously |
+| 3 | **ACT** | Fixes pushed via WP autopush | Auto-trigger next agent based on decision |
+| 4 | **LEARN** | A16 stores basic score history | Cross-client learning — what worked where |
+
+### Milestones to "Real AI Agent"
+- **Milestone 1** (Sprint 3): CMO Agent built and making autonomous decisions
+- **Milestone 2** (Sprint 3): Platform suggests a fix with no human trigger — data proves it worked
+- **Milestone 3** (Sprint 3): Keyword → Lead attribution chain complete (GSC → GA4)
+- **Milestone 4** (Sprint 4): Client says "I can see SEO is bringing money"
+- **Milestone 5** (Sprint 5): Agency acquires new client using pre-sales audit tool
+
+---
+
+## Architecture & Tech Stack
+
+- **Frontend**: React 18 + Vite (inline styles, no CSS framework)
+- **Backend**: Express + Firebase Firestore + Firebase Auth
+- **LLM**: Groq → Gemini → OpenRouter (3-provider fallback chain)
+- **Deployment**: Render (both frontend static site + backend web service)
+- **Database**: Firebase Firestore (no SQL)
+- **Auth**: Firebase Auth (email/password + Google OAuth for GSC/GA4/GBP)
+
+---
+
+## Shared State Pattern
+
+All agent outputs are persisted in Firestore. **Always use `saveState`/`getState` — never pass state between agents directly.**
+
 ```js
 const { saveState, getState } = require("../shared-state/stateManager");
 
-// Save
+// Save agent output
 await saveState(clientId, "A2_audit", result);
 
 // Read in another agent
 const audit = await getState(clientId, "A2_audit");
 ```
 
----
-
-### Shared State (Firestore)
-
-Collection: `shared_state`, document ID = `clientId`
-
-Fields: `A1_brief`, `A2_audit`, `A3_keywords`, `A4_competitor`, `A5_content`, `A6_onpage`, `A7_technical`, `A8_geo`, `A9_report`
-
-Other Firestore collections: `users`, `clients`, `tasks`, `approval_queue`, `alerts`, `notifications`, `portal_snapshots`, `content_drafts`, `wp_push_log`, `client_memory`, `score_history`, `rank_history`, `cwv_history`
+**Firestore collection**: `shared_state`, document ID = `clientId`
+**Fields**: `A1_brief`, `A2_audit`, `A3_keywords`, `A4_competitor`, `A5_content`, `A6_onpage`, `A7_technical`, `A8_geo`, `A9_report`
 
 ---
 
-### LLM Utility (`server/utils/llm.js`)
+## LLM Utility (`server/utils/llm.js`)
 
-3-provider fallback chain. **Always use `callLLM()` — never call providers directly.**
+**Always use `callLLM()` — never call providers directly.**
 
 ```js
 const { callLLM, parseJSON } = require("../utils/llm");
 
 const response = await callLLM(prompt, keys, { maxTokens: 4000, temperature: 0.3 });
-const data = parseJSON(response); // safe JSON parse with fallback
+const data = parseJSON(response); // safe — handles markdown code blocks around JSON
 ```
 
-- **Groq** (primary): `llama-3.1-8b-instant`
-- **Gemini** (fallback 1): `gemini-2.0-flash`
-- **OpenRouter** (fallback 2): multi-model
-- **Retry logic**: 2 attempts per provider; 429 → wait 60s then retry; timeout → retry after 1.5s
-- **`keys`** object comes from `getUserKeys(uid)` — user's own Firestore keys with env var fallback
+- **Groq** (primary): `llama-3.1-8b-instant` — fast, free tier
+- **Gemini** (fallback 1): `gemini-2.0-flash` — generous free tier
+- **OpenRouter** (fallback 2): multi-model, last resort
+- **Retry**: 2 attempts per provider; 429 → wait 60s then retry; timeout → retry after 1.5s
+- `keys` object from `getUserKeys(uid)` — user's Firestore keys, env vars as fallback
 
 ---
 
-### Authentication
+## Authentication
 
-**Backend middleware** (`server/middleware/auth.js`):
+**Backend** (`server/middleware/auth.js`):
 ```js
 const { verifyToken } = require("../middleware/auth");
 router.get("/route", verifyToken, async (req, res) => {
   const uid = req.uid; // Firebase UID
+  await getClientDoc(req.params.clientId, req.uid); // always verify ownership
 });
 ```
-- Validates Firebase ID token from `Authorization: Bearer <token>`
-- Always use `verifyToken` on protected routes
 
 **Frontend** (`src/context/AuthContext.jsx`):
 ```js
-const { user, getToken } = useAuth();
-const token = await getToken(); // Firebase ID token (auto-refreshed)
-// Use in fetch: Authorization: `Bearer ${token}`
+const { getToken } = useAuth();
+const token = await getToken(); // auto-refreshed Firebase ID token
+// Headers: { Authorization: `Bearer ${token}` }
 ```
 
 ---
 
 ## Frontend Conventions
 
-### Dark/Light Mode Color System
-
-All components receive and use these props — **never hardcode colors**:
+### Dark/Light Mode Color System — Never hardcode colors
 
 ```js
-// Standard props pattern
+// Always receive these as props
 function MyComponent({ dark, bg2, bg3, bdr, txt, txt2 }) { ... }
 
-// Color definitions (from App.jsx / AgentPipeline.jsx)
 const bg   = dark ? "#0a0a0a"  : "#f5f5f0";  // Page background
 const bg2  = dark ? "#111"     : "#ffffff";  // Card background
-const bg3  = dark ? "#1a1a1a"  : "#f0f0ea";  // Input / secondary background
-const bdr  = dark ? "#222"     : "#e0e0d8";  // Border color
+const bg3  = dark ? "#1a1a1a"  : "#f0f0ea";  // Input/secondary background
+const bdr  = dark ? "#222"     : "#e0e0d8";  // Border
 const txt  = dark ? "#e8e8e8"  : "#1a1a18";  // Primary text
-const txt2 = dark ? "#666"     : "#888";     // Secondary / muted text
-const B    = "#443DCB";                      // Brand blue (buttons, accents)
+const txt2 = dark ? "#666"     : "#888";     // Muted text
+const B    = "#443DCB";                      // Brand blue
 ```
 
-### Inline Styles — Required Pattern
-
-All styles are **inline only**. No CSS modules, no Tailwind, no external classes.
+### Inline Styles Only — No CSS classes, no Tailwind
 
 ```jsx
 // Correct
 <div style={{ background: bg2, border: `1px solid ${bdr}`, borderRadius: 10, padding: "12px 16px" }}>
 
-// Wrong — never do this
+// Wrong — never
 <div className="card p-4 bg-white">
 ```
 
-Standard values used across the codebase:
-- `borderRadius`: 8, 10, 12, 14 (for cards), 6 (small), 4 (badges/tags)
-- `fontSize`: 10 (tiny labels), 11 (secondary), 12 (body), 13 (default), 14–16 (headings)
-- `fontWeight`: 400 (normal), 600 (semibold), 700 (bold), 800 (display)
-- Status colors: `#059669` (green/success), `#D97706` (amber/warn), `#DC2626` (red/critical), `#443DCB` (brand blue), `#0891B2` (cyan/info)
-
-### Issue Severity Colors
-
-```js
-const sevColor = {
-  critical: "#DC2626", // P1
-  warning:  "#D97706", // P2
-  info:     "#6B7280", // P3
-};
-```
-
-### Component Props Naming
-
-Consistent across the entire codebase:
-- `dark` — boolean dark mode flag
-- `bg2`, `bg3`, `bdr`, `txt`, `txt2` — color tokens
-- `clientId` — Firestore client document ID
-- `getToken` — async function returning Firebase ID token
-- `API` — backend base URL (from env/state)
-- `onTabSwitch(tabId)` — callback for tab navigation
+**Standard values**: borderRadius 8/10/12/14, fontSize 10–16, status colors: `#059669` green, `#D97706` amber, `#DC2626` red, `#443DCB` brand, `#0891B2` cyan.
 
 ---
 
 ## Backend Conventions
 
 ### Route Structure
-
 ```js
-const express = require("express");
-const router = express.Router();
-const { verifyToken } = require("../middleware/auth");
-
 router.get("/:clientId/something", verifyToken, async (req, res) => {
   try {
-    await getClientDoc(req.params.clientId, req.uid); // ownership check
-    // ... logic
+    await getClientDoc(req.params.clientId, req.uid);
+    // logic
     return res.json({ data });
   } catch (e) {
     return res.status(e.code || 500).json({ error: e.message });
@@ -207,33 +332,19 @@ router.get("/:clientId/something", verifyToken, async (req, res) => {
 });
 ```
 
-Always:
-1. Use `verifyToken` middleware
-2. Call `getClientDoc(clientId, uid)` to verify ownership
-3. Wrap in try/catch, return `{ error: e.message }` on failure
-4. Use `AbortSignal.timeout(N)` on all external `fetch()` calls
-
-### Error Handling
-
-```js
-// External fetch calls — always add timeout
-const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
-
-// 429 handling in LLM (already in llm.js — don't re-implement)
-if (res.status === 429) throw Object.assign(new Error("429 rate limit"), { name: "RateLimitError" });
-```
+Always: (1) `verifyToken`, (2) ownership check, (3) try/catch, (4) `AbortSignal.timeout(N)` on all external fetch calls.
 
 ### Agent Output Pattern
-
 ```js
-// Success
-return { success: true, agentKey: result };
+await saveState(clientId, "AX_key", result);  // always save first
+return { success: true, agentKey: result };   // then return
+```
 
-// Failure
-return { success: false, error: "Human-readable reason" };
-
-// Always save before returning
-await saveState(clientId, "AX_key", result);
+### Issue Severity (A2/A6)
+```js
+issues.p1.push({ type: "missing_ssl",  detail: "HTTPS not enabled",    fix: "Install SSL certificate" });  // P1 — blocks rankings
+issues.p2.push({ type: "missing_meta", detail: "No meta description",  fix: "Add 120–170 char desc" });    // P2 — hurts rankings
+issues.p3.push({ type: "missing_alt",  detail: "3 images without alt", fix: "Add alt attributes" });       // P3 — minor
 ```
 
 ---
@@ -248,32 +359,26 @@ await saveState(clientId, "AX_key", result);
 | `src/pages/PrintReport.jsx` | White-label PDF report (print-CSS, no Tailwind) |
 | `src/pages/ApprovalQueue.jsx` | Human gate for A5/A6/A12 fixes |
 | `src/context/AuthContext.jsx` | Firebase Auth + Google OAuth (GSC/GA4/GBP scopes) |
-| `src/config/firebase.js` | Firebase client SDK init |
 | `src/tools.js` | 60+ tool definitions with prompts, icons, categories |
 
 ### Backend
 | File | Purpose |
 |------|---------|
 | `server/index.js` | Express entry point, daily/monthly schedulers |
+| `server/agents/A0_orchestrator.js` | Pipeline runner, dependency chain, allSettled, 25-min timeout |
 | `server/routes/agents.js` | All agent run + data endpoints |
-| `server/utils/llm.js` | LLM fallback chain + retry logic |
-| `server/utils/getUserKeys.js` | Per-user API key fetching |
-| `server/utils/jsRenderer.js` | Puppeteer JS rendering with graceful fallback |
+| `server/utils/llm.js` | LLM fallback chain + 429 retry logic |
+| `server/utils/jsRenderer.js` | Puppeteer JS rendering with graceful fetch() fallback |
 | `server/utils/scoreCalculator.js` | 4-dimension SEO score + forecast |
+| `server/utils/roiTracker.js` | ROI attribution (fix → rank → traffic → revenue) |
 | `server/crawler/serpScraper.js` | Free SERP scraping (DDG → Bing, 30 results) |
-| `server/crawler/webCrawler.js` | Multi-page site crawler |
 | `server/shared-state/stateManager.js` | Firestore agent state CRUD |
 
 ---
 
-## Environment Variables
+## Environment Variables (Set in Render Dashboard)
 
-Copy `.env.example` to `.env` in both root and `server/`.
-
-**All environment variables are set in the Render dashboard** (not in `.env` files).
-Never commit secrets to the repo.
-
-**Frontend env vars (Render Static Site → Environment):**
+**Frontend (Render Static Site → Environment):**
 ```
 VITE_FIREBASE_API_KEY=
 VITE_FIREBASE_AUTH_DOMAIN=
@@ -284,12 +389,12 @@ VITE_FIREBASE_APP_ID=
 VITE_API_URL=https://<your-backend>.onrender.com
 ```
 
-**Backend env vars (Render Web Service → Environment):**
+**Backend (Render Web Service → Environment):**
 ```
 FIREBASE_PROJECT_ID=
-FIREBASE_SERVICE_ACCOUNT={"type":"service_account",...}  # full JSON string
+FIREBASE_SERVICE_ACCOUNT={"type":"service_account",...}   # full JSON string
 JWT_SECRET=minimum-32-character-secret-key
-PORT=10000                                               # Render default
+PORT=10000                                                # Render default
 APP_URL=https://<your-backend>.onrender.com
 FRONTEND_URL=https://<your-frontend>.onrender.com
 ```
@@ -301,151 +406,79 @@ GEMINI_API_KEY=
 OPENROUTER_API_KEY=
 ```
 
-**Google integrations (for GSC/GA4/GBP):**
+**Google (for GSC/GA4/GBP/PageSpeed):**
 ```
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
 GOOGLE_API_KEY=
 ```
 
-**Optional SEO data:**
+**Optional paid SEO APIs:**
 ```
-SERPAPI_KEY=          # Live SERP data (free SERP fallback works without it)
-SERANKING_API_KEY=
-DATAFORSEO_KEY=
-```
-
----
-
-## Important Patterns to Follow
-
-### Adding a New Agent Tab in AgentPipeline.jsx
-
-1. Add tab trigger: `{isComplete("AX") && <div style={s.tab(activeTab==="mytab")} onClick={()=>setActiveTab("mytab")}>🔧 My Tab</div>}`
-2. Add tab content: `{activeTab==="mytab" && state.AX_key && (<MyView data={state.AX_key} dark={dark} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2} />)}`
-3. Add mini-summary component: `function MySummary({ data, txt, txt2 }) { return <div style={{ fontSize:12, color:txt2 }}>...</div>; }`
-4. Add full view component with the standard color prop pattern
-
-### Adding a New API Route
-
-```js
-// server/routes/agents.js or new file
-router.get("/:clientId/my-data", verifyToken, async (req, res) => {
-  try {
-    await getClientDoc(req.params.clientId, req.uid);
-    const data = await getState(req.params.clientId, "AX_key");
-    if (!data) return res.json({ myData: [] });
-    return res.json({ myData: data.something || [] });
-  } catch (e) {
-    return res.status(e.code || 500).json({ error: e.message });
-  }
-});
-```
-
-### Calling the LLM with Structured Output
-
-```js
-const prompt = `You are an SEO expert. Analyse X. Return ONLY valid JSON:
-{
-  "field1": "value",
-  "field2": ["item1", "item2"],
-  "field3": 42
-}`;
-
-const response = await callLLM(prompt, keys, { maxTokens: 3000, temperature: 0.3 });
-const parsed   = parseJSON(response);
-// parseJSON always returns an object (empty {} on failure)
-```
-
-### SERP Scraping (Free — No API Key)
-
-```js
-const { getSERP } = require("../crawler/serpScraper");
-
-const result = await getSERP("target keyword", { location: "in", num: 30 });
-// result.results = [{ title, url, domain, position, snippet }]
-// DDG first → Bing fallback → always returns up to 30 results
-```
-
-### Competitor Auto-Discovery (A4 Pattern)
-
-When `brief.competitors` is empty, A4 automatically:
-1. Calls `getSERP()` for the top 5 target keywords
-2. Counts domain frequency in results
-3. Picks the top 5–6 domains as competitors
-4. Crawls each competitor homepage for real SEO signals
-5. Passes real data to LLM for analysis
-
-### Issue Severity in A2/A6
-
-```js
-// P1 — blocks rankings, urgent
-issues.p1.push({ type: "missing_ssl", detail: "HTTPS not enabled", fix: "Install SSL certificate" });
-
-// P2 — hurts rankings, important
-issues.p2.push({ type: "missing_meta", detail: "No meta description on homepage", fix: "Add 120-170 char description" });
-
-// P3 — minor improvements
-issues.p3.push({ type: "missing_alt", detail: "3 images without alt text", fix: "Add descriptive alt attributes" });
+SERPAPI_KEY=          # Live SERP — free DDG fallback works without it
+DATAFORSEO_KEY=       # Backlinks — no free alternative
+SERANKING_API_KEY=    # Optional
 ```
 
 ---
 
 ## Render Configuration
 
-Configured via `render.yaml` in the repo root.
-
-| Service | Type | Root | Build Command | Start Command |
-|---------|------|------|---------------|---------------|
+| Service | Type | Root Dir | Build Command | Start Command |
+|---------|------|----------|---------------|---------------|
 | Backend | Web Service | `server/` | `npm install` | `node index.js` |
 | Frontend | Static Site | `/` | `npm install && npm run build` | — (serves `dist/`) |
 
-**CORS** in `server/index.js` allows `*.onrender.com` origins.
+**CORS** in `server/index.js` allows `*.onrender.com`.
 
-**Render free tier note**: Backend spins down after 15 min of inactivity. First request after sleep takes ~30s to cold-start. Upgrade to a paid instance for always-on behaviour.
+**Cold-start warning**: Render free tier spins down after 15 min inactivity. First request after sleep takes ~30s. Upgrade to paid instance for always-on.
 
-**Deploy logs**: Check Render dashboard → service → "Logs" tab if a deploy fails.
+**Deploy logs**: Render dashboard → service → "Logs" tab.
 
 ---
 
-## Firebase Collections Quick Reference
+## Firestore Collections Quick Reference
 
 | Collection | Key | Purpose |
 |------------|-----|---------|
-| `users` | uid | User profile + `apiKeys` (groq, gemini, openrouter, serp, google...) |
+| `users` | uid | User profile + `apiKeys` |
 | `clients` | clientId | Client data, `pipelineStatus`, `seoScore` |
-| `shared_state` | clientId | All agent outputs (A1_brief, A2_audit, etc.) |
-| `tasks` | auto | Task queue (pending/approved/completed), used by A12 |
+| `shared_state` | clientId | All agent outputs (A1_brief → A9_report) |
+| `tasks` | auto | Task queue (pending/approved/completed) |
 | `approval_queue` | auto | Human review gate for A9 reports, A6 fixes |
-| `alerts` | auto | P1/P2/P3 alert log from A9 checkAlerts() |
-| `score_history` | `clientId_date` | SEO score time series for trend charts |
+| `alerts` | auto | P1/P2/P3 alert log from A9 `checkAlerts()` |
+| `score_history` | `clientId_date` | SEO score time series |
 | `rank_history` | `clientId_date` | Keyword position snapshots |
-| `cwv_history` | auto | Core Web Vitals history per client |
+| `cwv_history` | auto | Core Web Vitals history |
 | `content_drafts` | auto | A14-generated article drafts |
 | `wp_push_log` | auto | A13 WordPress push audit trail |
-| `client_memory` | clientId | A16 structured memory for AI context |
-| `portal_snapshots` | auto | Monthly SEO score snapshots for white-label portal |
+| `client_memory` | clientId | A16 structured memory |
+| `portal_snapshots` | auto | Monthly SEO score snapshots (white-label portal) |
 
 ---
 
 ## Common Gotchas
 
-1. **Agent state access** — Always `await getState()`. State is async Firestore, never synchronous.
+1. **Agent state is async Firestore** — always `await getState()`, never synchronous.
 
-2. **`parseJSON` safety** — Always use `parseJSON(response)` from `llm.js`, never `JSON.parse()` directly on LLM output. LLM often wraps JSON in markdown code blocks.
+2. **`parseJSON` safety** — always use `parseJSON(response)` from `llm.js`, never `JSON.parse()` directly. LLM wraps JSON in markdown code blocks.
 
-3. **AbortSignal.timeout** — Add to every `fetch()` call to external services. Standard timeouts: 10s for crawl, 20s for PageSpeed, 30s for SERP, 8s for quick checks.
+3. **AbortSignal.timeout** — add to every external `fetch()`. Standard: 10s crawl, 20s PageSpeed, 30s SERP, 8s quick checks.
 
-4. **Rate limits** — Already handled in `llm.js` (60s wait + retry). For SERP, use the free `getSERP()` scraper to avoid SerpAPI quota burn.
+4. **Rate limits** — handled in `llm.js` (60s wait + retry). Use free `getSERP()` scraper to avoid SerpAPI quota burn.
 
-5. **Firestore document size** — Max 1MB per doc. `A2_audit` with full crawl data can be large. Keep `pageAudits` to 80 pages max (enforced in A2).
+5. **Firestore doc size** — max 1MB. `A2_audit` with full crawl can be large. Cap `pageAudits` at 80 pages (enforced in A2).
 
-6. **JS-rendered sites** — `jsRenderer.js` uses Puppeteer with graceful fallback to `fetch()`. Check `checks.isJSRendered` flag in A2 output to know if Puppeteer was used.
+6. **JS-rendered sites** — `jsRenderer.js` uses Puppeteer with fetch() fallback. Check `checks.isJSRendered` in A2 output.
 
-7. **Color props** — Never use `dark ? "#111" : "#fff"` inline in child components. Always receive `bg2`, `bg3`, `bdr`, `txt`, `txt2` as props from parent.
+7. **Color props** — never hardcode `dark ? "#111" : "#fff"` in child components. Always receive `bg2`, `bg3`, `bdr`, `txt`, `txt2` as props.
 
-8. **Issue field names** — A2's `auditPage()` produces `{ type, detail, fix }`. The `/pages` API route produces `{ type, label, severity }` for basic checks. The UI renders `issue.detail || issue.label || issue.type` to handle both.
+8. **Issue field names** — A2 `auditPage()` produces `{ type, detail, fix }`. Pages API `/pages` route produces `{ type, label, severity }`. UI renders `issue.detail || issue.label || issue.type`.
 
-9. **Accordion deduplication** — In AgentPipeline DashboardView, `topTasks` are shown in "Fix These First". Filter them out of category accordions: `const catTasks = allTasks.filter(t => t.category === cat.id && !topIds.has(t.id))`.
+9. **A9 report fields** — LLM returns `expectedOutcome` (not `how`) in `next3Actions`. KPI status is `"green"|"amber"|"red"` — render as "On Track / Warning / At Risk".
 
-10. **A9 report fields** — LLM returns `expectedOutcome` (not `how`) in `next3Actions`. KPI scorecard `status` is `"green" | "amber" | "red"` — render as "On Track / Warning / At Risk".
+10. **Accordion deduplication** — `topTasks` shown in "Fix These First". Filter from category accordions: `allTasks.filter(t => t.category === cat.id && !topIds.has(t.id))`.
+
+11. **A4 auto-discovery** — when `brief.competitors` is empty, A4 discovers top 5–6 competitors from SERP automatically, crawls their homepages, passes real data to LLM.
+
+12. **Render cold-start** — backend on free tier sleeps after 15 min. If pipeline seems stuck, it may be waking up. First request takes ~30s.

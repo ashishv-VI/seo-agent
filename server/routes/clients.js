@@ -22,6 +22,28 @@ router.post("/", verifyToken, async (req, res) => {
       a1Result.brief.autoSignedOff = true;
       a1Result.brief.signedOffAt  = new Date().toISOString();
       await saveState(clientId, "A1_brief", a1Result.brief);
+
+      // Sprint 1 — Save Day 1 baseline snapshot so before/after comparison is always possible.
+      // Scores (SEO, traffic, rankings) are added later when A2/A7/A9 complete for the first time.
+      await saveState(clientId, "baseline", {
+        capturedAt:    new Date().toISOString(),
+        briefSnapshot: {
+          businessName:   a1Result.brief.businessName,
+          websiteUrl:     a1Result.brief.websiteUrl,
+          kpiSelection:   a1Result.brief.kpiSelection || [],
+          goals:          a1Result.brief.goals || [],
+          competitors:    a1Result.brief.competitors || [],
+          primaryKeywords: a1Result.brief.primaryKeywords || [],
+          pastSeoHistory: a1Result.brief.pastSeoHistory || null,
+          avgOrderValue:  a1Result.brief.avgOrderValue || null,
+        },
+        // These will be filled in by A9 on first pipeline completion:
+        seoScore:       null,
+        healthScore:    null,
+        keywordsRanking: null,
+        topIssues:      null,
+        firstPipelineAt: null,
+      });
     }
 
     // Save client record

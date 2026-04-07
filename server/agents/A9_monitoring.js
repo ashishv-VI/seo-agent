@@ -146,6 +146,23 @@ Write an 8-step SEO report. Return ONLY valid JSON:
     });
     // Save score to client doc for list view display
     await db.collection("clients").doc(clientId).update({ seoScore: scoreData.overall }).catch(() => {});
+
+    // Sprint 1 — Fill in baseline snapshot on first pipeline completion (once only)
+    try {
+      const baseline = await getState(clientId, "baseline");
+      if (baseline && !baseline.firstPipelineAt) {
+        await saveState(clientId, "baseline", {
+          ...baseline,
+          seoScore:        scoreData.overall,
+          healthScore:     audit?.healthScore || null,
+          keywordsRanking: keywords?.totalKeywords || null,
+          topIssues:       audit?.summary ? { p1: audit.summary.p1Count, p2: audit.summary.p2Count, p3: audit.summary.p3Count } : null,
+          firstPipelineAt: new Date().toISOString(),
+        });
+      }
+    } catch (e) {
+      console.error("[A9] Baseline snapshot update error:", e.message);
+    }
   } catch (e) {
     console.error("[A9] Score calculation error:", e.message);
   }

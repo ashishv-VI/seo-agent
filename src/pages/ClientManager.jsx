@@ -166,7 +166,79 @@ function CompetitorInput({ label, value, onChange, dark }) {
   );
 }
 
+// ── Social link chip input ───────────────────────────────────────────────────
+function SocialInput({ label, value, onChange, dark }) {
+  const [input, setInput] = useState("");
+  const bdr  = dark ? "#2a2a2a" : "#e0e0d8";
+  const txt  = dark ? "#e8e8e8" : "#1a1a18";
+  const txt2 = dark ? "#888"    : "#777";
+  const bg3  = dark ? "#1a1a1a" : "#f0f0ea";
+
+  const PLATFORMS = [
+    { key:"facebook",  icon:"📘", hint:"facebook.com/" },
+    { key:"instagram", icon:"📸", hint:"instagram.com/" },
+    { key:"linkedin",  icon:"💼", hint:"linkedin.com/company/" },
+    { key:"twitter",   icon:"🐦", hint:"x.com/" },
+    { key:"youtube",   icon:"▶️", hint:"youtube.com/" },
+  ];
+
+  function getIcon(url) {
+    if (url.includes("facebook"))  return "📘";
+    if (url.includes("instagram")) return "📸";
+    if (url.includes("linkedin"))  return "💼";
+    if (url.includes("twitter") || url.includes("x.com")) return "🐦";
+    if (url.includes("youtube"))   return "▶️";
+    return "🔗";
+  }
+
+  function add(v) {
+    const url = v.trim();
+    if (url && !value.includes(url)) onChange([...value, url]);
+    setInput("");
+  }
+
+  return (
+    <div>
+      <label style={{ fontSize:13, color:txt2, fontWeight:600, marginBottom:6, display:"block" }}>{label}</label>
+      <div style={{ display:"flex", gap:6, marginBottom:8 }}>
+        {PLATFORMS.map(p => (
+          <button key={p.key} type="button"
+            onClick={() => { if (!value.some(v => v.includes(p.key))) setInput(`https://${p.hint}`); }}
+            style={{ padding:"5px 11px", borderRadius:8, fontSize:14, cursor:"pointer", border:`1px solid ${bdr}`, background:"transparent", color:txt2, title:p.key }}>
+            {p.icon}
+          </button>
+        ))}
+      </div>
+      <div style={{ display:"flex", gap:6 }}>
+        <input value={input} onChange={e => setInput(e.target.value)}
+          onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); add(input); } }}
+          placeholder="https://instagram.com/yourbrand"
+          style={{ flex:1, padding:"8px 12px", borderRadius:8, border:`1px solid ${bdr}`, background:bg3, color:txt, fontSize:13, outline:"none", fontFamily:"inherit" }} />
+        <button type="button" onClick={() => add(input)}
+          style={{ padding:"8px 14px", borderRadius:8, border:`1px solid #443DCB`, background:"transparent", color:"#443DCB", fontSize:13, cursor:"pointer", fontWeight:600 }}>+ Add</button>
+      </div>
+      {value.length > 0 && (
+        <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginTop:8 }}>
+          {value.map((v, i) => (
+            <span key={i} style={{ padding:"5px 12px", borderRadius:10, background:"#0EA5E911", border:"1px solid #0EA5E933", color:"#0EA5E9", fontSize:12, fontWeight:600, display:"flex", alignItems:"center", gap:6 }}>
+              {getIcon(v)} {v.replace(/^https?:\/\//, "").replace(/\/$/, "")}
+              <span onClick={() => onChange(value.filter((_, j) => j !== i))} style={{ cursor:"pointer", opacity:0.6, fontSize:14, lineHeight:1 }}>×</span>
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Preset options ──────────────────────────────────────────────────────────
+const KPI_OPTIONS = [
+  "Organic Traffic Growth",
+  "Lead Generation",
+  "Online Sales / E-commerce",
+  "Local Visibility",
+];
+
 const SERVICE_OPTIONS = [
   "SEO", "Local SEO", "Technical SEO", "Link Building",
   "PPC / Google Ads", "Social Media Ads", "Content Marketing",
@@ -239,6 +311,11 @@ export default function ClientManager({ dark }) {
     businessLocation: "", services: [], goals: [],
     targetAudience: [], conversionGoals: [],
     targetLocations: [], competitors: [], primaryKeywords: "",
+    // Sprint 1 — new fields
+    kpiSelection: [],
+    avgOrderValue: "",
+    socialLinks: [],
+    pastSeoHistory: "",
     notes: "",
   };
   const [form, setForm] = useState(blankForm);
@@ -429,13 +506,71 @@ export default function ClientManager({ dark }) {
                 />
               </div>
 
+              {/* ── Section: KPI Selection ───────────────────── */}
+              <div style={s.sec}>Primary KPI — What Does Success Look Like?</div>
+
+              <div style={{ gridColumn:"span 2" }}>
+                <div style={{ fontSize:12, color:txt2, marginBottom:10 }}>
+                  Select 1–2 KPIs that matter most. The AI agents will focus their recommendations around these goals.
+                </div>
+                <div style={{ display:"flex", flexWrap:"wrap", gap:10 }}>
+                  {KPI_OPTIONS.map(kpi => {
+                    const icons = { "Organic Traffic Growth":"📈", "Lead Generation":"🎯", "Online Sales / E-commerce":"🛒", "Local Visibility":"📍" };
+                    const selected = form.kpiSelection.includes(kpi);
+                    return (
+                      <button key={kpi} type="button"
+                        onClick={() => setForm(f => ({ ...f, kpiSelection: selected ? f.kpiSelection.filter(k => k !== kpi) : [...f.kpiSelection, kpi] }))}
+                        style={{ padding:"10px 16px", borderRadius:10, fontSize:13, fontWeight:600, cursor:"pointer", display:"flex", alignItems:"center", gap:6,
+                          border: selected ? "2px solid #443DCB" : `1px solid ${bdr}`,
+                          background: selected ? "#443DCB18" : "transparent",
+                          color: selected ? "#443DCB" : txt2, transition:"all 0.15s" }}>
+                        <span>{icons[kpi]}</span> {kpi}
+                        {selected && <span style={{ fontSize:10, marginLeft:2 }}>✓</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+                {form.kpiSelection.length === 0 && (
+                  <div style={{ fontSize:11, color:"#D97706", marginTop:8 }}>
+                    ⚠️ No KPI selected — agents will default to Organic Traffic Growth
+                  </div>
+                )}
+              </div>
+
+              {/* ── Section: Business Performance ────────────── */}
+              <div style={s.sec}>Business Performance Context</div>
+
+              <div>
+                <label style={s.label}>Average Order / Transaction Value</label>
+                <input style={s.inp} type="text" value={form.avgOrderValue}
+                  onChange={e => setForm(f => ({...f, avgOrderValue: e.target.value}))}
+                  placeholder="e.g. £150 per booking, £45 avg basket" />
+                <div style={{ fontSize:11, color:txt2, marginTop:4 }}>Helps calculate ROI from SEO improvements</div>
+              </div>
+
+              <div />
+
+              <div style={{ gridColumn:"span 2" }}>
+                <SocialInput label="Social Media Profiles (optional)"
+                  value={form.socialLinks}
+                  onChange={v => setForm(f => ({...f, socialLinks: v}))}
+                  dark={dark} />
+              </div>
+
+              <div style={{ gridColumn:"span 2" }}>
+                <label style={s.label}>Past SEO History</label>
+                <textarea style={{...s.inp, height:60, resize:"vertical"}} value={form.pastSeoHistory}
+                  onChange={e => setForm(f => ({...f, pastSeoHistory: e.target.value}))}
+                  placeholder="Previous SEO agency? Google penalties? When last optimized? Budget range?" />
+              </div>
+
               {/* ── Section: Notes ────────────────────────────── */}
               <div style={s.sec}>Additional Notes</div>
 
               <div style={{ gridColumn:"span 2" }}>
                 <textarea style={{...s.inp, height:70, resize:"vertical"}} value={form.notes}
                   onChange={e => setForm(f => ({...f, notes: e.target.value}))}
-                  placeholder="Any extra context — budget, timeline, previous SEO work, specific challenges..." />
+                  placeholder="Any extra context — budget, timeline, specific challenges, brand guidelines..." />
               </div>
             </div>
 

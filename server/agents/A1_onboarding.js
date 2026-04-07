@@ -21,6 +21,11 @@ async function runA1(clientId, rawData) {
     newPagesNeeded = [],
     currentTraffic,
     notes,
+    // Sprint 1 — new fields
+    kpiSelection = [],       // Primary KPIs: ["Organic Traffic Growth", "Lead Generation", ...]
+    avgOrderValue,           // e.g. "£150 per booking"
+    socialLinks = [],        // Social profile URLs
+    pastSeoHistory,          // Previous SEO work, agencies, penalties
   } = rawData;
 
   // Validate required fields
@@ -29,6 +34,9 @@ async function runA1(clientId, rawData) {
   if (!websiteUrl)      missing.push("Website URL");
   if (!targetAudience)  missing.push("Target Audience");
   if (goals.length === 0) missing.push("Goals");
+
+  // Derive primary KPI from goals if not explicitly set
+  const derivedKpi = kpiSelection.length > 0 ? kpiSelection : deriveKpiFromGoals(goals);
 
   // Structure the brief
   const brief = {
@@ -47,6 +55,12 @@ async function runA1(clientId, rawData) {
     goals,
     conversionGoal,
     currentTraffic: currentTraffic || "unknown",
+
+    // Sprint 1 — KPI & Performance
+    kpiSelection:   derivedKpi,
+    avgOrderValue:  avgOrderValue || null,
+    socialLinks,
+    pastSeoHistory: pastSeoHistory || null,
 
     // Research Inputs (will be validated by A3 - not final)
     primaryKeywords,
@@ -76,6 +90,20 @@ async function runA1(clientId, rawData) {
       ? `Brief saved with ${missing.length} missing field(s): ${missing.join(", ")}`
       : "Brief complete — ready for human sign-off before audit begins",
   };
+}
+
+/**
+ * Derive a primary KPI from goals when the user hasn't explicitly set one.
+ * Used as a fallback so all downstream agents always have a kpiSelection.
+ */
+function deriveKpiFromGoals(goals = []) {
+  const g = goals.join(" ").toLowerCase();
+  const kpis = [];
+  if (g.includes("traffic") || g.includes("ranking") || g.includes("organic")) kpis.push("Organic Traffic Growth");
+  if (g.includes("lead") || g.includes("form") || g.includes("contact"))        kpis.push("Lead Generation");
+  if (g.includes("sale") || g.includes("e-commerce") || g.includes("purchase")) kpis.push("Online Sales / E-commerce");
+  if (g.includes("local") || g.includes("map") || g.includes("visibility"))     kpis.push("Local Visibility");
+  return kpis.length > 0 ? kpis : ["Organic Traffic Growth"]; // default
 }
 
 module.exports = { runA1 };
