@@ -11,17 +11,21 @@ A full-stack, multi-agent SEO automation platform that mirrors real agency workf
 
 ---
 
-## Running the Project
+## Deployment
+
+This project is **live on Render** — there is no local development setup.
+
+- **Frontend (Static Site)**: Deployed on Render, built with `npm run build` (Vite → `dist/`)
+- **Backend (Web Service)**: Deployed on Render from `server/`, runs `node index.js`
+- **Auto-deploy**: Every push to `main` branch triggers both services to redeploy automatically
+- **Environment variables**: Set directly in Render dashboard (not in `.env` files)
+
+**To deploy a change**: commit + push to `main` — Render handles the rest.
 
 ```bash
-# Frontend (http://localhost:5173)
-npm run dev
-
-# Backend (http://localhost:5000)
-cd server && npm run dev
-
-# Production build
-npm run build
+git add .
+git commit -m "feat: description"
+git push origin main
 ```
 
 ---
@@ -266,23 +270,28 @@ await saveState(clientId, "AX_key", result);
 
 Copy `.env.example` to `.env` in both root and `server/`.
 
-**Required for core functionality:**
+**All environment variables are set in the Render dashboard** (not in `.env` files).
+Never commit secrets to the repo.
+
+**Frontend env vars (Render Static Site → Environment):**
 ```
-# Frontend (.env in root)
 VITE_FIREBASE_API_KEY=
 VITE_FIREBASE_AUTH_DOMAIN=
 VITE_FIREBASE_PROJECT_ID=
 VITE_FIREBASE_STORAGE_BUCKET=
 VITE_FIREBASE_MESSAGING_SENDER_ID=
 VITE_FIREBASE_APP_ID=
-VITE_API_URL=http://localhost:5000
+VITE_API_URL=https://<your-backend>.onrender.com
+```
 
-# Backend (server/.env)
+**Backend env vars (Render Web Service → Environment):**
+```
 FIREBASE_PROJECT_ID=
-FIREBASE_SERVICE_ACCOUNT={"type":"service_account",...}  # JSON string
+FIREBASE_SERVICE_ACCOUNT={"type":"service_account",...}  # full JSON string
 JWT_SECRET=minimum-32-character-secret-key
-PORT=5000
-FRONTEND_URL=http://localhost:5173
+PORT=10000                                               # Render default
+APP_URL=https://<your-backend>.onrender.com
+FRONTEND_URL=https://<your-frontend>.onrender.com
 ```
 
 **LLM (at least one required):**
@@ -382,15 +391,20 @@ issues.p3.push({ type: "missing_alt", detail: "3 images without alt text", fix: 
 
 ---
 
-## Deployment (Render)
+## Render Configuration
 
-The project is deployed on Render (see `render.yaml`):
-- **Backend**: `server/` → Node web service, auto-deploy on push to `main`
-- **Frontend**: Root → Vite static site build, `dist/` served
+Configured via `render.yaml` in the repo root.
 
-**CORS** configured in `server/index.js` — allows `localhost:5173`, `localhost:3000`, and `*.onrender.com`
+| Service | Type | Root | Build Command | Start Command |
+|---------|------|------|---------------|---------------|
+| Backend | Web Service | `server/` | `npm install` | `node index.js` |
+| Frontend | Static Site | `/` | `npm install && npm run build` | — (serves `dist/`) |
 
-Push to `main` branch triggers both deploys automatically.
+**CORS** in `server/index.js` allows `*.onrender.com` origins.
+
+**Render free tier note**: Backend spins down after 15 min of inactivity. First request after sleep takes ~30s to cold-start. Upgrade to a paid instance for always-on behaviour.
+
+**Deploy logs**: Check Render dashboard → service → "Logs" tab if a deploy fails.
 
 ---
 
