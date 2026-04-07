@@ -160,6 +160,30 @@ async function runA4(clientId, keys) {
     competitorDomains = serpDiscoveredProfiles.map(p => p.domain);
     autoDiscovered = true;
     console.log(`[A4] Discovered ${competitorDomains.length} competitors: ${competitorDomains.join(", ")}`);
+
+    // If SERP scraping returned nothing, ask LLM to suggest competitors
+    if (competitorDomains.length === 0 && checkKeywords.length > 0) {
+      console.log("[A4] SERP returned 0 — using LLM to suggest competitors...");
+      try {
+        const suggestPrompt = `You are an SEO expert. Given:
+Business: ${brief.businessName} — ${brief.businessDescription || ""}
+Website: ${brief.websiteUrl}
+Target keywords: ${checkKeywords.slice(0,5).map(k=>k.keyword).join(", ")}
+Location: ${location}
+
+List the top 5 most likely competitor domains (just domains, no https://, no www). Return ONLY valid JSON array of strings:
+["competitor1.com","competitor2.com","competitor3.com","competitor4.com","competitor5.com"]`;
+        const resp = await callLLM(suggestPrompt, keys, { maxTokens: 200, temperature: 0.2 });
+        const suggested = parseJSON(resp);
+        if (Array.isArray(suggested) && suggested.length > 0) {
+          competitorDomains = suggested.map(d =>
+            d.replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0].toLowerCase()
+          ).filter(Boolean).slice(0, 5);
+          serpDiscoveredProfiles = competitorDomains.map(d => ({ domain: d, serpCount: null, avgPosition: null, titles: [], snippets: [] }));
+          console.log(`[A4] LLM suggested ${competitorDomains.length} competitors: ${competitorDomains.join(", ")}`);
+        }
+      } catch { /* non-blocking — proceed with empty list */ }
+    }
   }
 
   // ── STEP 2: SERP keyword ranking matrix (SerpAPI if available, else free SERP) ─

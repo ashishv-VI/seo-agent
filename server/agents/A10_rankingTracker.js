@@ -87,6 +87,8 @@ async function runA10(clientId, keys, gscToken = null) {
         .replace(/^www\./, "")
         .replace(/\/$/, "")
         .toLowerCase();
+      // Also compute root domain (e.g. "example" from "example.co.uk") for fuzzy match
+      const rootDomain = cleanDomain.split(".")[0];
 
       const topKws = (keywords?.keywordMap || [])
         .filter(k => k.priority === "high" || k.cluster === "generic")
@@ -103,16 +105,20 @@ async function runA10(clientId, keys, gscToken = null) {
         for (const kw of topKws) {
           try {
             const serp  = await getSERP(kw, { location: loc });
-            const found = (serp.results || []).findIndex(r =>
-              (r.url || r.link || "").toLowerCase().includes(cleanDomain)
-            );
+            const serpResults = serp.results || [];
+            const found = serpResults.findIndex(r => {
+              const u = (r.url || r.link || "").toLowerCase();
+              const d = (r.domain || "").toLowerCase();
+              return u.includes(cleanDomain) || d.includes(cleanDomain) ||
+                     (rootDomain.length > 4 && (u.includes(rootDomain) || d.includes(rootDomain)));
+            });
             rankingData.push({
               keyword:    kw,
               position:   found >= 0 ? found + 1 : null,
-              page:       found >= 0 ? (serp.results[found].url || serp.results[found].link) : null,
+              page:       found >= 0 ? (serpResults[found].url || serpResults[found].link) : null,
               clicks:     null,
               impressions:null,
-              source:     "DDG",
+              source:     serp.source || "DDG",
             });
           } catch { /* skip individual keyword on error */ }
           await new Promise(r => setTimeout(r, 900));

@@ -66,25 +66,35 @@ function parseDDGResults(html, keyword) {
     const rawUrl  = lm[1];
     const rawTitle = lm[2].replace(/<[^>]+>/g, "").trim();
 
-    // DDG wraps URLs — extract the actual URL
+    // DDG wraps URLs with protocol-relative redirects: //duckduckgo.com/l/?uddg=<encoded>
+    // MUST handle protocol-relative ("//") by prepending "https:" before parsing
     let url = rawUrl;
     try {
-      const parsed = new URL(rawUrl);
+      const fullUrl = rawUrl.startsWith("//") ? `https:${rawUrl}` : rawUrl;
+      const parsed  = new URL(fullUrl);
       if (parsed.hostname.includes("duckduckgo")) {
-        url = parsed.searchParams.get("uddg") || rawUrl;
+        const uddg = parsed.searchParams.get("uddg");
+        if (uddg) {
+          try { url = decodeURIComponent(uddg); } catch { url = uddg; }
+        }
       }
     } catch { /* keep rawUrl */ }
 
-    if (!url || url.startsWith("//duckduckgo") || url.includes("duckduckgo.com")) continue;
+    // Skip if still pointing at DDG or empty
+    if (!url || url.includes("duckduckgo.com") || url.startsWith("//")) continue;
+    // Skip ads/sponsored
+    if (url.includes("/y.js") || url.includes("://r.search")) continue;
+
+    if (!url.startsWith("http")) url = "https://" + url;
 
     let domain = "";
-    try { domain = new URL(url.startsWith("http") ? url : "https://" + url).hostname; } catch { }
+    try { domain = new URL(url).hostname.replace(/^www\./, ""); } catch { continue; }
 
     position++;
     results.push({
       position,
       url,
-      domain: domain.replace(/^www\./, ""),
+      domain,
       title:   rawTitle,
       snippet: snippets[position - 1] || "",
     });
@@ -313,25 +323,80 @@ function extractRelated(html) {
   return [...new Set(related.filter(r => r.length > 3))].slice(0, 8);
 }
 
-// ── Main SERP function — tries DDG first, falls back to Bing ─────────────
+// ── Yahoo Search Scraper (3rd fallback) ──────────────────────────────────
+async function scrapeYahoo(keyword, options = {}) {
+  const { location = "in" } = options;
+  const params = new URLSearchParams({ p: keyword, n: 30 });
+  try {
+    const res = await fetch(`https://search.yahoo.com/search?${params}`, {
+      signal: AbortSignal.timeout(15000),
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/121.0.0.0 Safari/537.36",
+        "Accept":     "text/html,application/xhtml+xml",
+        "Accept-Language": "en-US,en;q=0.9",
+      },
+    });
+    if (!res.ok) return { results: [], source: "yahoo", error: `HTTP ${res.status}` };
+    const html = await res.text();
+
+    const results = [];
+    // Yahoo result: <div class="algo"> with <h3><a href="real_url">
+    const blockRe = /<div[^>]+class=["'][^"']*algo[^"']*["'][^>]*>([\s\S]*?)(?=<div[^>]+class=["'][^"']*algo|$)/gi;
+    let bm;
+    let pos = 0;
+    while ((bm = blockRe.exec(html)) !== null && pos < 30) {
+      const block   = bm[1];
+      const urlM    = /<h3[^>]*>[\s\S]*?<a[^>]+href=["'](https?:\/\/[^"'\s]+)["']/i.exec(block);
+      const titleM  = /<h3[^>]*>[\s\S]*?<a[^>]*>([\s\S]*?)<\/a>/i.exec(block);
+      const snippetM = /<div[^>]+class=["'][^"']*compText[^"']*["'][^>]*>([\s\S]*?)<\/div>/i.exec(block);
+      if (!urlM) continue;
+      const url = urlM[1];
+      // Skip Yahoo redirect URLs
+      if (url.includes("yahoo.com/") && !url.includes(".yahoo.com/news")) {
+        // try to extract rd= param
+      }
+      let domain = "";
+      try { domain = new URL(url).hostname.replace(/^www\./, ""); } catch { continue; }
+      pos++;
+      results.push({
+        position: pos,
+        url,
+        domain,
+        title:   titleM?.[1]?.replace(/<[^>]+>/g, "").trim() || "",
+        snippet: snippetM?.[1]?.replace(/<[^>]+>/g, "").trim() || "",
+      });
+    }
+    return { keyword, results: results.slice(0, 30), source: "yahoo", scrapedAt: new Date().toISOString() };
+  } catch (e) {
+    return { results: [], source: "yahoo", error: e.message };
+  }
+}
+
+// ── Main SERP function — DDG → Bing → Yahoo ───────────────────────────────
 async function getSERP(keyword, options = {}) {
-  // Try DuckDuckGo first
+  // 1. Try DuckDuckGo first
   const ddgResult = await scrapeDDG(keyword, options);
   if (ddgResult.results.length >= 5) return ddgResult;
 
-  // Fallback to Bing
-  console.log(`[serpScraper] DDG returned ${ddgResult.results.length} results — falling back to Bing`);
+  // 2. Fallback to Bing
+  console.log(`[serpScraper] DDG returned ${ddgResult.results.length} results for "${keyword}" — trying Bing`);
   const bingResult = await scrapeBing(keyword, options);
-  if (bingResult.results.length >= 3) return bingResult;
+  if (bingResult.results.length >= 5) return bingResult;
 
-  // Return whatever we have
-  return ddgResult.results.length > bingResult.results.length ? ddgResult : bingResult;
+  // 3. Fallback to Yahoo
+  console.log(`[serpScraper] Bing returned ${bingResult.results.length} results for "${keyword}" — trying Yahoo`);
+  const yahooResult = await scrapeYahoo(keyword, options);
+  if (yahooResult.results.length >= 3) return yahooResult;
+
+  // Return best non-empty result
+  return [ddgResult, bingResult, yahooResult].sort((a, b) => b.results.length - a.results.length)[0];
 }
 
 module.exports = {
   getSERP,
   scrapeDDG,
   scrapeBing,
+  scrapeYahoo,
   scrapeGoogleShopping,
   scrapeAutocomplete,
   extractPAA,
