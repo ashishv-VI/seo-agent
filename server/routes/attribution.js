@@ -147,6 +147,154 @@ router.get("/:clientId/data", verifyToken, async (req, res) => {
   }
 });
 
+// ── GET /api/attribution/:clientId/ga4-conversions ───
+// Fetches real GA4 conversion data and joins with GSC keyword rankings.
+// Requires GA4 property ID + Google OAuth token stored in client keys.
+router.get("/:clientId/ga4-conversions", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const clientId = req.params.clientId;
+
+    // Load keys
+    const keysDoc = await db.collection("users").doc(req.uid).get();
+    const keys    = keysDoc.exists ? keysDoc.data().apiKeys || {} : {};
+    const ga4Id   = keys.gaPropertyId || keys.ga4PropertyId || null;
+    const gToken  = keys.googleAccessToken || null;
+
+    if (!ga4Id)  return res.json({ source: "none", error: "No GA4 property ID configured — add it in Settings", conversions: [], keywordJoin: [] });
+    if (!gToken) return res.json({ source: "none", error: "Google account not connected — sign in with Google in Settings", conversions: [], keywordJoin: [] });
+
+    // ── GA4 Reporting API call ──────────────────────
+    // Dimensions: sessionSource, sessionMedium, landingPage, sessionCampaignName
+    // Metrics: conversions, sessions
+    const ga4Body = {
+      dateRanges: [{ startDate: "30daysAgo", endDate: "today" }],
+      dimensions: [
+        { name: "sessionSource" },
+        { name: "sessionMedium" },
+        { name: "landingPage" },
+        { name: "sessionCampaignName" },
+      ],
+      metrics: [
+        { name: "conversions" },
+        { name: "sessions" },
+      ],
+      limit: 100,
+    };
+
+    const ga4Res = await fetch(
+      `https://analyticsdata.googleapis.com/v1beta/properties/${ga4Id}:runReport`,
+      {
+        method:  "POST",
+        headers: { Authorization: `Bearer ${gToken}`, "Content-Type": "application/json" },
+        body:    JSON.stringify(ga4Body),
+        signal:  AbortSignal.timeout(20000),
+      }
+    );
+
+    if (!ga4Res.ok) {
+      const errText = await ga4Res.text().catch(() => "GA4 API error");
+      return res.json({ source: "none", error: `GA4 API error: ${errText}`, conversions: [], keywordJoin: [] });
+    }
+
+    const ga4Data = await ga4Res.json();
+
+    // ── Parse GA4 response ──────────────────────────
+    const rows = ga4Data.rows || [];
+    const gaConversions = rows.map(row => {
+      const dims = row.dimensionValues || [];
+      const mets = row.metricValues    || [];
+      return {
+        source:      dims[0]?.value || "(direct)",
+        medium:      dims[1]?.value || "(none)",
+        landingPage: dims[2]?.value || "/",
+        campaign:    dims[3]?.value || "(none)",
+        conversions: parseInt(mets[0]?.value || "0", 10),
+        sessions:    parseInt(mets[1]?.value || "0", 10),
+      };
+    }).filter(r => r.conversions > 0)
+      .sort((a, b) => b.conversions - a.conversions);
+
+    // ── Join with GSC rankings by landing page ──────
+    const rankings = await getState(clientId, "A10_rankings").catch(() => null);
+    const rankList = rankings?.rankings || [];
+    const rankMap  = {};
+    for (const r of rankList) {
+      if (r.page) {
+        const path = r.page.replace(/^https?:\/\/[^/]+/, "").toLowerCase();
+        if (!rankMap[path]) rankMap[path] = r;
+      }
+    }
+
+    // Also load GSC keyword data from A9 report for richer join
+    const report   = await getState(clientId, "A9_report").catch(() => null);
+    const gscKws   = report?.gscSummary?.topKeywords || [];
+    const gscKwMap = {};
+    for (const k of gscKws) {
+      const kQuery = (k.query || k.keyword || "").toLowerCase();
+      if (kQuery) gscKwMap[kQuery] = k;
+    }
+
+    // Enrich GA4 rows with GSC keyword data
+    const keywordJoin = gaConversions.map(row => {
+      const lpPath  = row.landingPage.replace(/^https?:\/\/[^/]+/, "").toLowerCase();
+      const ranked  = rankMap[lpPath] || null;
+      const gscData = ranked ? (gscKwMap[ranked.keyword?.toLowerCase()] || null) : null;
+
+      return {
+        ...row,
+        gscKeyword:   ranked?.keyword   || null,
+        gscPosition:  ranked?.position  || null,
+        gscClicks:    gscData?.clicks   || null,
+        gscImpressions: gscData?.impressions || null,
+        gscCtr:       gscData?.ctr      || null,
+        conversionRate: row.sessions > 0 ? parseFloat(((row.conversions / row.sessions) * 100).toFixed(2)) : null,
+      };
+    });
+
+    // ── Aggregate by source/medium ──────────────────
+    const bySource = {};
+    for (const r of gaConversions) {
+      const key = `${r.source} / ${r.medium}`;
+      if (!bySource[key]) bySource[key] = { source: r.source, medium: r.medium, conversions: 0, sessions: 0 };
+      bySource[key].conversions += r.conversions;
+      bySource[key].sessions    += r.sessions;
+    }
+    const sourceSummary = Object.values(bySource)
+      .sort((a, b) => b.conversions - a.conversions)
+      .slice(0, 10);
+
+    // ── Organic keyword leaders ─────────────────────
+    const organicRows = keywordJoin
+      .filter(r => r.medium === "organic" && r.gscKeyword)
+      .sort((a, b) => b.conversions - a.conversions)
+      .slice(0, 15);
+
+    // Store enriched GA4 data for attribution dashboard
+    await db.collection("shared_state").doc(`${clientId}_A_ga4conversions`).set({
+      clientId,
+      updatedAt:    new Date().toISOString(),
+      totalConversions: gaConversions.reduce((s, r) => s + r.conversions, 0),
+      keywordJoin,
+      sourceSummary,
+      organicKeywordLeaders: organicRows,
+    }, { merge: true });
+
+    return res.json({
+      source: "ga4",
+      totalConversions: gaConversions.reduce((s, r) => s + r.conversions, 0),
+      totalSessions:    gaConversions.reduce((s, r) => s + r.sessions,    0),
+      keywordJoin:      keywordJoin.slice(0, 50),
+      sourceSummary,
+      organicKeywordLeaders: organicRows,
+      dateRange: "Last 30 days",
+      ga4PropertyId: ga4Id,
+    });
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message, conversions: [], keywordJoin: [] });
+  }
+});
+
 // ── GET /api/attribution/:clientId/snippet ────────
 // Returns the personalised tracking script snippet for this client
 router.get("/:clientId/snippet", verifyToken, async (req, res) => {

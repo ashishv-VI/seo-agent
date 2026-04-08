@@ -100,6 +100,9 @@ export default function ApprovalQueue({ dark, clientId }) {
   // Fix verification
   const [verifications, setVerifications] = useState([]);
   const [verifyStats,   setVerifyStats]   = useState(null);
+  // A23 Investigations
+  const [investigations, setInvestigations] = useState([]);
+  const [approvingInv,   setApprovingInv]   = useState(null);
 
   const bg   = dark ? "#0a0a0a" : "#f5f5f0";
   const bg2  = dark ? "#111"    : "#ffffff";
@@ -114,18 +117,21 @@ export default function ApprovalQueue({ dark, clientId }) {
   async function load() {
     setLoading(true);
     const token = await getToken();
-    const [appRes, decRes, verRes] = await Promise.all([
+    const [appRes, decRes, verRes, invRes] = await Promise.all([
       fetch(`${API}/api/agents/${clientId}/approvals`, { headers: { Authorization: `Bearer ${token}` } }),
       fetch(`${API}/api/agents/${clientId}/cmo-decisions`, { headers: { Authorization: `Bearer ${token}` } }),
       fetch(`${API}/api/agents/${clientId}/fix-verification`, { headers: { Authorization: `Bearer ${token}` } }),
+      fetch(`${API}/api/agents/${clientId}/A23/investigations`, { headers: { Authorization: `Bearer ${token}` } }).catch(() => null),
     ]);
     const appData = await appRes.json();
     const decData = await decRes.json().catch(() => ({}));
     const verData = await verRes.json().catch(() => ({}));
+    const invData = invRes ? await invRes.json().catch(() => ({})) : {};
     setItems(appData.items || []);
     setDecisions(decData.decisions || []);
     setVerifications(verData.fixes || []);
     setVerifyStats(verData.stats || null);
+    setInvestigations(invData.investigations || []);
     setLoading(false);
   }
 
@@ -215,9 +221,10 @@ export default function ApprovalQueue({ dark, clientId }) {
       {/* ── Tabs ──────────────────────────────────────────── */}
       <div style={{ display: "flex", gap: 4, marginBottom: 20, borderBottom: `1px solid ${bdr}`, paddingBottom: 0 }}>
         {[
-          { id: "approvals",    label: `Content Approvals (${pending.length})` },
-          { id: "cmo",          label: `CMO Decisions (${pendingDecisions.length})` },
-          { id: "verification", label: `Fix Outcomes${verifyStats ? ` (${verifyStats.successRate ?? "?"}% success)` : ""}` },
+          { id: "approvals",       label: `Content Approvals (${pending.length})` },
+          { id: "cmo",             label: `CMO Decisions (${pendingDecisions.length})` },
+          { id: "investigations",  label: `🔍 Investigations (${investigations.filter(i => i.status === "pending").length})` },
+          { id: "verification",    label: `Fix Outcomes${verifyStats ? ` (${verifyStats.successRate ?? "?"}% success)` : ""}` },
         ].map(t => (
           <button key={t.id} onClick={() => setActiveTab(t.id)} style={{
             padding: "8px 16px", border: "none", borderRadius: "8px 8px 0 0",
@@ -315,6 +322,93 @@ export default function ApprovalQueue({ dark, clientId }) {
                 </div>
               ))}
             </>
+          )}
+        </div>
+      )}
+
+      {/* ════════════════════════════════════════════════════
+          TAB: A23 INVESTIGATIONS
+          ════════════════════════════════════════════════════ */}
+      {activeTab === "investigations" && (
+        <div>
+          {investigations.length === 0 ? (
+            <div style={{ background: bg2, border: `1px solid ${bdr}`, borderRadius: 12, padding: 40, textAlign: "center" }}>
+              <div style={{ fontSize: 32, marginBottom: 12 }}>🔍</div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: txt, marginBottom: 6 }}>No investigations yet</div>
+              <div style={{ fontSize: 12, color: txt2 }}>When P1 alerts are detected, the Investigation Agent automatically diagnoses the root cause and proposes a fix here.</div>
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              {investigations.map((inv, i) => {
+                const diag     = inv.diagnosis     || {};
+                const fix      = inv.proposedFix   || {};
+                const alertInv = inv.alert         || {};
+                const urgColor = fix.urgency === "critical" ? "#DC2626" : fix.urgency === "high" ? "#D97706" : "#0891B2";
+                const catColor = diag.category === "technical" ? "#DC2626" : diag.category === "competitor" ? "#D97706" : diag.category === "on_page" ? "#0891B2" : "#6B7280";
+
+                return (
+                  <div key={inv.id || i} style={{ background: bg2, border: `1px solid ${bdr}`, borderRadius: 12, overflow: "hidden" }}>
+                    {/* Alert header */}
+                    <div style={{ padding: "14px 20px", background: urgColor + "0c", borderBottom: `1px solid ${bdr}`, display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                      <div>
+                        <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 4 }}>
+                          <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 6, background: urgColor + "18", color: urgColor, textTransform: "uppercase" }}>
+                            {alertInv.tier || "P1"} · {fix.urgency || "high"}
+                          </span>
+                          <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 6, background: catColor + "18", color: catColor, textTransform: "uppercase" }}>
+                            {diag.category || "unknown"}
+                          </span>
+                          <span style={{ fontSize: 10, color: txt2 }}>
+                            {inv.status === "pending" ? "Awaiting approval" : inv.status}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: txt }}>{(alertInv.type || "").replace(/_/g, " ")}</div>
+                      </div>
+                      {inv.createdAt && (
+                        <div style={{ fontSize: 10, color: txt2, flexShrink: 0 }}>
+                          {new Date(inv.createdAt).toLocaleDateString()}
+                        </div>
+                      )}
+                    </div>
+
+                    <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: 12 }}>
+                      {/* Root cause */}
+                      <div>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: txt2, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Root Cause</div>
+                        <div style={{ fontSize: 12, color: txt, lineHeight: 1.6, padding: "10px 14px", background: bg3, borderRadius: 8 }}>
+                          {diag.rootCause || "Investigating..."}
+                        </div>
+                        {diag.evidence?.length > 0 && (
+                          <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+                            {diag.evidence.slice(0, 4).map((e, j) => (
+                              <span key={j} style={{ fontSize: 10, padding: "2px 8px", background: bg3, border: `1px solid ${bdr}`, borderRadius: 6, color: txt2 }}>{e}</span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Proposed fix */}
+                      <div style={{ padding: "12px 16px", background: "#05966910", border: "1px solid #05966930", borderRadius: 8 }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: "#059669", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>
+                          Proposed Fix — {fix.agent ? `Run ${fix.agent}` : ""}
+                        </div>
+                        <div style={{ fontSize: 12, color: txt, lineHeight: 1.6 }}>{fix.action || "See alert for suggested fix."}</div>
+                        {fix.estimatedImpact && (
+                          <div style={{ fontSize: 11, color: "#059669", marginTop: 6, fontWeight: 600 }}>→ {fix.estimatedImpact}</div>
+                        )}
+                      </div>
+
+                      {/* Confidence */}
+                      {diag.confidence != null && (
+                        <div style={{ fontSize: 11, color: txt2 }}>
+                          Diagnosis confidence: <span style={{ fontWeight: 700, color: diag.confidence > 0.8 ? "#059669" : "#D97706" }}>{Math.round(diag.confidence * 100)}%</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           )}
         </div>
       )}

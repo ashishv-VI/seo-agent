@@ -186,4 +186,39 @@ function buildAlertEmail(name, alerts) {
     </div>`;
 }
 
-module.exports = { notifyFixPushed, notifyReportReady, notifyP1Alert };
+// ── Investigation fix notification ────────────────
+async function notifyInvestigationFix(clientId, { alert, rootCause, fix, approvalId }) {
+  const brief  = await getState(clientId, "A1_brief").catch(() => null);
+  const name   = brief?.businessName || "Client";
+
+  await createNotification(clientId, "investigation_fix",
+    `🔍 Issue Diagnosed — Action Ready`,
+    `${(alert.type || "P1 Alert").replace(/_/g, " ")}: ${rootCause.slice(0, 100)}`,
+    { alertId: alert.id, approvalId, fix }
+  );
+
+  await sendEmail(clientId, {
+    subject: `🔍 SEO Issue Diagnosed — ${name}. Fix ready to approve.`,
+    body: `
+      <div style="font-family:sans-serif;max-width:600px;margin:0 auto;color:#1a1a18">
+        <div style="background:#443DCB;padding:24px;border-radius:8px 8px 0 0">
+          <h2 style="color:#fff;margin:0">🔍 SEO Issue Diagnosed</h2>
+          <p style="color:#ffffff99;margin:8px 0 0">${name}</p>
+        </div>
+        <div style="background:#fff;padding:24px;border:1px solid #e0e0d8;border-top:none;border-radius:0 0 8px 8px">
+          <p><strong>Alert:</strong> ${(alert.type || "").replace(/_/g, " ")}</p>
+          <div style="background:#fff3cd;padding:14px;border-radius:8px;margin:12px 0">
+            <strong>Root Cause:</strong> ${rootCause}
+          </div>
+          <div style="background:#d1fae5;padding:14px;border-radius:8px;margin:12px 0">
+            <strong>Proposed Fix:</strong> ${fix}
+          </div>
+          <p>Log in to the platform to approve and execute this fix.</p>
+        </div>
+      </div>`,
+  });
+
+  return { success: true };
+}
+
+module.exports = { notifyFixPushed, notifyReportReady, notifyP1Alert, notifyInvestigationFix };

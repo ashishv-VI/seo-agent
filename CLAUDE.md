@@ -12,8 +12,8 @@ The difference: it senses data, decides what to fix, acts autonomously, verifies
 SENSE → DECIDE → ACT → VERIFY → LEARN → repeat forever
 ```
 
-**Current honest state**: SENSE ✅ ACT ✅ DECIDE ⚠️ (rule-based, not truly autonomous) VERIFY ❌ LEARN ❌
-The loop is not closed yet. Verification + Learning are the two missing pieces.
+**Current honest state**: SENSE ✅ ACT ✅ DECIDE ✅ VERIFY ✅ LEARN ⚠️ (CMO reads memory, not yet fully cross-client)
+The loop is mostly closed. Alert→Investigate→Fix chain built. Remaining: cross-client learning depth.
 
 **3 User Types:**
 | User | Need | Platform Delivers |
@@ -40,14 +40,16 @@ git push origin main
 
 ---
 
-## Agent Architecture — All 21 Agents
+## Agent Architecture — All 24 Agents
 
 ### STRATEGY LAYER
 | Agent | File | Purpose | Status |
 |-------|------|---------|--------|
-| **CMO Agent** | `CMO_agent.js` | Sees all data → decides what to fix → queues next agents | ✅ Built — rule-based fallback, needs A16 memory integration |
+| **CMO Agent** | `CMO_agent.js` | Sees all data → decides what to fix → queues next agents | ✅ Built — reads A16 memory + cross-client patterns |
 | **A17 Reviewer** | `A17_reviewer.js` | Quality gate — confidence score 0–1 per agent output | ✅ Built |
 | **A19 Conversion** | `A19_conversion.js` | CRO: CTA gaps, form issues, landing page blockers | ✅ Built |
+| **A22 Predictive** | `A22_predictive.js` | 90-day traffic forecast (linear regression) + keyword opportunity scoring | ✅ Built |
+| **A23 Investigator** | `A23_investigator.js` | Alert → root cause diagnosis → proposed fix → approval queue + notification | ✅ Built |
 
 ### DISCOVERY LAYER
 | Agent | File | Purpose | Status |
@@ -98,7 +100,7 @@ Every agent returns: `{ success: boolean, error?: string, ...data }`
 
 This is our north star. These are the gaps between what we have and a real autonomous agent.
 
-### GAP 1: Verification Loop (MOST IMPORTANT)
+### GAP 1: Verification Loop ✅ BUILT
 After A13 pushes a fix, we never check if it worked.
 ```
 Fix pushed (meta title rewrite on /services)
@@ -109,8 +111,8 @@ Fix pushed (meta title rewrite on /services)
 ```
 **Without this, the agent acts but never learns. It's the most important thing to build.**
 
-### GAP 2: CMO Must Read A16 Memory
-CMO currently ignores what worked before. Fix:
+### GAP 2: CMO Reads A16 Memory ✅ BUILT
+CMO loads client_memory + global_patterns before deciding. Fix:
 ```
 CMO load order:
 1. Load all 9 agent states (already done)
@@ -119,7 +121,7 @@ CMO load order:
 4. Decision = signals + memory + patterns (not just signals)
 ```
 
-### GAP 3: Keyword → Lead Attribution (Agencies need this to justify invoices)
+### GAP 3: Keyword → Lead Attribution ✅ BUILT (form tracking + GA4 API join)
 ```
 GSC keyword → landing page → GA4 session → GA4 conversion (form_submit)
 = "This keyword brought 3 leads this month"
@@ -131,8 +133,8 @@ A2 crawls 500 pages but stores only 80 in the Firestore doc (1MB limit).
 Need: each page as its own subcollection doc → then detect patterns:
 `"47 service pages all missing H1"` not `"page /services missing H1"`.
 
-### GAP 5: Content from Real SERP Analysis
-A5 generates briefs from keywords. It should also scrape top 10 SERP results first:
+### GAP 5: Content from Real SERP Analysis ✅ BUILT
+A5 now scrapes top 5 SERP results before generating briefs:
 - Average word count of top 3
 - Common H2 headings competitors use
 - PAA questions
@@ -144,15 +146,15 @@ You manage N clients. What works for one should inform others.
 `client_memory` collection has the data. Need a cross-client read layer in CMO:
 `"Meta rewrites worked for 4/5 similar businesses — high confidence for this client too."`
 
-### GAP 7: Alert → Investigate → Fix Chain (true autonomy)
-Current: alert sits in Firestore, human logs in to read it.
-Goal:
+### GAP 7: Alert → Investigate → Fix Chain ✅ BUILT (A23 Investigator)
+A23 runs after A9.checkAlerts → diagnoses root cause → proposes fix → approval queue + notification.
 ```
-Ranking drop detected
-→ Agent auto-investigates: competitor new page? Technical change? CWV degraded?
-→ Diagnoses root cause
-→ Proposes fix with approve button
-→ Sends WhatsApp/email: "Page dropped. Here's why + fix. Approve?"
+P1 alert detected (A9)
+→ A23 investigates: competitor new page? CWV degraded? Technical change?
+→ Diagnoses root cause (confidence-scored)
+→ Creates approval_queue item with specific fix
+→ In-app notification + SendGrid email: "Issue diagnosed. Fix ready. Approve?"
+→ One-click approve in Approvals → Investigations tab
 ```
 
 ---
@@ -360,8 +362,12 @@ Issue severity: `p1` = blocks rankings · `p2` = hurts rankings · `p3` = minor
 6. **agentLimiter skips GETs** — only POST AI runs count against the limit.
 7. **Color props in child components** — always receive `bg2`, `bg3`, `bdr`, `txt`, `txt2` as props, never recompute.
 8. **A9 field names** — LLM returns `expectedOutcome` (not `how`) in `next3Actions`.
-9. **CMO reads A16** — not yet wired. When building CMO improvements, load `client_memory` first.
+9. **CMO reads A16** — wired. CMO loads `client_memory` + `global_patterns` filtered by ownerId before deciding.
 10. **Render cold-start** — free tier sleeps after 15min, first request ~30s. Paid plan = always-on.
+11. **A5 SERP scrape is non-blocking** — `fetchSerpIntelligence()` failures are caught silently. Brief still generates with LLM even if SERP fails.
+12. **GA4 conversion join** — `GET /api/attribution/:clientId/ga4-conversions` requires `gaPropertyId` in user keys + valid Google access token. Returns `{ source: "none" }` if not configured.
+13. **A23 investigator** — runs automatically after checkAlerts finds P1 alerts. Also callable on-demand via `POST /api/agents/:clientId/A23/investigate`. Results appear in ApprovalQueue → Investigations tab.
+14. **ControlRoom CMO banner** — CMO decision shown as a persistent banner at top of Control Room (above tabs). "Approve & Execute" button queues nextAgents via cmo-decisions endpoint.
 
 ---
 
@@ -377,9 +383,16 @@ Issue severity: `p1` = blocks rankings · `p2` = hurts rankings · `p3` = minor
 | `src/components/RankTrackerPanel.jsx` | Manual rank tracker, auto-imports A10 data on first load |
 | `server/index.js` | Entry point, all cron schedulers (daily/weekly/monthly/watchdog) |
 | `server/agents/A0_orchestrator.js` | Pipeline runner, 25-min timeout, dependency chain |
-| `server/agents/CMO_agent.js` | Strategy: signal extraction → LLM/rule decision → cmo_queue |
+| `server/agents/CMO_agent.js` | Strategy: signal extraction → LLM/rule decision → cmo_queue. Reads A16 memory + global_patterns |
+| `server/agents/A22_predictive.js` | 90-day traffic forecast (linear regression) + keyword opportunity scoring |
+| `server/agents/A23_investigator.js` | P1 alert → root cause diagnosis → approval queue + email notification |
 | `server/routes/agents.js` | All agent run + data GET endpoints |
-| `server/routes/controlRoom.js` | Control Room data aggregation |
+| `server/routes/controlRoom.js` | Control Room data aggregation. Now includes CMO decision in response |
+| `server/routes/attribution.js` | Form tracking events + GA4 conversion join (real API) + tracking snippet |
+| `server/utils/auditPatterns.js` | Reads per-page subcollection → detects site-wide patterns (missing H1 on 47 pages etc) |
+| `src/components/AuditPatternsPanel.jsx` | Site-wide pattern analysis UI — severity bars, affected URLs, fix suggestions |
+| `src/components/AttributionDashboard.jsx` | Form tracking + GA4 conversion join + tracking snippet installer |
+| `src/components/PredictiveForecastPanel.jsx` | 90-day traffic forecast + keyword opportunities + score projection |
 | `server/routes/agency.js` | Agency dashboard aggregation |
 | `server/crawler/serpScraper.js` | Free SERP: DDG → Bing → Yahoo |
 | `server/utils/llm.js` | LLM fallback chain + 429 retry |

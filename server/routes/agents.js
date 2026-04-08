@@ -1742,13 +1742,54 @@ router.get("/:clientId/A22/forecast", verifyToken, async (req, res) => {
 router.get("/:clientId/A2/patterns", verifyToken, async (req, res) => {
   try {
     await getClientDoc(req.params.clientId, req.uid);
-    const data = await getState(req.params.clientId, "A2_patterns");
-    if (data) return res.json(data);
+    const refresh = req.query.refresh === "true";
 
-    // If no cached patterns, compute live from subcollection
+    // Return cached unless refresh=true
+    if (!refresh) {
+      const cached = await getState(req.params.clientId, "A2_patterns");
+      if (cached) return res.json(cached);
+    }
+
+    // Compute live from subcollection
     const { detectSitePatterns } = require("../utils/auditPatterns");
     const patterns = await detectSitePatterns(req.params.clientId);
     return res.json(patterns);
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
+// ────────────────────────────────────────────────────
+// A23 — ALERT INVESTIGATOR
+// ────────────────────────────────────────────────────
+
+// POST /:clientId/A23/investigate — run investigation on all unresolved P1 alerts
+router.post("/:clientId/A23/investigate", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const { runA23 } = require("../agents/A23_investigator");
+    const keys = await getUserKeys(req.uid);
+    const result = await runA23(req.params.clientId, keys);
+    return res.json(result);
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
+// GET /:clientId/A23/investigations — latest investigation results
+router.get("/:clientId/A23/investigations", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    // Return from approval_queue type=investigation_fix
+    const snap = await db.collection("approval_queue")
+      .where("clientId", "==", req.params.clientId)
+      .where("type", "==", "investigation_fix")
+      .limit(20)
+      .get();
+    const investigations = snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
+    return res.json({ investigations });
   } catch (e) {
     return res.status(e.code || 500).json({ error: e.message });
   }

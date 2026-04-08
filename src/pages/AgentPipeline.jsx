@@ -13,6 +13,7 @@ import RankTrackerPanel from "../components/RankTrackerPanel";
 import ControlRoom from "./ControlRoom";
 import AttributionDashboard from "../components/AttributionDashboard";
 import PredictiveForecastPanel from "../components/PredictiveForecastPanel";
+import AuditPatternsPanel from "../components/AuditPatternsPanel";
 
 const ALL_AGENTS = [
   { id:"A1",  label:"Client Brief",       icon:"📋", phase:1 },
@@ -384,6 +385,7 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
           {isComplete("A9") && <div style={s.tab(activeTab==="impactreport")} onClick={()=>setActiveTab("impactreport")}>📑 Impact Report</div>}
           <div style={s.tab(activeTab==="attribution")} onClick={()=>setActiveTab("attribution")}>🔗 Attribution</div>
           {isComplete("A3") && <div style={s.tab(activeTab==="forecast")} onClick={()=>setActiveTab("forecast")}>🔮 Forecast</div>}
+          {isComplete("A2") && <div style={s.tab(activeTab==="patterns")} onClick={()=>setActiveTab("patterns")}>🗂️ Site Patterns</div>}
         </div>
 
       </div>
@@ -663,6 +665,12 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
       {/* ── Predictive Forecast Tab ── */}
       {activeTab==="forecast" && (
         <PredictiveForecastPanel dark={dark} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2}
+          clientId={clientId} />
+      )}
+
+      {/* ── Site-Wide Audit Patterns Tab ── */}
+      {activeTab==="patterns" && (
+        <AuditPatternsPanel dark={dark} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2}
           clientId={clientId} />
       )}
 

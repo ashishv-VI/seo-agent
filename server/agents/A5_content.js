@@ -2,12 +2,120 @@ const { saveState, getState } = require("../shared-state/stateManager");
 const { callLLM, parseJSON }  = require("../utils/llm");
 const { db, FieldValue }      = require("../config/firebase");
 const { emitToolSuggestion }  = require("../utils/toolBridge");
+const { getSERP }             = require("../crawler/serpScraper");
 
 /**
  * A5 — Content Optimisation Agent
  * Generates title/meta/heading rewrites + content briefs
  * All output goes to approval queue — human gate before anything goes live
  */
+
+// ── SERP Research: fetch top results + scrape each page ──────────────────────
+// Returns data-driven content intelligence for a keyword
+async function fetchSerpIntelligence(keyword) {
+  try {
+    const serpData = await getSERP(keyword, { num: 5 });
+    const topUrls  = (serpData.results || []).slice(0, 5).map(r => r.url).filter(Boolean);
+
+    // Scrape each result page for content signals
+    const pageData = await Promise.allSettled(
+      topUrls.map(url => scrapePageForBrief(url))
+    );
+
+    const pages = pageData
+      .filter(r => r.status === "fulfilled" && r.value)
+      .map(r => r.value);
+
+    if (pages.length === 0) return null;
+
+    // Aggregate signals
+    const avgWordCount    = Math.round(pages.reduce((s, p) => s + (p.wordCount || 0), 0) / pages.length);
+    const allH2s          = pages.flatMap(p => p.h2s || []);
+    const schemaTypes     = [...new Set(pages.flatMap(p => p.schemas || []))].slice(0, 5);
+    // Most common H2 phrases (normalised)
+    const h2Freq = {};
+    for (const h2 of allH2s) {
+      const normalised = h2.toLowerCase().trim().slice(0, 50);
+      if (normalised.length > 3) h2Freq[normalised] = (h2Freq[normalised] || 0) + 1;
+    }
+    const topH2s = Object.entries(h2Freq)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+      .map(([h2, count]) => ({ h2, appearsIn: count }));
+
+    return {
+      keyword,
+      topResults: topUrls.length,
+      avgWordCount,
+      topH2Headings: topH2s,
+      commonSchemas: schemaTypes,
+      serpSnippets:  (serpData.results || []).slice(0, 3).map(r => r.snippet || "").filter(Boolean),
+    };
+  } catch {
+    return null;
+  }
+}
+
+// ── Scrape a single page for content signals (word count, H2s, schema) ───────
+async function scrapePageForBrief(url) {
+  try {
+    const res = await fetch(url, {
+      signal:  AbortSignal.timeout(8000),
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; SEOBot/1.0)", "Accept": "text/html" },
+    });
+    if (!res.ok) return null;
+    const html = await res.text();
+
+    // Word count — strip tags, count words in body
+    const bodyText = html
+      .replace(/<script[\s\S]*?<\/script>/gi, "")
+      .replace(/<style[\s\S]*?<\/style>/gi, "")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    const wordCount = bodyText.split(" ").filter(w => w.length > 2).length;
+
+    // H2 headings
+    const h2Matches = [...html.matchAll(/<h2[^>]*>([\s\S]*?)<\/h2>/gi)];
+    const h2s = h2Matches
+      .map(m => m[1].replace(/<[^>]+>/g, "").trim())
+      .filter(h => h.length > 3 && h.length < 100)
+      .slice(0, 10);
+
+    // Schema types (from @type in JSON-LD)
+    const schemaMatches = [...html.matchAll(/"@type"\s*:\s*"([^"]+)"/gi)];
+    const schemas = [...new Set(schemaMatches.map(m => m[1]))].slice(0, 5);
+
+    return { url, wordCount, h2s, schemas };
+  } catch {
+    return null;
+  }
+}
+
+// ── Build SERP intelligence section for LLM prompt ────────────────────────────
+function buildSerpSection(serpIntel) {
+  if (!serpIntel) return "";
+  const lines = [
+    `\n## Real SERP Analysis for "${serpIntel.keyword}" (${serpIntel.topResults} top results scraped)`,
+    `- Average word count of top pages: ${serpIntel.avgWordCount || "unknown"} words`,
+  ];
+  if (serpIntel.topH2Headings?.length > 0) {
+    lines.push(`- Common H2 headings used by top-ranking pages:`);
+    for (const h of serpIntel.topH2Headings.slice(0, 6)) {
+      lines.push(`  • "${h.h2}" (${h.appearsIn}/${serpIntel.topResults} pages)`);
+    }
+  }
+  if (serpIntel.commonSchemas?.length > 0) {
+    lines.push(`- Schema types used: ${serpIntel.commonSchemas.join(", ")}`);
+  }
+  if (serpIntel.serpSnippets?.length > 0) {
+    lines.push(`- Top 3 SERP snippets (what Google shows for this query):`);
+    serpIntel.serpSnippets.forEach((s, i) => lines.push(`  ${i+1}. "${s.slice(0, 120)}"`));
+  }
+  lines.push(`\nUse this real SERP data to make the content brief data-driven. Match or beat the avg word count. Cover the common H2 topics. Add recommended schema types.`);
+  return lines.join("\n");
+}
+
 async function runA5(clientId, keys) {
   const brief      = await getState(clientId, "A1_brief");
   const audit      = await getState(clientId, "A2_audit");
@@ -27,7 +135,18 @@ async function runA5(clientId, keys) {
   const currentH1    = audit?.checks?.h1?.value    || "";
   const currentDesc  = audit?.checks?.metaDescription?.value || "";
 
+  // ── SERP Intelligence — scrape top 5 results for primary keyword ─────────
+  const primaryKeyword = topKeywords[0]?.keyword || brief.businessName;
+  let serpIntel = null;
+  try {
+    console.log(`[A5] Fetching SERP intelligence for "${primaryKeyword}"...`);
+    serpIntel = await fetchSerpIntelligence(primaryKeyword);
+    if (serpIntel) console.log(`[A5] SERP: avgWordCount=${serpIntel.avgWordCount}, H2s=${serpIntel.topH2Headings?.length}`);
+  } catch { /* non-blocking — degrade gracefully */ }
+
   // ── LLM: Generate optimised on-page content ────────
+  const serpSection = buildSerpSection(serpIntel);
+
   const prompt = `You are an expert SEO content strategist.
 
 Client: ${brief.businessName}
@@ -43,7 +162,7 @@ Current Homepage:
 
 Top Target Keywords: ${topKeywords.map(k => k.keyword).join(", ")}
 Content Gaps to Fill: ${contentGaps.slice(0,3).map(g => g.topic).join(", ")}
-
+${serpSection}
 Generate optimised content recommendations. Return ONLY valid JSON:
 
 {
@@ -138,11 +257,14 @@ Generate optimised content recommendations. Return ONLY valid JSON:
     contentData,
     approvalItemsCount: approvalItems.length,
     approvalItemIds:    approvalItems,
+    serpIntelligence:   serpIntel || null,
     summary: {
       homepageOptimised:  !!contentData.homepageOptimisation,
       newPageBriefs:      contentData.newPageBriefs?.length || 0,
       faqItems:           contentData.faqContent?.length || 0,
       refreshFlags:       contentData.contentRefreshFlags?.length || 0,
+      serpDataUsed:       serpIntel != null,
+      avgWordCountTarget: serpIntel?.avgWordCount || null,
     },
     generatedAt: new Date().toISOString(),
   };

@@ -167,6 +167,17 @@ setInterval(async () => {
           }
         } catch { /* non-blocking */ }
 
+        // A23: investigate any new P1 alerts — diagnose root cause, propose fix, notify
+        if (alertResult?.alertsCreated > 0) {
+          try {
+            const { runA23 } = require("./agents/A23_investigator");
+            const inv = await runA23(doc.id, keys);
+            if (inv?.investigated > 0) {
+              console.log(`[daily-monitor] A23: ${inv.investigated} P1 alert(s) investigated for ${data.name}`);
+            }
+          } catch { /* non-blocking */ }
+        }
+
         // A16: update client AI memory after daily check
         runA16(doc.id, keys).catch(() => {});
 
