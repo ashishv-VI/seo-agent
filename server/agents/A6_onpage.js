@@ -332,12 +332,17 @@ Return ONLY valid JSON:
   }
 }`;
 
-  let recommendations;
+  const { a6OnPageRecs } = require("../utils/ruleBasedFallbacks");
+  const ruleRecs = a6OnPageRecs(audit, keywords, brief);
+
+  let recommendations = { schemaMarkup: [], trackingSetup: {}, openGraph: { needed: true, tags: [] }, ...ruleRecs };
   try {
     const response = await callLLM(prompt, keys, { maxTokens: 2000 });
-    recommendations = parseJSON(response);
+    const llmRecs  = parseJSON(response);
+    // LLM output wins if it has schema markup — otherwise keep rule output
+    recommendations = llmRecs.schemaMarkup?.length > 0 ? { ...ruleRecs, ...llmRecs, generatedBy: "llm+rules" } : { ...ruleRecs, generatedBy: "rules" };
   } catch {
-    recommendations = { schemaMarkup: [], trackingSetup: {}, openGraph: { needed: true, tags: [] } };
+    // Rule-based output already set
   }
 
   // ── Validate JSON-LD schemas from LLM ─────────────

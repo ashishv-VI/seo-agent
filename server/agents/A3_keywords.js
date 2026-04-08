@@ -55,12 +55,20 @@ Generate a keyword map with exactly these 4 clusters. Return ONLY valid JSON, no
 
 Generate 5-8 keywords per cluster. Make them realistic and specific to the business.`;
 
-  let keywordData;
+  // Build rule-based seed clusters from brief data — works even with no LLM
+  const { a3KeywordClusters } = require("../utils/ruleBasedFallbacks");
+  const seedClusters = buildSeedClusters(brief);
+
+  let keywordData = seedClusters; // always have something
   try {
     const response = await callLLM(prompt, keys, { maxTokens: 4000, temperature: 0.4 });
-    keywordData = parseJSON(response);
-  } catch (e) {
-    return { success: false, error: `LLM keyword generation failed: ${e.message}` };
+    const llmData  = parseJSON(response);
+    // LLM wins if it returned real clusters
+    if (llmData.generic?.length > 0 || llmData.longtail?.length > 0) {
+      keywordData = llmData;
+    }
+  } catch {
+    console.warn("[A3] LLM unavailable — using rule-based keyword seed clusters");
   }
 
   // ── SerpAPI: Get live SERP data ────────────────────
@@ -258,6 +266,50 @@ Generate 5-8 keywords per cluster. Make them realistic and specific to the busin
   } catch { /* non-blocking */ }
 
   return { success: true, keywords: result };
+}
+
+// ── Rule-based keyword seed builder (no LLM required) ────────────────────────
+function buildSeedClusters(brief) {
+  const name       = brief?.businessName || "";
+  const services   = brief?.services || [];
+  const locations  = brief?.targetLocations || brief?.targetLocation ? [brief.targetLocation] : [];
+  const desc       = brief?.businessDescription || "";
+  const keywords   = brief?.primaryKeywords || [];
+
+  // Brand cluster
+  const brand = [
+    { keyword: name.toLowerCase(), intent: "navigational", difficulty: "low", priority: "high", suggestedPage: "/" },
+    ...keywords.map(k => ({ keyword: k, intent: "navigational", difficulty: "low", priority: "high", suggestedPage: "/" })),
+  ].slice(0, 5);
+
+  // Generic / commercial cluster
+  const generic = services.slice(0, 6).map(s => ({
+    keyword: s.toLowerCase(), intent: "transactional", difficulty: "medium", priority: "high", suggestedPage: "/services",
+  }));
+  if (generic.length === 0 && desc) {
+    const words = desc.toLowerCase().split(/\s+/).filter(w => w.length > 4).slice(0, 6);
+    words.forEach(w => generic.push({ keyword: w, intent: "transactional", difficulty: "medium", priority: "medium", suggestedPage: "/services" }));
+  }
+
+  // Long-tail cluster
+  const longtail = services.slice(0, 4).map(s => ({
+    keyword: `best ${s.toLowerCase()}`, intent: "commercial", difficulty: "medium", priority: "medium", suggestedPage: "/services",
+  }));
+
+  // Local variants
+  const localVariants = [];
+  for (const loc of locations.slice(0, 3)) {
+    for (const svc of services.slice(0, 2)) {
+      localVariants.push({ keyword: `${svc.toLowerCase()} ${loc.toLowerCase()}`, location: loc, intent: "transactional", difficulty: "low" });
+    }
+  }
+
+  // Informational cluster
+  const informational = services.slice(0, 3).map(s => ({
+    keyword: `how to choose ${s.toLowerCase()}`, intent: "informational", difficulty: "low", priority: "low", suggestedPage: "/blog",
+  }));
+
+  return { brand, generic, longtail, localVariants, informational, gaps: [], generatedBy: "rule-engine" };
 }
 
 module.exports = { runA3 };

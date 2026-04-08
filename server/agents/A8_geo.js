@@ -192,12 +192,18 @@ Provide a comprehensive GEO and off-page analysis. Return ONLY valid JSON:
   ]
 }`;
 
-  let geoData;
+  const { a8GeoRecs } = require("../utils/ruleBasedFallbacks");
+  const ruleGeo = a8GeoRecs(brief, audit);
+
+  let geoData = ruleGeo; // always have output
   try {
-    const response = await callLLM(prompt, keys, { maxTokens: 4000, temperature: 0.3 });
-    geoData = parseJSON(response);
-  } catch (e) {
-    return { success: false, error: `GEO analysis failed: ${e.message}` };
+    const response  = await callLLM(prompt, keys, { maxTokens: 4000, temperature: 0.3 });
+    const llmGeo    = parseJSON(response);
+    if (llmGeo.napStatus || llmGeo.gbpStatus || llmGeo.recommendations?.length > 0) {
+      geoData = { ...ruleGeo, ...llmGeo, generatedBy: "llm+rules" };
+    }
+  } catch {
+    console.warn("[A8] LLM unavailable — using rule-based GEO analysis");
   }
 
   const result = {

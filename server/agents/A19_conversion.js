@@ -61,12 +61,25 @@ Return ONLY valid JSON:
   "estimatedCRLift": "e.g. +0.5–1.5% CR improvement if top 3 fixes applied"
 }`;
 
-  let analysis;
+  const { a19CROAnalysis } = require("../utils/ruleBasedFallbacks");
+  const ruleAnalysis = a19CROAnalysis(audit, brief, keywords);
+
+  let analysis = {
+    overallCRO:         ruleAnalysis.conversionScore >= 70 ? "strong" : ruleAnalysis.conversionScore >= 40 ? "average" : "weak",
+    conversionBlockers: ruleAnalysis.issues,
+    quickWins:          ruleAnalysis.quickWins,
+    landingPageAudit:   { verdict: `${ruleAnalysis.issues.length} conversion blockers found`, topFix: ruleAnalysis.issues[0]?.fix || "Site looks conversion-ready" },
+    estimatedCRLift:    ruleAnalysis.issues.length > 3 ? "+1.5–3% CR if top fixes applied" : "+0.5–1% CR if fixes applied",
+    generatedBy:        "rule-engine",
+  };
   try {
-    const raw  = await callLLM(prompt, keys, { maxTokens: 2000, temperature: 0.3 });
-    analysis   = parseJSON(raw);
+    const raw     = await callLLM(prompt, keys, { maxTokens: 2000, temperature: 0.3 });
+    const llmData = parseJSON(raw);
+    if (llmData.conversionBlockers?.length > 0) {
+      analysis = { ...analysis, ...llmData, generatedBy: "llm+rules" };
+    }
   } catch {
-    analysis = buildFallbackCRO(croSignals, brief);
+    // Rule-based output already set
   }
 
   const result = {

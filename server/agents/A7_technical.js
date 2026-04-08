@@ -162,12 +162,25 @@ Provide technical fix recommendations. Return ONLY valid JSON:
   }
 }`;
 
-  let techRecs;
+  const { a7TechRecs } = require("../utils/ruleBasedFallbacks");
+  // Rule-based recs run first — always produce output, no API needed
+  const ruleTechRecs = a7TechRecs(cwvData, audit);
+
+  let techRecs = ruleTechRecs; // default: rule-based (zero API dependency)
   try {
     const response = await callLLM(prompt, keys, { maxTokens: 2500 });
-    techRecs = parseJSON(response);
+    const llmRecs  = parseJSON(response);
+    // Merge: LLM enriches rule output — but rules are the safety net
+    techRecs = {
+      ...ruleTechRecs,
+      priorityFixes:                  llmRecs.priorityFixes?.length > ruleTechRecs.priorityFixes.length ? llmRecs.priorityFixes : ruleTechRecs.priorityFixes,
+      infrastructureRecommendations:  llmRecs.infrastructureRecommendations?.length ? llmRecs.infrastructureRecommendations : ruleTechRecs.infrastructureRecommendations,
+      mobileChecklist:                llmRecs.mobileChecklist?.length ? llmRecs.mobileChecklist : ruleTechRecs.mobileChecklist,
+      cwvStatus:                      llmRecs.cwvStatus?.overallAssessment ? llmRecs.cwvStatus : ruleTechRecs.cwvStatus,
+      generatedBy:                    "llm+rules",
+    };
   } catch {
-    techRecs = { priorityFixes: [], infrastructureRecommendations: [], mobileChecklist: [], cwvStatus: {} };
+    // LLM failed — rule-based output is already set, continue silently
   }
 
   const result = {
