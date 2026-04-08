@@ -1759,6 +1759,53 @@ router.get("/:clientId/A2/patterns", verifyToken, async (req, res) => {
   }
 });
 
+// GET /:clientId/A2/crawl-status — real-time crawl progress (polling)
+router.get("/:clientId/A2/crawl-status", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const clientId = req.params.clientId;
+
+    // Read from clients doc — A2 writes progress here during crawl
+    const clientDoc = await db.collection("clients").doc(clientId).get();
+    const data      = clientDoc.data() || {};
+    const audit     = await getState(clientId, "A2_audit").catch(() => null);
+
+    return res.json({
+      status:        data.agents?.A2 || "idle",
+      crawlProgress: data.crawlProgress || null,  // { crawled, total, pct }
+      lastAuditAt:   audit?.auditedAt || null,
+      pagesCrawled:  audit?.checks?.pageAuditCount || audit?.checks?.internalLinksFound || 0,
+      healthScore:   audit?.healthScore || null,
+      p1Count:       audit?.issues?.p1?.length || 0,
+      p2Count:       audit?.issues?.p2?.length || 0,
+    });
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
+// GET /:clientId/A2/page-scores — per-page SEO scores from pageScorer
+router.get("/:clientId/A2/page-scores", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const clientId = req.params.clientId;
+    const refresh  = req.query.refresh === "true";
+
+    if (!refresh) {
+      const cached = await getState(clientId, "A2_page_scores");
+      if (cached) return res.json(cached);
+    }
+
+    const brief          = await getState(clientId, "A1_brief").catch(() => null);
+    const targetKeywords = (brief?.primaryKeywords || []).slice(0, 5);
+    const { scoreAllPages } = require("../utils/pageScorer");
+    const scores = await scoreAllPages(clientId, targetKeywords);
+    return res.json(scores);
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
 // ────────────────────────────────────────────────────
 // A23 — ALERT INVESTIGATOR
 // ────────────────────────────────────────────────────
