@@ -3,14 +3,15 @@
  * Each provider retries once on timeout before falling to the next.
  */
 
-const RETRY_DELAY_MS    = 1500;
-const RATE_LIMIT_WAIT_MS = 60000; // 60 seconds — standard Groq/Gemini rate-limit window
+const RETRY_DELAY_MS     = 1500;
+const RATE_LIMIT_WAIT_MS = 60000; // 60s — standard rate-limit window
+const OVERLOAD_WAIT_MS   = 8000;  // 8s — overloaded (529) is usually transient
 
 async function sleep(ms) {
   return new Promise(r => setTimeout(r, ms));
 }
 
-// ── Single provider call with one retry on timeout or rate-limit ─────────────
+// ── Single provider call with one retry on timeout / rate-limit / overload ───
 async function callWithRetry(fn, providerName) {
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
@@ -19,9 +20,11 @@ async function callWithRetry(fn, providerName) {
     } catch (e) {
       const isTimeout   = e.name === "TimeoutError"   || e.message?.includes("timeout");
       const isRateLimit = e.name === "RateLimitError" || e.message?.includes("429");
-      if (attempt === 1 && isRateLimit) {
-        console.warn(`[llm] ${providerName} rate-limited (429) — waiting 60s before retry`);
-        await sleep(RATE_LIMIT_WAIT_MS);
+      const isOverloaded = e.name === "OverloadedError" || e.message?.includes("529") || e.message?.includes("overload");
+      if (attempt === 1 && (isRateLimit || isOverloaded)) {
+        const waitMs = isOverloaded ? OVERLOAD_WAIT_MS : RATE_LIMIT_WAIT_MS;
+        console.warn(`[llm] ${providerName} ${isOverloaded ? "overloaded (529)" : "rate-limited (429)"} — waiting ${waitMs / 1000}s before retry`);
+        await sleep(waitMs);
         continue;
       }
       if (attempt === 1 && isTimeout) {
@@ -58,6 +61,8 @@ async function callLLM(prompt, keys, options = {}) {
         signal: AbortSignal.timeout(30000),
       });
       if (res.status === 429) throw Object.assign(new Error("429 rate limit"), { name: "RateLimitError" });
+      if (res.status === 529) throw Object.assign(new Error("529 overloaded"), { name: "OverloadedError" });
+      if (!res.ok) throw new Error(`Groq HTTP ${res.status}`);
       const data = await res.json();
       return data.choices?.[0]?.message?.content || null;
     }, "Groq");
@@ -81,6 +86,8 @@ async function callLLM(prompt, keys, options = {}) {
         }
       );
       if (res.status === 429) throw Object.assign(new Error("429 rate limit"), { name: "RateLimitError" });
+      if (res.status === 529) throw Object.assign(new Error("529 overloaded"), { name: "OverloadedError" });
+      if (!res.ok) throw new Error(`Gemini HTTP ${res.status}`);
       const data = await res.json();
       return data.candidates?.[0]?.content?.parts?.[0]?.text || null;
     }, "Gemini");
@@ -107,6 +114,8 @@ async function callLLM(prompt, keys, options = {}) {
         signal: AbortSignal.timeout(35000),
       });
       if (res.status === 429) throw Object.assign(new Error("429 rate limit"), { name: "RateLimitError" });
+      if (res.status === 529) throw Object.assign(new Error("529 overloaded"), { name: "OverloadedError" });
+      if (!res.ok) throw new Error(`OpenRouter HTTP ${res.status}`);
       const data = await res.json();
       return data.choices?.[0]?.message?.content || null;
     }, "OpenRouter");

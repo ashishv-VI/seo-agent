@@ -315,8 +315,14 @@ async function runA2(clientId) {
               titleLength:     pg.checks?.title?.length || 0,
               metaDescription: pg.checks?.metaDescription?.value || "",
               hasH1:           (pg.checks?.h1?.count || 0) > 0,
+              h1:              pg.checks?.h1?.value || null,
+              h2Count:         pg.checks?.h2Count || 0,
+              h3Count:         pg.checks?.h3Count || 0,
               hasMeta:         pg.checks?.metaDescription?.exists || false,
               hasCanonical:    pg.checks?.canonical?.exists || false,
+              hasSchema:       (pg.checks?.schemaTypes?.length || 0) > 0,
+              schemas:         pg.checks?.schemaTypes || [],
+              noindex:         pg.checks?.robotsMeta?.value?.includes("noindex") || false,
               altMissing:      pg.checks?.altTextAudit?.missingAlt || 0,
               wordCount:       pg.checks?.wordCount || 0,
               freshness:       pg.checks?.contentFreshness?.freshnessSignal || "unknown",
@@ -524,6 +530,11 @@ async function runA2(clientId) {
         altMissing:      page.altMissing || 0,
         responseTime:    page.responseTime || null,
         statusCode:      page.statusCode || 200,
+        h2Count:         page.h2Count  || 0,
+        h3Count:         page.h3Count  || 0,
+        schemas:         page.schemas  || page.schemaTypes || [],
+        noindex:         !!page.noindex,
+        freshness:       page.freshness || null,
         issueCount:      (page.issues || []).length,
         issues:          (page.issues || []).slice(0, 10), // cap to stay under 1MB per doc
         clientId,
@@ -534,13 +545,26 @@ async function runA2(clientId) {
       if (batchCount >= 490) break;
     }
 
-    batch.commit().then(() => {
-      // After pages are written, run pattern detection and cache it
-      const { detectSitePatterns } = require("../utils/auditPatterns");
+    batch.commit().then(async () => {
       const { saveState: ss } = require("../shared-state/stateManager");
-      detectSitePatterns(clientId)
-        .then(patterns => ss(clientId, "A2_patterns", patterns))
-        .catch(() => {});
+
+      // Run pattern detection and cache it
+      try {
+        const { detectSitePatterns } = require("../utils/auditPatterns");
+        const patterns = await detectSitePatterns(clientId);
+        await ss(clientId, "A2_patterns", patterns);
+      } catch { /* non-blocking */ }
+
+      // Run per-page scoring and cache it
+      try {
+        const { scoreAllPages } = require("../utils/pageScorer");
+        const brief = await require("../shared-state/stateManager").getState(clientId, "A1_brief").catch(() => null);
+        const targetKeywords = (brief?.primaryKeywords || []).slice(0, 5);
+        const pageScores = await scoreAllPages(clientId, targetKeywords);
+        await ss(clientId, "A2_page_scores", pageScores);
+        console.log(`[A2] Page scoring complete: ${pageScores.pages?.length} pages, avg score ${pageScores.summary?.avgScore}`);
+      } catch { /* non-blocking */ }
+
     }).catch(() => {});
   }
 
@@ -597,6 +621,12 @@ function parseOnPage(html, pageUrl, clientId) {
   } else if (h1Count > 1) {
     issues.p2.push({ type: "multiple_h1", detail: `${h1Count} H1 tags on ${pageLabel} — should be exactly 1`, fix: "Keep only one H1 per page" });
   }
+
+  // H2 / H3 heading counts (for pageScorer + content structure)
+  const h2Matches_ = html.match(/<h2[^>]*>[\s\S]*?<\/h2>/gi) || [];
+  const h3Matches_ = html.match(/<h3[^>]*>[\s\S]*?<\/h3>/gi) || [];
+  checks.h2Count = h2Matches_.length;
+  checks.h3Count = h3Matches_.length;
 
   // Canonical tag
   const canonicalMatch = html.match(/<link[^>]*rel=["']canonical["'][^>]*href=["']([^"']*)["']/i);

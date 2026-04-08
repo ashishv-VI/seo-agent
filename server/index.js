@@ -30,6 +30,7 @@ const crawlerRoutes      = require("./routes/crawlerRoutes");
 const controlRoomRoutes  = require("./routes/controlRoom");
 const agencyRoutes       = require("./routes/agency");
 const attributionRoutes  = require("./routes/attribution");
+const rulesEngineRoutes  = require("./routes/rulesEngine");
 
 const app  = express();
 const PORT = process.env.PORT || 5000;
@@ -118,6 +119,7 @@ app.use("/api/crawler",      apiLimiter,   crawlerRoutes);
 app.use("/api/control-room", apiLimiter,   controlRoomRoutes);
 app.use("/api/agency",       apiLimiter,   agencyRoutes);
 app.use("/api/attribution",  apiLimiter,   attributionRoutes);
+app.use("/api/rules-engine", agentLimiter, rulesEngineRoutes);
 
 // ── Daily alert monitoring ─────────────────────────
 // Runs A9.checkAlerts for every active client — detects new technical issues,
@@ -177,6 +179,15 @@ setInterval(async () => {
             }
           } catch { /* non-blocking */ }
         }
+
+        // Rules Engine: evaluate all IFTTT automation rules
+        try {
+          const { evaluateRules } = require("./routes/rulesEngine");
+          const ruleResult = await evaluateRules(doc.id, data.ownerId);
+          if (ruleResult?.fired > 0) {
+            console.log(`[daily-monitor] Rules engine: ${ruleResult.fired} rule(s) fired for ${data.name}`);
+          }
+        } catch { /* non-blocking */ }
 
         // A16: update client AI memory after daily check
         runA16(doc.id, keys).catch(() => {});
@@ -296,6 +307,16 @@ setInterval(async () => {
         console.log(`[weekly-pull] Done for ${data.name} — GSC: ${gscData ? "ok" : "skip"}, GA4: ${ga4Data ? "ok" : "skip"}`);
       } catch { /* skip client */ }
     }
+
+    // ── Weekly Brief — send Monday intelligence email to agency exec ─────
+    try {
+      const { sendWeeklyBriefs } = require("./utils/weeklyBrief");
+      const briefResult = await sendWeeklyBriefs();
+      console.log(`[weekly-pull] Weekly briefs sent: ${briefResult.sent}, errors: ${briefResult.errors}`);
+    } catch (e) {
+      console.error("[weekly-pull] Weekly brief error:", e.message);
+    }
+
   } catch (err) {
     console.error("[weekly-pull] Error:", err.message);
   }

@@ -99,12 +99,46 @@ function extractMeta(html, url) {
   const schemaMatches = [...html.matchAll(/"@type"\s*:\s*"([^"]+)"/g)];
   const schemaTypes   = [...new Set(schemaMatches.map(m => m[1]))];
 
-  // Estimate word count from text content
+  // ── H2 / H3 / H4 heading extraction (keyword hierarchy) ─────────────────
+  const h2Matches = [...html.matchAll(/<h2[^>]*>([\s\S]*?)<\/h2>/gi)];
+  const h3Matches = [...html.matchAll(/<h3[^>]*>([\s\S]*?)<\/h3>/gi)];
+  const h4Matches = [...html.matchAll(/<h4[^>]*>([\s\S]*?)<\/h4>/gi)];
+  const h2s = h2Matches.map(m => m[1].replace(/<[^>]+>/g, "").trim()).filter(h => h.length > 2 && h.length < 200).slice(0, 20);
+  const h3s = h3Matches.map(m => m[1].replace(/<[^>]+>/g, "").trim()).filter(h => h.length > 2 && h.length < 200).slice(0, 20);
+  const h4s = h4Matches.map(m => m[1].replace(/<[^>]+>/g, "").trim()).filter(h => h.length > 2 && h.length < 200).slice(0, 10);
+
+  // ── Image alt text audit ─────────────────────────────────────────────────
+  const imgMatches  = [...html.matchAll(/<img[^>]*>/gi)];
+  const imgsNoAlt   = imgMatches.filter(m => !m[0].match(/alt=["'][^"']+["']/i));
+  const imgAlt = {
+    total:      imgMatches.length,
+    missingAlt: imgsNoAlt.length,
+    missingUrls: imgsNoAlt.slice(0, 10).map(m => {
+      const srcM = m[0].match(/src=["']([^"']*)["']/i);
+      return srcM ? srcM[1] : "(no src)";
+    }),
+  };
+
+  // ── Estimate word count from text content ────────────────────────────────
   const text      = html.replace(/<style[\s\S]*?<\/style>/gi, "")
                         .replace(/<script[\s\S]*?<\/script>/gi, "")
                         .replace(/<[^>]+>/g, " ")
                         .replace(/\s+/g, " ").trim();
   const wordCount = text.split(" ").filter(w => w.length > 2).length;
+
+  // ── Thin content signals ─────────────────────────────────────────────────
+  const htmlLength   = html.length;
+  const contentRatio = htmlLength > 0 ? Math.round((text.length / htmlLength) * 100) : 0;
+  const hasFAQ       = /<[^>]*(?:faq|question|answer)[^>]*>/i.test(html) ||
+                       /(?:frequently asked|FAQ|common question)/i.test(html);
+  const hasMedia     = /<(?:video|iframe|audio)[^>]*>/i.test(html);
+  const thinContent  = {
+    wordCount,
+    contentRatio,   // text-to-code ratio (%)
+    hasFAQ,
+    hasMedia,
+    isThin: wordCount < 300 || contentRatio < 15,
+  };
 
   // Check HTTPS
   const isHttps = url.startsWith("https://");
@@ -116,6 +150,12 @@ function extractMeta(html, url) {
     url, title, description, h1, canonical,
     robots, noindex, ogTitle, schemaTypes,
     wordCount, isHttps,
+    h2s, h3s, h4s,
+    h2Count: h2s.length,
+    h3Count: h3s.length,
+    h4Count: h4s.length,
+    imgAlt,
+    thinContent,
   };
 }
 
@@ -135,8 +175,10 @@ async function crawlDomain(startUrl, options = {}) {
   const queue    = [{ url: startUrl, depth: 0 }];
   const visited  = new Set();
   const pages    = [];
-  const backlinksFound = []; // external links found = these domains have link TO us potential
-  const externalLinksOut = []; // links from this domain TO other domains
+  const backlinksFound   = [];
+  const externalLinksOut = [];
+  // Internal link equity map: { [url]: { inbound: number, linkedFrom: string[] } }
+  const internalLinkMap  = {};
 
   while (queue.length > 0 && pages.length < maxPages) {
     const { url, depth } = queue.shift();
@@ -148,18 +190,40 @@ async function crawlDomain(startUrl, options = {}) {
     // Skip non-HTML resources
     if (/\.(pdf|jpg|jpeg|png|gif|svg|webp|mp4|zip|css|js|xml|json)(\?|$)/i.test(url)) continue;
 
+    // ── Page response time tracking ──────────────────────────────────────
+    const t0 = Date.now();
     const { html, status, finalUrl, error } = await fetchPage(url);
-    if (!html) continue;
+    const responseTime = Date.now() - t0;
+    if (!html) {
+      // Track broken pages
+      if (status && status >= 400) {
+        pages.push({ url, status, broken: true, responseTime, depth });
+      }
+      continue;
+    }
 
     const meta  = extractMeta(html, finalUrl || url);
     const links = extractLinks(html, finalUrl || url);
 
+    // ── Internal link equity map — track inbound links per page ─────────
+    for (const link of links.internal) {
+      const clean = link.url.split("?")[0].split("#")[0];
+      if (!internalLinkMap[clean]) internalLinkMap[clean] = { inbound: 0, linkedFrom: [] };
+      internalLinkMap[clean].inbound++;
+      if (internalLinkMap[clean].linkedFrom.length < 5) {
+        internalLinkMap[clean].linkedFrom.push(finalUrl || url);
+      }
+    }
+
     const pageData = {
       ...meta,
       depth,
-      crawledAt:    new Date().toISOString(),
+      responseTime,
+      statusCode:    status || 200,
+      crawledAt:     new Date().toISOString(),
       internalLinks: links.internal.length,
       externalLinks: links.external.length,
+      internalLinksTo: links.internal.slice(0, 30).map(l => l.url.split("?")[0].split("#")[0]),
     };
 
     pages.push(pageData);
@@ -175,7 +239,7 @@ async function crawlDomain(startUrl, options = {}) {
       }
     }
 
-    // Collect outbound links (these are potential backlinks for other domains)
+    // Collect outbound links
     for (const link of links.external) {
       externalLinksOut.push({
         fromDomain: rootDomain,
@@ -187,19 +251,135 @@ async function crawlDomain(startUrl, options = {}) {
       });
     }
 
-    // Polite delay
     if (queue.length > 0) {
       await new Promise(r => setTimeout(r, delayMs));
     }
   }
 
+  // ── Post-crawl analysis ────────────────────────────────────────────────
+
+  // Attach inbound link count to each page
+  for (const page of pages) {
+    if (!page.broken) {
+      const clean = (page.url || "").split("?")[0].split("#")[0];
+      page.inboundInternalLinks = internalLinkMap[clean]?.inbound || 0;
+      page.linkedFrom           = internalLinkMap[clean]?.linkedFrom || [];
+    }
+  }
+
+  // ── Orphan page detection ─────────────────────────────────────────────
+  const orphanPages = pages
+    .filter(p => !p.broken && p.inboundInternalLinks === 0 && p.url !== startUrl)
+    .map(p => p.url);
+
+  // ── Keyword cannibalization detection ─────────────────────────────────
+  // Pages targeting same keyword (via title + H1 overlap)
+  const cannibalization = detectCannibalization(pages);
+
+  // ── Duplicate title / meta detection ─────────────────────────────────
+  const { dupTitles, dupMetas } = detectDuplicates(pages);
+
+  // ── Slow pages ───────────────────────────────────────────────────────
+  const slowPages = pages
+    .filter(p => !p.broken && p.responseTime > 2000)
+    .map(p => ({ url: p.url, responseTime: p.responseTime }))
+    .sort((a, b) => b.responseTime - a.responseTime);
+
+  // ── Broken pages (4xx/5xx) ───────────────────────────────────────────
+  const brokenPages = pages
+    .filter(p => p.broken || (p.statusCode && p.statusCode >= 400))
+    .map(p => ({ url: p.url, status: p.statusCode || p.status }));
+
   return {
-    domain:   rootDomain,
-    pagesFound: pages.length,
+    domain:     rootDomain,
+    pagesFound: pages.filter(p => !p.broken).length,
     pages,
     externalLinksOut,
+    internalLinkMap,
+    analysis: {
+      orphanPages:       orphanPages.slice(0, 50),
+      orphanCount:       orphanPages.length,
+      cannibalization,
+      dupTitles:         dupTitles.slice(0, 10),
+      dupMetas:          dupMetas.slice(0, 10),
+      slowPages:         slowPages.slice(0, 10),
+      brokenPages:       brokenPages.slice(0, 20),
+      avgResponseTime:   pages.length > 0
+        ? Math.round(pages.filter(p => p.responseTime).reduce((s, p) => s + (p.responseTime || 0), 0) / pages.filter(p => p.responseTime).length)
+        : 0,
+    },
     crawledAt: new Date().toISOString(),
   };
 }
 
-module.exports = { fetchPage, extractLinks, extractMeta, crawlDomain };
+// ── Keyword cannibalization: pages with overlapping title/H1/H2 terms ────────
+function detectCannibalization(pages) {
+  const conflicts = [];
+  const titleMap  = {};  // normalised keyword → [urls]
+
+  for (const page of pages) {
+    if (page.broken) continue;
+    // Extract key terms from title + H1
+    const signals = [
+      page.title || "",
+      page.h1    || "",
+      ...(page.h2s || []).slice(0, 3),
+    ].join(" ").toLowerCase();
+
+    // Extract 2-3 word phrases as target keywords
+    const words  = signals.split(/\s+/).filter(w => w.length > 3);
+    const bigrams = [];
+    for (let i = 0; i < words.length - 1; i++) {
+      bigrams.push(`${words[i]} ${words[i+1]}`);
+    }
+    for (const phrase of bigrams) {
+      if (!titleMap[phrase]) titleMap[phrase] = [];
+      if (!titleMap[phrase].includes(page.url)) titleMap[phrase].push(page.url);
+    }
+  }
+
+  // Find phrases that appear in 2+ pages — potential cannibalization
+  for (const [phrase, urls] of Object.entries(titleMap)) {
+    if (urls.length >= 2 && phrase.length > 6) {
+      conflicts.push({ keyword: phrase, pages: urls.slice(0, 5), count: urls.length });
+    }
+  }
+
+  return conflicts
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 20);
+}
+
+// ── Duplicate title + meta detection ─────────────────────────────────────────
+function detectDuplicates(pages) {
+  const titleMap = {}, metaMap = {};
+  for (const p of pages) {
+    if (p.broken) continue;
+    if (p.title) {
+      const t = p.title.toLowerCase().trim();
+      if (!titleMap[t]) titleMap[t] = [];
+      titleMap[t].push(p.url);
+    }
+    if (p.description) {
+      const m = p.description.toLowerCase().trim();
+      if (!metaMap[m])  metaMap[m] = [];
+      metaMap[m].push(p.url);
+    }
+  }
+  const dupTitles = Object.entries(titleMap)
+    .filter(([, urls]) => urls.length > 1)
+    .map(([title, urls]) => ({ title: title.slice(0, 80), urls }));
+  const dupMetas  = Object.entries(metaMap)
+    .filter(([, urls]) => urls.length > 1)
+    .map(([meta, urls]) => ({ meta: meta.slice(0, 120), urls }));
+  return { dupTitles, dupMetas };
+}
+
+module.exports = {
+  fetchPage,
+  extractLinks,
+  extractMeta,
+  crawlDomain,
+  detectCannibalization,
+  detectDuplicates,
+};
