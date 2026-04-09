@@ -14,6 +14,8 @@ import ControlRoom from "./ControlRoom";
 import AttributionDashboard from "../components/AttributionDashboard";
 import PredictiveForecastPanel from "../components/PredictiveForecastPanel";
 import AuditPatternsPanel from "../components/AuditPatternsPanel";
+import PageScoresPanel from "../components/PageScoresPanel";
+import RulesEnginePanel from "../components/RulesEnginePanel";
 
 const ALL_AGENTS = [
   { id:"A1",  label:"Client Brief",       icon:"📋", phase:1 },
@@ -49,6 +51,8 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
   const [showPortal,    setShowPortal]    = useState(false);
   const [portalLoading, setPortalLoading] = useState(false);
   const [agencyBrand,   setAgencyBrand]   = useState({ agencyName:"", primaryColor:"#443DCB", logoUrl:"" });
+  const [crawlProgress, setCrawlProgress] = useState(null); // { crawled, total, pct }
+  const crawlPollRef = useRef(null);
   const pollRef     = useRef(null);
   const loadLatest  = useRef(null); // always points to the latest load fn for use in setInterval
 
@@ -147,7 +151,10 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
 
   useEffect(() => {
     load();
-    return () => { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; } };
+    return () => {
+      if (pollRef.current)      { clearInterval(pollRef.current);      pollRef.current      = null; }
+      if (crawlPollRef.current) { clearInterval(crawlPollRef.current); crawlPollRef.current = null; }
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientId]);
 
@@ -207,12 +214,22 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
   }
 
   async function runAudit() {
-    setRunning("A2"); setError("");
+    setRunning("A2"); setError(""); setCrawlProgress(null);
+    // Poll crawl progress every 3s while audit runs
+    if (crawlPollRef.current) clearInterval(crawlPollRef.current);
+    crawlPollRef.current = setInterval(async () => {
+      try {
+        const t = await getToken();
+        const r = await fetch(`${API}/api/agents/${clientId}/A2/crawl-status`, { headers: { Authorization: `Bearer ${t}` } });
+        if (r.ok) { const d = await r.json(); if (d.crawlProgress) setCrawlProgress(d.crawlProgress); }
+      } catch {}
+    }, 3000);
     const token = await getToken();
     const res   = await fetch(`${API}/api/clients/${clientId}/audit`, {
       method: "POST", headers: { Authorization: `Bearer ${token}` },
     });
     const data = await res.json();
+    clearInterval(crawlPollRef.current); crawlPollRef.current = null; setCrawlProgress(null);
     if (!res.ok) setError(data.error || "Audit failed");
     else { await load(); setExpandedAgent("A3"); }
     setRunning(null);
@@ -356,6 +373,7 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
             {isComplete("A9") && <div style={s.tab(activeTab==="report")} onClick={()=>setActiveTab("report")}>📊 Report</div>}
             {isComplete("A11") && <div style={s.tab(activeTab==="linkbuilding")} onClick={()=>setActiveTab("linkbuilding")}>🔗 Link Building</div>}
             {isComplete("A2") && <div style={s.tab(activeTab==="pages")} onClick={()=>setActiveTab("pages")}>📄 Pages</div>}
+            {isComplete("A2") && <div style={s.tab(activeTab==="pagescores")} onClick={()=>setActiveTab("pagescores")}>📊 Page Scores</div>}
             {isComplete("A5") && <div style={s.tab(activeTab==="briefs")} onClick={()=>setActiveTab("briefs")}>📝 Briefs</div>}
             {isComplete("A10") && <div style={s.tab(activeTab==="comparison")} onClick={()=>setActiveTab("comparison")}>📊 Before/After</div>}
           </div>
@@ -386,6 +404,7 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
           <div style={s.tab(activeTab==="attribution")} onClick={()=>setActiveTab("attribution")}>🔗 Attribution</div>
           {isComplete("A3") && <div style={s.tab(activeTab==="forecast")} onClick={()=>setActiveTab("forecast")}>🔮 Forecast</div>}
           {isComplete("A2") && <div style={s.tab(activeTab==="patterns")} onClick={()=>setActiveTab("patterns")}>🗂️ Site Patterns</div>}
+          <div style={s.tab(activeTab==="rules")} onClick={()=>setActiveTab("rules")}>⚙️ Rules</div>
         </div>
 
       </div>
@@ -513,6 +532,17 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
                 {isOpen && stateData && (
                   <div style={{ background:bg3, borderRadius:10, padding:16, marginBottom:8, marginTop:-4 }}>
                     {ag.id === "A1" && <BriefDetail brief={stateData} txt={txt} txt2={txt2} bg2={bg2} bdr={bdr} />}
+                    {ag.id === "A2" && running === "A2" && crawlProgress && (
+                      <div style={{ marginBottom: 12 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: "#D97706" }}>⏳ Crawling pages...</span>
+                          <span style={{ fontSize: 12, color: txt2 }}>{crawlProgress.crawled} / {crawlProgress.total || "?"} pages ({crawlProgress.pct || 0}%)</span>
+                        </div>
+                        <div style={{ height: 8, background: bg2, borderRadius: 4, overflow: "hidden", border: `1px solid ${bdr}` }}>
+                          <div style={{ height: "100%", width: `${crawlProgress.pct || 0}%`, background: "#443DCB", borderRadius: 4, transition: "width .5s" }} />
+                        </div>
+                      </div>
+                    )}
                     {ag.id === "A2" && <AuditSummary audit={stateData} txt={txt} txt2={txt2} bg2={bg2} />}
                     {ag.id === "A3" && <KeywordSummary kw={stateData} txt={txt} txt2={txt2} bg2={bg2} />}
                     {ag.id === "A4" && <CompetitorSummary comp={stateData} txt={txt} txt2={txt2} bg2={bg2} />}
@@ -671,6 +701,18 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
       {/* ── Site-Wide Audit Patterns Tab ── */}
       {activeTab==="patterns" && (
         <AuditPatternsPanel dark={dark} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2}
+          clientId={clientId} />
+      )}
+
+      {/* ── Page Scores Tab ── */}
+      {activeTab==="pagescores" && (
+        <PageScoresPanel dark={dark} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2}
+          clientId={clientId} />
+      )}
+
+      {/* ── Rules Engine Tab ── */}
+      {activeTab==="rules" && (
+        <RulesEnginePanel dark={dark} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2}
           clientId={clientId} />
       )}
 

@@ -37,22 +37,49 @@ async function runCMO(clientId, keys) {
   const clientMemory = await db.collection("client_memory").doc(clientId).get()
     .then(d => d.exists ? d.data() : null).catch(() => null);
 
-  // ── Load cross-client global patterns (Sprint 5) ──
-  // What fix types have worked for similar clients — improves CMO decision quality
-  const clientDoc  = await db.collection("clients").doc(clientId).get().catch(() => null);
-  const ownerId    = clientDoc?.data()?.ownerId || null;
+  // ── Load cross-client global patterns ──────────────
+  // 1. Same-owner patterns: what worked across this agency's clients
+  // 2. Same-businessType patterns: what worked for similar industries
+  const clientDoc   = await db.collection("clients").doc(clientId).get().catch(() => null);
+  const clientData  = clientDoc?.data() || {};
+  const ownerId     = clientData.ownerId || null;
+  const businessType = (brief?.businessType || brief?.industry || "").toLowerCase().trim();
+
   let globalPatterns = [];
   if (ownerId) {
-    globalPatterns = await db.collection("global_patterns")
+    // Own-agency patterns
+    const ownPatterns = await db.collection("global_patterns")
       .where("ownerId", "==", ownerId)
       .limit(30)
       .get()
       .then(s => s.docs.map(d => d.data()))
       .catch(() => []);
+
+    // Cross-agency similar-business patterns (no ownerId filter — any agency, same business type)
+    let similarPatterns = [];
+    if (businessType) {
+      similarPatterns = await db.collection("global_patterns")
+        .where("businessType", "==", businessType)
+        .limit(20)
+        .get()
+        .then(s => s.docs.map(d => d.data()).filter(p => p.ownerId !== ownerId))
+        .catch(() => []);
+    }
+
+    // Mark cross-agency, then merge deduplicated
+    const seen = new Set();
+    for (const p of ownPatterns) {
+      const key = `${p.fixType}:${p.ownerId}:${p.recordedAt}`;
+      if (!seen.has(key)) { seen.add(key); globalPatterns.push(p); }
+    }
+    for (const p of similarPatterns) {
+      const key = `${p.fixType}:${p.ownerId}:${p.recordedAt}`;
+      if (!seen.has(key)) { seen.add(key); globalPatterns.push({ ...p, _crossAgency: true }); }
+    }
   }
 
   // Summarise patterns into a prompt-friendly string
-  const patternSummary = buildPatternSummary(globalPatterns, clientMemory);
+  const patternSummary = buildPatternSummary(globalPatterns, clientMemory, businessType);
 
   // ── Rule-based signal extraction ─────────────────
   const signals = extractSignals({ brief, audit, keywords, competitor, onpage, technical, geo, report, rankings });
@@ -142,33 +169,55 @@ function extractSignals({ brief, audit, keywords, competitor, onpage, technical,
 }
 
 // ── Cross-client pattern summary for CMO prompt ───
-function buildPatternSummary(globalPatterns, clientMemory) {
+function buildPatternSummary(globalPatterns, clientMemory, businessType = "") {
   if (!globalPatterns.length && !clientMemory?.fixOutcomes?.length) return null;
 
   const lines = [];
 
-  // Global patterns — what works across clients
   if (globalPatterns.length > 0) {
-    const byType = {};
-    for (const p of globalPatterns) {
-      if (!byType[p.fixType]) byType[p.fixType] = { improved: 0, total: 0 };
-      byType[p.fixType].total++;
-      if (p.outcome === "improved") byType[p.fixType].improved++;
+    // Split by source: same-owner vs same-businessType (different agency)
+    const ownAgency   = globalPatterns.filter(p => !p._crossAgency);
+    const crossAgency = globalPatterns.filter(p => p._crossAgency);
+
+    // Same-owner aggregate
+    if (ownAgency.length > 0) {
+      const byType = {};
+      for (const p of ownAgency) {
+        if (!byType[p.fixType]) byType[p.fixType] = { improved: 0, total: 0 };
+        byType[p.fixType].total++;
+        if (p.outcome === "improved") byType[p.fixType].improved++;
+      }
+      const sorted = Object.entries(byType).sort((a, b) => (b[1].improved / b[1].total) - (a[1].improved / a[1].total));
+      lines.push("Fix success rates across your clients:");
+      for (const [fixType, counts] of sorted.slice(0, 5)) {
+        const rate = Math.round((counts.improved / counts.total) * 100);
+        lines.push(`  - ${fixType}: ${rate}% success (${counts.improved}/${counts.total})`);
+      }
     }
-    const sorted = Object.entries(byType).sort((a, b) => (b[1].improved / b[1].total) - (a[1].improved / a[1].total));
-    lines.push("Cross-client fix success rates (your other clients):");
-    for (const [fixType, counts] of sorted.slice(0, 5)) {
-      const rate = Math.round((counts.improved / counts.total) * 100);
-      lines.push(`  - ${fixType}: ${rate}% success (${counts.improved}/${counts.total})`);
+
+    // Cross-agency same-business-type
+    if (crossAgency.length > 0 && businessType) {
+      const byType = {};
+      for (const p of crossAgency) {
+        if (!byType[p.fixType]) byType[p.fixType] = { improved: 0, total: 0 };
+        byType[p.fixType].total++;
+        if (p.outcome === "improved") byType[p.fixType].improved++;
+      }
+      const sorted = Object.entries(byType).sort((a, b) => (b[1].improved / b[1].total) - (a[1].improved / a[1].total));
+      lines.push(`Industry benchmarks for "${businessType}" businesses:`);
+      for (const [fixType, counts] of sorted.slice(0, 3)) {
+        const rate = Math.round((counts.improved / counts.total) * 100);
+        lines.push(`  - ${fixType}: ${rate}% success across ${counts.total} similar sites`);
+      }
     }
   }
 
-  // This client's fix history
+  // This client's own fix history
   const fixOutcomes = clientMemory?.fixOutcomes || [];
   if (fixOutcomes.length > 0) {
     const recent = fixOutcomes.slice(-10);
-    const worked  = recent.filter(f => f.outcome === "improved").map(f => f.field);
-    const failed  = recent.filter(f => f.outcome === "degraded" || f.outcome === "no_change").map(f => f.field);
+    const worked = recent.filter(f => f.outcome === "improved").map(f => f.field);
+    const failed = recent.filter(f => f.outcome === "degraded" || f.outcome === "no_change").map(f => f.field);
     if (worked.length > 0) lines.push(`This client — fixes that worked: ${[...new Set(worked)].join(", ")}`);
     if (failed.length > 0) lines.push(`This client — fixes that didn't work: ${[...new Set(failed)].join(", ")}`);
   }
