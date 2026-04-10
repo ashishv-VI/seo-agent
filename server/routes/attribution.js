@@ -13,6 +13,7 @@ const router        = express.Router();
 const { db }        = require("../config/firebase");
 const { verifyToken }  = require("../middleware/auth");
 const { getState }     = require("../shared-state/stateManager");
+const ga4            = require("../utils/ga4Client");
 const crypto           = require("crypto");
 
 // ── Helper: ownership check ────────────────────────
@@ -155,14 +156,38 @@ router.get("/:clientId/ga4-conversions", verifyToken, async (req, res) => {
     await getClientDoc(req.params.clientId, req.uid);
     const clientId = req.params.clientId;
 
-    // Load keys
-    const keysDoc = await db.collection("users").doc(req.uid).get();
-    const keys    = keysDoc.exists ? keysDoc.data().apiKeys || {} : {};
-    const ga4Id   = keys.gaPropertyId || keys.ga4PropertyId || null;
-    const gToken  = keys.googleAccessToken || null;
+    // Load GA4 integration from client doc (OAuth tokens stored per-client)
+    const clientDoc  = await db.collection("clients").doc(clientId).get();
+    const ga4Int     = clientDoc.data()?.ga4Integration || null;
 
-    if (!ga4Id)  return res.json({ source: "none", error: "No GA4 property ID configured — add it in Settings", conversions: [], keywordJoin: [] });
-    if (!gToken) return res.json({ source: "none", error: "Google account not connected — sign in with Google in Settings", conversions: [], keywordJoin: [] });
+    // Fallback: also check user apiKeys for manually-entered gaPropertyId
+    const keysDoc    = await db.collection("users").doc(req.uid).get();
+    const userKeys   = keysDoc.exists ? keysDoc.data().apiKeys || {} : {};
+
+    const ga4Id = ga4Int?.propertyId || userKeys.gaPropertyId || userKeys.ga4PropertyId || null;
+
+    if (!ga4Int?.connected && !userKeys.gaPropertyId) {
+      return res.json({ source: "none", error: "Google Analytics not connected — go to Integrations tab and connect GA4", conversions: [], keywordJoin: [] });
+    }
+    if (!ga4Id) {
+      return res.json({ source: "none", error: "No GA4 property selected — connect GA4 in Integrations and select a property", conversions: [], keywordJoin: [] });
+    }
+
+    // Get a valid (auto-refreshed) access token from ga4Integration
+    let gToken = null;
+    if (ga4Int?.connected) {
+      try {
+        gToken = await ga4.getValidToken(ga4Int, clientId, db);
+      } catch (e) {
+        return res.json({ source: "none", error: `GA4 token error: ${e.message} — reconnect Google Analytics`, conversions: [], keywordJoin: [] });
+      }
+    } else if (userKeys.googleAccessToken) {
+      gToken = userKeys.googleAccessToken;
+    }
+
+    if (!gToken) {
+      return res.json({ source: "none", error: "Google account not connected — go to Integrations tab and connect GA4", conversions: [], keywordJoin: [] });
+    }
 
     // ── GA4 Reporting API call ──────────────────────
     // Dimensions: sessionSource, sessionMedium, landingPage, sessionCampaignName
@@ -300,7 +325,6 @@ router.get("/:clientId/ga4-conversions", verifyToken, async (req, res) => {
 router.get("/:clientId/snippet", verifyToken, async (req, res) => {
   try {
     await getClientDoc(req.params.clientId, req.uid);
-    const clientDoc  = await db.collection("clients").doc(req.params.clientId).get();
     const backendUrl = process.env.BACKEND_URL || process.env.RENDER_EXTERNAL_URL || "https://seo-agent-backend.onrender.com";
 
     const snippet = `<!-- SEO Agent Conversion Tracker — paste before </body> -->
