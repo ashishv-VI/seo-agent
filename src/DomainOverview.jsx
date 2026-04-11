@@ -5,7 +5,6 @@ const API = import.meta.env.VITE_API_URL || "https://seo-agent-backend-8m1z.onre
 export default function DomainOverview({ dark, getToken }) {
   const [domain,  setDomain]  = useState("");
   const [loading, setLoading] = useState(false);
-  const [crawling, setCrawling] = useState(false);
   const [data,    setData]    = useState(null);
   const [error,   setError]   = useState("");
   const [tab,     setTab]     = useState("overview");
@@ -16,16 +15,17 @@ export default function DomainOverview({ dark, getToken }) {
   const bdr  = dark ? "#222"    : "#e0e0d8";
   const txt  = dark ? "#e8e8e8" : "#1a1a18";
   const txt2 = dark ? "#666"    : "#888";
+  const B    = "#443DCB";
 
   async function analyze() {
-    const d = domain.trim().replace(/^https?:\/\//i, "").replace(/\/$/, "");
+    const d = domain.trim();
     if (!d) return;
     setLoading(true); setData(null); setError(""); setTab("overview");
     try {
       const token = getToken ? await getToken() : null;
       const headers = { "Content-Type": "application/json" };
       if (token) headers["Authorization"] = `Bearer ${token}`;
-      const res  = await fetch(`${API}/api/crawler/domain-overview`, {
+      const res  = await fetch(`${API}/api/backlinks/analyze`, {
         method: "POST", headers, body: JSON.stringify({ domain: d }),
       });
       const json = await res.json();
@@ -35,28 +35,14 @@ export default function DomainOverview({ dark, getToken }) {
     setLoading(false);
   }
 
-  async function startCrawl() {
-    const d = domain.trim().replace(/^https?:\/\//i, "").replace(/\/$/, "");
-    if (!d) return;
-    setCrawling(true);
-    try {
-      const token = getToken ? await getToken() : null;
-      const headers = { "Content-Type": "application/json" };
-      if (token) headers["Authorization"] = `Bearer ${token}`;
-      await fetch(`${API}/api/crawler/crawl-domain`, {
-        method: "POST", headers, body: JSON.stringify({ domain: d, maxPages: 50, background: true }),
-      });
-      setTimeout(() => { setCrawling(false); analyze(); }, 2000);
-    } catch { setCrawling(false); }
-  }
-
-  const drColor = getDRColor(data?.drScore);
+  const drColor = data ? getDRColor(data.drScore) : "#888";
+  const totalLinks = data ? (data.followLinks + data.nofollowLinks) : 0;
 
   return (
     <div style={{ padding: 24, background: bg, minHeight: "100vh", color: txt }}>
       <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>Domain Overview</h2>
       <p style={{ color: txt2, fontSize: 13, marginBottom: 20 }}>
-        DR score, backlinks, referring domains — powered by our own crawler
+        Real backlink data — DR score, referring domains, anchor analysis — powered by DataForSEO
       </p>
 
       {/* Input */}
@@ -73,171 +59,256 @@ export default function DomainOverview({ dark, getToken }) {
         />
         <button onClick={analyze} disabled={loading || !domain.trim()} style={{
           padding: "10px 22px", borderRadius: 8, border: "none", cursor: "pointer",
-          background: loading ? "#444" : "#443DCB", color: "#fff", fontSize: 14, fontWeight: 600,
+          background: loading ? "#444" : B, color: "#fff", fontSize: 14, fontWeight: 600,
+          opacity: loading || !domain.trim() ? 0.6 : 1,
         }}>
-          {loading ? "Loading..." : "Analyze"}
+          {loading ? "Analyzing..." : "Analyze"}
         </button>
       </div>
 
+      {/* Error */}
       {error && (
-        <div style={{ padding: 12, background: "#DC262622", border: "1px solid #DC2626", borderRadius: 8, color: "#DC2626", marginBottom: 20, fontSize: 13 }}>
-          {error}
+        <div style={{ padding: "14px 16px", background: "#DC262611", border: "1px solid #DC262633", borderRadius: 10, color: "#DC2626", marginBottom: 20, fontSize: 13 }}>
+          <div style={{ fontWeight: 700, marginBottom: error.includes("DataForSEO") ? 8 : 0 }}>{error}</div>
+          {error.includes("DataForSEO") && (
+            <div style={{ color: txt2, lineHeight: 1.8 }}>
+              <strong style={{ color: txt }}>How to fix:</strong><br />
+              1. Sign up at <strong>dataforseo.com</strong> (free trial available)<br />
+              2. Copy your <strong>login:password</strong> API credentials<br />
+              3. Go to <strong>Settings → API Keys</strong> → paste in DataForSEO field → Save<br />
+              4. Come back and click Analyze again
+            </div>
+          )}
         </div>
       )}
 
+      {/* Loading */}
       {loading && (
         <div style={{ textAlign: "center", padding: 60, color: txt2 }}>
-          <div style={{ fontSize: 32, marginBottom: 12 }}>🌐</div>
-          <div>Loading domain data...</div>
+          <div style={{ fontSize: 32, marginBottom: 12 }}>🔍</div>
+          <div style={{ fontWeight: 600, marginBottom: 4 }}>Fetching real backlink data...</div>
+          <div style={{ fontSize: 12 }}>Querying DataForSEO — usually takes 3–8 seconds</div>
         </div>
       )}
 
       {data && (
         <>
-          {/* Fresh status banner */}
-          {!data.isFresh && (
-            <div style={{ padding: "10px 16px", background: "#D9770622", border: "1px solid #D97706", borderRadius: 8, marginBottom: 16, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <span style={{ fontSize: 13, color: "#D97706" }}>
-                No recent crawl data — results may be incomplete.
-                {data.freshCrawlQueued ? " A fresh crawl has been queued." : ""}
-              </span>
-              <button onClick={startCrawl} disabled={crawling} style={{
-                padding: "6px 14px", borderRadius: 6, border: "none", cursor: "pointer",
-                background: "#D97706", color: "#fff", fontSize: 12, fontWeight: 600,
-              }}>
-                {crawling ? "Queuing..." : "Crawl Now"}
-              </button>
+          {/* KPI Cards */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 10, marginBottom: 20 }}>
+            <div style={{ padding: "14px 16px", background: bg2, border: `2px solid ${drColor}22`, borderRadius: 12, textAlign: "center" }}>
+              <div style={{ fontSize: 10, color: txt2, textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>Domain Rank</div>
+              <div style={{ fontSize: 26, fontWeight: 800, color: drColor, lineHeight: 1 }}>{data.drScore ?? "0"}</div>
+              <div style={{ fontSize: 11, color: drColor, fontWeight: 600, marginTop: 4 }}>{data.drLabel || "—"}</div>
+            </div>
+            {[
+              { label: "Backlinks",        value: (data.backlinks || 0).toLocaleString(),        color: B },
+              { label: "Referring Domains",value: (data.referringDomains || 0).toLocaleString(), color: "#0891B2" },
+              { label: "Referring IPs",    value: (data.referringIPs || 0).toLocaleString(),     color: "#9333EA" },
+              { label: "Spam Score",       value: `${data.spamScore || 0}%`,                     color: (data.spamScore || 0) > 30 ? "#DC2626" : "#059669" },
+              { label: "New (30d)",        value: `+${data.newBacklinks || 0}`,                  color: "#059669" },
+              { label: "Lost (30d)",       value: `-${data.lostBacklinks || 0}`,                 color: "#DC2626" },
+            ].map(k => (
+              <div key={k.label} style={{ padding: "14px 16px", background: bg2, border: `1px solid ${bdr}`, borderRadius: 12, textAlign: "center" }}>
+                <div style={{ fontSize: 10, color: txt2, textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>{k.label}</div>
+                <div style={{ fontSize: 20, fontWeight: 800, color: k.color, lineHeight: 1 }}>{k.value}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* DoFollow bar */}
+          {totalLinks > 0 && (
+            <div style={{ background: bg2, border: `1px solid ${bdr}`, borderRadius: 10, padding: "12px 16px", marginBottom: 16 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, marginBottom: 8 }}>Do-Follow vs No-Follow</div>
+              <div style={{ height: 8, borderRadius: 4, background: bdr, overflow: "hidden", marginBottom: 6 }}>
+                <div style={{ height: "100%", width: `${Math.round((data.followLinks / totalLinks) * 100)}%`, background: "#059669", borderRadius: 4 }} />
+              </div>
+              <div style={{ display: "flex", gap: 20, fontSize: 12 }}>
+                <span style={{ color: txt2 }}>✅ DoFollow: <strong style={{ color: txt }}>{(data.followLinks || 0).toLocaleString()}</strong></span>
+                <span style={{ color: txt2 }}>⚠️ NoFollow: <strong style={{ color: txt }}>{(data.nofollowLinks || 0).toLocaleString()}</strong></span>
+                <span style={{ color: txt2, marginLeft: "auto" }}>{Math.round((data.followLinks / totalLinks) * 100)}% DoFollow</span>
+              </div>
             </div>
           )}
 
-          {/* Metric Cards */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginBottom: 24 }}>
-            <DRCard dr={data.drScore} label={data.drLabel} dark={dark} />
-            <MetricCard dark={dark} label="Referring Domains" value={data.referringDomains?.toLocaleString() || "—"} color="#059669" icon="🌐" />
-            <MetricCard dark={dark} label="Total Backlinks" value={data.totalBacklinks?.toLocaleString() || "—"} color="#0891B2" icon="🔗" />
-            <MetricCard dark={dark} label="Pages Crawled" value={data.pagesCrawled?.toLocaleString() || "—"} color="#9333EA" icon="📄" />
-            <MetricCard dark={dark} label="Last Crawled" value={data.lastCrawled ? new Date(data.lastCrawled).toLocaleDateString() : "Never"} color="#D97706" icon="🕐" />
-          </div>
-
           {/* Tabs */}
           <div style={{ display: "flex", gap: 4, marginBottom: 16, borderBottom: `1px solid ${bdr}` }}>
-            {["overview", "backlinks", "anchors"].map(t => (
-              <button key={t} onClick={() => setTab(t)} style={{
+            {[
+              { key: "overview",  label: "Overview" },
+              { key: "referring", label: `Referring Domains (${data.referringDomainsData?.length || 0})` },
+              { key: "anchors",   label: `Anchor Texts (${data.topAnchors?.length || 0})` },
+            ].map(t => (
+              <button key={t.key} onClick={() => setTab(t.key)} style={{
                 padding: "8px 16px", border: "none", cursor: "pointer", fontSize: 13, background: "none",
-                color: tab === t ? "#443DCB" : txt2, fontWeight: tab === t ? 700 : 400,
-                borderBottom: tab === t ? "2px solid #443DCB" : "2px solid transparent", marginBottom: -1,
+                color: tab === t.key ? B : txt2, fontWeight: tab === t.key ? 700 : 400,
+                borderBottom: tab === t.key ? `2px solid ${B}` : "2px solid transparent", marginBottom: -1,
               }}>
-                {t === "overview" ? "Overview" : t === "backlinks" ? "Referring Domains" : "Anchor Texts"}
+                {t.label}
               </button>
             ))}
           </div>
 
+          {/* Overview tab */}
           {tab === "overview" && (
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-              {/* DR Gauge */}
+              {/* DR gauge */}
               <div style={{ padding: 20, background: bg2, border: `1px solid ${bdr}`, borderRadius: 12, textAlign: "center" }}>
-                <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 16 }}>Domain Rating</div>
-                <div style={{ width: 100, height: 100, borderRadius: "50%", border: `6px solid ${drColor}`, background: drColor + "22", margin: "0 auto 12px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 16 }}>Domain Rank</div>
+                <div style={{
+                  width: 100, height: 100, borderRadius: "50%",
+                  border: `6px solid ${drColor}`,
+                  background: drColor + "22",
+                  margin: "0 auto 12px",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                }}>
                   <div>
-                    <div style={{ fontSize: 28, fontWeight: 800, color: drColor }}>{data.drScore ?? "—"}</div>
+                    <div style={{ fontSize: 28, fontWeight: 800, color: drColor }}>{data.drScore ?? 0}</div>
                     <div style={{ fontSize: 10, color: txt2 }}>/ 100</div>
                   </div>
                 </div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: drColor }}>{data.drLabel || "Not calculated"}</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: drColor }}>{data.drLabel}</div>
                 <div style={{ fontSize: 12, color: txt2, marginTop: 4 }}>Based on backlink graph</div>
               </div>
 
-              {/* Link Profile */}
+              {/* Link profile */}
               <div style={{ padding: 20, background: bg2, border: `1px solid ${bdr}`, borderRadius: 12 }}>
                 <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 16 }}>Link Profile</div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                  <Stat label="Referring Domains" value={data.referringDomains || 0} color="#059669" />
-                  <Stat label="Total Backlinks" value={data.totalBacklinks || 0} color="#0891B2" />
+                  {[
+                    { label: "Referring Domains",  value: data.referringDomains || 0,  color: "#0891B2" },
+                    { label: "Total Backlinks",     value: data.backlinks || 0,          color: B },
+                    { label: "Broken Backlinks",    value: data.brokenBacklinks || 0,    color: "#DC2626" },
+                  ].map(s => (
+                    <div key={s.label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <span style={{ fontSize: 13, color: txt2 }}>{s.label}</span>
+                      <span style={{ fontSize: 15, fontWeight: 700, color: s.color }}>{s.value.toLocaleString()}</span>
+                    </div>
+                  ))}
                   <div style={{ borderTop: `1px solid ${bdr}`, paddingTop: 10, fontSize: 12, color: txt2 }}>
-                    Ratio: {data.referringDomains > 0 ? (data.totalBacklinks / data.referringDomains).toFixed(1) : "—"} links / domain
+                    Ratio: {data.referringDomains > 0 ? (data.backlinks / data.referringDomains).toFixed(1) : "—"} links / domain
                   </div>
                 </div>
               </div>
 
-              {/* Crawl Info */}
-              <div style={{ padding: 20, background: bg2, border: `1px solid ${bdr}`, borderRadius: 12, gridColumn: "1 / -1" }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700 }}>Crawl Status</div>
-                  <button onClick={startCrawl} disabled={crawling} style={{
-                    padding: "6px 14px", borderRadius: 6, border: "none", cursor: "pointer",
-                    background: "#443DCB", color: "#fff", fontSize: 12,
-                  }}>
-                    {crawling ? "Starting..." : "Start Fresh Crawl"}
-                  </button>
+              {/* Spam warning */}
+              {(data.spamScore || 0) > 30 && (
+                <div style={{ padding: 16, background: "#DC262611", border: "1px solid #DC262633", borderRadius: 10, gridColumn: "1 / -1" }}>
+                  <div style={{ fontWeight: 700, color: "#DC2626", marginBottom: 4 }}>⚠️ High Spam Score: {data.spamScore}%</div>
+                  <div style={{ fontSize: 12, color: txt2 }}>
+                    A spam score above 30% suggests many low-quality or spammy referring domains.
+                    Consider a link audit and disavow file submission via Google Search Console.
+                  </div>
                 </div>
-                <div style={{ display: "flex", gap: 24, fontSize: 13, color: txt2 }}>
-                  <span>Pages crawled: <b style={{ color: txt }}>{data.pagesCrawled || 0}</b></span>
-                  <span>Status: <b style={{ color: data.isFresh ? "#059669" : "#D97706" }}>{data.isFresh ? "Fresh" : "Stale"}</b></span>
-                  <span>Last crawl: <b style={{ color: txt }}>{data.lastCrawled ? new Date(data.lastCrawled).toLocaleString() : "Never"}</b></span>
+              )}
+
+              {/* New vs lost */}
+              <div style={{ padding: 16, background: bg2, border: `1px solid ${bdr}`, borderRadius: 10, gridColumn: "1 / -1" }}>
+                <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 12 }}>Last 30 Days</div>
+                <div style={{ display: "flex", gap: 24 }}>
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ fontSize: 22, fontWeight: 800, color: "#059669" }}>+{(data.newBacklinks || 0).toLocaleString()}</div>
+                    <div style={{ fontSize: 11, color: txt2 }}>New backlinks</div>
+                  </div>
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ fontSize: 22, fontWeight: 800, color: "#DC2626" }}>-{(data.lostBacklinks || 0).toLocaleString()}</div>
+                    <div style={{ fontSize: 11, color: txt2 }}>Lost backlinks</div>
+                  </div>
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ fontSize: 22, fontWeight: 800, color: (data.newBacklinks||0) >= (data.lostBacklinks||0) ? "#059669" : "#DC2626" }}>
+                      {(data.newBacklinks||0) >= (data.lostBacklinks||0) ? "+" : ""}{(data.newBacklinks||0) - (data.lostBacklinks||0)}
+                    </div>
+                    <div style={{ fontSize: 11, color: txt2 }}>Net change</div>
+                  </div>
                 </div>
               </div>
             </div>
           )}
 
-          {tab === "backlinks" && (
+          {/* Referring Domains tab */}
+          {tab === "referring" && (
             <div>
               {data.referringDomainsData?.length > 0 ? (
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                   <thead>
                     <tr style={{ borderBottom: `1px solid ${bdr}` }}>
-                      <th style={{ textAlign: "left", padding: "8px 10px", color: txt2, fontWeight: 600 }}>Referring Domain</th>
-                      <th style={{ textAlign: "center", padding: "8px 10px", color: txt2, fontWeight: 600 }}>Links</th>
-                      <th style={{ textAlign: "center", padding: "8px 10px", color: txt2, fontWeight: 600 }}>DR</th>
-                      <th style={{ textAlign: "left", padding: "8px 10px", color: txt2, fontWeight: 600 }}>First Seen</th>
+                      {["Referring Domain", "Rank", "Backlinks", "DoFollow", "First Seen", "Spam"].map(h => (
+                        <th key={h} style={{ textAlign: h === "Referring Domain" ? "left" : "center", padding: "8px 10px", color: txt2, fontWeight: 600 }}>{h}</th>
+                      ))}
                     </tr>
                   </thead>
                   <tbody>
                     {data.referringDomainsData.map((d, i) => (
                       <tr key={i} style={{ borderBottom: `1px solid ${bdr}22` }}>
-                        <td style={{ padding: "8px 10px", color: "#443DCB" }}>{d.domain}</td>
-                        <td style={{ padding: "8px 10px", textAlign: "center" }}>{d.linkCount}</td>
-                        <td style={{ padding: "8px 10px", textAlign: "center" }}>
-                          <span style={{ color: getDRColor(d.dr), fontWeight: 700 }}>{d.dr ?? "—"}</span>
+                        <td style={{ padding: "8px 10px", color: B, fontWeight: 500 }}>{d.domain}</td>
+                        <td style={{ padding: "8px 10px", textAlign: "center" }}>{d.rank}</td>
+                        <td style={{ padding: "8px 10px", textAlign: "center" }}>{(d.backlinks || 0).toLocaleString()}</td>
+                        <td style={{ padding: "8px 10px", textAlign: "center", color: d.dofollow ? "#059669" : txt2 }}>
+                          {d.dofollow ? "✅" : "—"}
                         </td>
-                        <td style={{ padding: "8px 10px", color: txt2, fontSize: 12 }}>
+                        <td style={{ padding: "8px 10px", textAlign: "center", color: txt2, fontSize: 12 }}>
                           {d.firstSeen ? new Date(d.firstSeen).toLocaleDateString() : "—"}
+                        </td>
+                        <td style={{ padding: "8px 10px", textAlign: "center", color: (d.spamScore || 0) > 30 ? "#DC2626" : txt2 }}>
+                          {d.spamScore || 0}%
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               ) : (
-                <div style={{ textAlign: "center", padding: 40, color: txt2 }}>
-                  No referring domain data yet. Start a crawl to populate backlink data.
+                <div style={{ textAlign: "center", padding: 40, color: txt2, fontSize: 13 }}>
+                  No referring domain data found for this domain.
                 </div>
               )}
             </div>
           )}
 
+          {/* Anchor Texts tab */}
           {tab === "anchors" && (
             <div>
               {data.topAnchors?.length > 0 ? (
-                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  {data.topAnchors.map((a, i) => (
-                    <div key={i} style={{ padding: "10px 16px", background: bg2, border: `1px solid ${bdr}`, borderRadius: 8, display: "flex", alignItems: "center", gap: 12 }}>
-                      <div style={{ width: 26, height: 26, borderRadius: "50%", background: "#443DCB22", color: "#443DCB", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, flexShrink: 0 }}>
-                        {i + 1}
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {data.topAnchors.map((a, i) => {
+                    const maxCount = data.topAnchors[0]?.count || 1;
+                    return (
+                      <div key={i} style={{ padding: "10px 16px", background: bg2, border: `1px solid ${bdr}`, borderRadius: 8 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 6 }}>
+                          <div style={{ width: 22, height: 22, borderRadius: "50%", background: `${B}22`, color: B, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, flexShrink: 0 }}>
+                            {i + 1}
+                          </div>
+                          <div style={{ flex: 1, fontWeight: 600, fontSize: 14 }}>{a.text || "(no text)"}</div>
+                          <div style={{ fontSize: 12, color: txt2 }}>{a.count} links · {a.domains} domains</div>
+                          <div style={{ fontSize: 11, color: a.dofollow ? "#059669" : txt2 }}>{a.dofollow ? "DoFollow" : "NoFollow"}</div>
+                        </div>
+                        <div style={{ height: 4, borderRadius: 2, background: bdr, overflow: "hidden" }}>
+                          <div style={{ height: "100%", width: `${Math.round((a.count / maxCount) * 100)}%`, background: B, borderRadius: 2 }} />
+                        </div>
                       </div>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: 600, fontSize: 14 }}>{a.text || "(no text)"}</div>
-                      </div>
-                      <div style={{ fontSize: 13, color: txt2 }}>{a.count} links</div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               ) : (
-                <div style={{ textAlign: "center", padding: 40, color: txt2 }}>
-                  No anchor text data yet.
+                <div style={{ textAlign: "center", padding: 40, color: txt2, fontSize: 13 }}>
+                  No anchor text data found for this domain.
                 </div>
               )}
             </div>
           )}
+
+          <div style={{ marginTop: 20, fontSize: 11, color: txt2, textAlign: "right" }}>
+            Data source: DataForSEO Backlinks API · Analyzed: {data.domain}
+          </div>
         </>
+      )}
+
+      {!data && !loading && !error && (
+        <div style={{ textAlign: "center", padding: "60px 20px", color: txt2 }}>
+          <div style={{ fontSize: 40, marginBottom: 12 }}>🔗</div>
+          <div style={{ fontSize: 15, fontWeight: 600, color: txt, marginBottom: 8 }}>Analyze any domain's backlink profile</div>
+          <div style={{ fontSize: 13 }}>Enter a domain above to see DR score, referring domains, backlinks, and anchor texts from DataForSEO.</div>
+          <div style={{ fontSize: 12, marginTop: 16, padding: "10px 16px", background: bg2, border: `1px solid ${bdr}`, borderRadius: 8, display: "inline-block" }}>
+            Requires DataForSEO API key in <strong>Settings → API Keys</strong>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -249,39 +320,4 @@ function getDRColor(dr) {
   if (dr >= 50) return "#D97706";
   if (dr >= 30) return "#EA580C";
   return "#DC2626";
-}
-
-function DRCard({ dr, label, dark }) {
-  const bg2 = dark ? "#111" : "#ffffff";
-  const bdr = dark ? "#222" : "#e0e0d8";
-  const txt2 = dark ? "#666" : "#888";
-  const color = getDRColor(dr);
-  return (
-    <div style={{ padding: "16px 18px", background: bg2, border: `1px solid ${bdr}`, borderRadius: 12, textAlign: "center" }}>
-      <div style={{ fontSize: 11, color: txt2, marginBottom: 4, textTransform: "uppercase", letterSpacing: 1 }}>Domain Rating</div>
-      <div style={{ fontSize: 28, fontWeight: 800, color }}>{dr ?? "—"}</div>
-      <div style={{ fontSize: 12, color, fontWeight: 600 }}>{label || "Not rated"}</div>
-    </div>
-  );
-}
-
-function MetricCard({ dark, label, value, color, icon }) {
-  const bg2 = dark ? "#111" : "#ffffff";
-  const bdr = dark ? "#222" : "#e0e0d8";
-  const txt2 = dark ? "#666" : "#888";
-  return (
-    <div style={{ padding: "16px 18px", background: bg2, border: `1px solid ${bdr}`, borderRadius: 12 }}>
-      <div style={{ fontSize: 11, color: txt2, marginBottom: 4, textTransform: "uppercase", letterSpacing: 1 }}>{label}</div>
-      <div style={{ fontSize: 20, fontWeight: 700, color }}>{icon} {value}</div>
-    </div>
-  );
-}
-
-function Stat({ label, value, color }) {
-  return (
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-      <span style={{ fontSize: 13, color: "#888" }}>{label}</span>
-      <span style={{ fontSize: 15, fontWeight: 700, color }}>{value?.toLocaleString()}</span>
-    </div>
-  );
 }

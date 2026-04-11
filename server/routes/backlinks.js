@@ -137,4 +137,72 @@ router.get("/:clientId/anchors", verifyToken, async (req, res) => {
   }
 });
 
+// ── POST /analyze — Free domain lookup (no clientId needed) ──────────────────
+// Used by Domain Overview standalone tool — looks up ANY domain using logged-in user's DataForSEO key
+router.post("/analyze", verifyToken, async (req, res) => {
+  try {
+    const { domain } = req.body;
+    if (!domain) return res.status(400).json({ error: "domain required" });
+
+    const keys = await getUserKeys(req.uid);
+    if (!keys.dataforseo) {
+      return res.status(400).json({ error: "DataForSEO key required. Go to Settings → API Keys → paste your DataForSEO login:password → Save." });
+    }
+
+    const norm = cleanDomain(domain);
+
+    const [summaryRes, domainsRes, anchorsRes] = await Promise.allSettled([
+      dfsPost("/v3/backlinks/summary/live",
+        [{ target: norm, include_subdomains: true }], keys.dataforseo),
+      dfsPost("/v3/backlinks/referring_domains/live",
+        [{ target: norm, limit: 50, order_by: ["rank,desc"], include_subdomains: true }], keys.dataforseo),
+      dfsPost("/v3/backlinks/anchors/live",
+        [{ target: norm, limit: 20, order_by: ["backlinks,desc"], include_subdomains: true }], keys.dataforseo),
+    ]);
+
+    const r  = summaryRes.status === "fulfilled" ? summaryRes.value?.tasks?.[0]?.result?.[0] : null;
+    const rd = domainsRes.status === "fulfilled" ? domainsRes.value?.tasks?.[0]?.result?.[0]?.items || [] : [];
+    const an = anchorsRes.status === "fulfilled" ? anchorsRes.value?.tasks?.[0]?.result?.[0]?.items || [] : [];
+
+    if (!r) {
+      const msg = summaryRes.reason?.message || summaryRes.value?.tasks?.[0]?.status_message || "No data from DataForSEO";
+      return res.status(500).json({ error: msg });
+    }
+
+    const drRaw = r.rank || 0;
+    const drLabel = drRaw >= 70 ? "Strong" : drRaw >= 50 ? "Good" : drRaw >= 30 ? "Moderate" : drRaw > 0 ? "Weak" : "New";
+
+    return res.json({
+      domain:           norm,
+      drScore:          drRaw,
+      drLabel,
+      backlinks:        r.backlinks             || 0,
+      referringDomains: r.referring_domains     || 0,
+      referringIPs:     r.referring_ips         || 0,
+      spamScore:        r.spam_score            || 0,
+      newBacklinks:     r.new_backlinks         || 0,
+      lostBacklinks:    r.lost_backlinks        || 0,
+      brokenBacklinks:  r.broken_backlinks      || 0,
+      followLinks:      r.referring_links_types?.follow   || 0,
+      nofollowLinks:    r.referring_links_types?.nofollow || 0,
+      referringDomainsData: rd.map(d => ({
+        domain:    d.domain,
+        rank:      d.rank      || 0,
+        backlinks: d.backlinks || 0,
+        dofollow:  d.dofollow  || false,
+        firstSeen: d.first_seen || null,
+        spamScore: d.spam_score || 0,
+      })),
+      topAnchors: an.map(a => ({
+        text:      a.anchor || "(no text)",
+        count:     a.backlinks || 0,
+        domains:   a.referring_domains || 0,
+        dofollow:  a.dofollow || false,
+      })),
+    });
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
+  }
+});
+
 module.exports = router;
