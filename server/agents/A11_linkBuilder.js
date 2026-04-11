@@ -14,6 +14,7 @@ const { callLLM, parseJSON }    = require("../utils/llm");
 const { db, FieldValue }        = require("../config/firebase");
 
 async function runA11(clientId, keys) {
+  try {
   // ── Dependency checks ─────────────────────────────
   const brief      = await getState(clientId, "A1_brief");
   const competitor = await getState(clientId, "A4_competitor");
@@ -27,7 +28,7 @@ async function runA11(clientId, keys) {
 
   const businessName = brief.businessName  || "the business";
   const websiteUrl   = brief.websiteUrl    || "";
-  const industry     = brief.industry      || (brief.services || []).join(", ") || "general";
+  const industry     = brief.industry      || [].concat(brief.services || []).join(", ") || "general";
   const locations    = (brief.targetLocations || []).join(", ") || "UK";
 
   const competitorDomains = (competitor.competitors || [])
@@ -187,6 +188,10 @@ Return ONLY valid JSON (no markdown, no explanation):
     highPriority: result.highPriority,
     quickWins,
   };
+  } catch (e) {
+    console.error(`[A11] Link builder failed for ${clientId}:`, e.message);
+    return { success: false, error: e.message };
+  }
 }
 
 module.exports = { runA11 };

@@ -8,6 +8,7 @@ const { emitToolSuggestion }  = require("../utils/toolBridge");
  * Uses Groq/Gemini for keyword expansion + SerpAPI for live data
  */
 async function runA3(clientId, keys) {
+  try {
   const brief = await getState(clientId, "A1_brief");
   const audit = await getState(clientId, "A2_audit");
 
@@ -266,6 +267,10 @@ Generate 5-8 keywords per cluster. Make them realistic and specific to the busin
   } catch { /* non-blocking */ }
 
   return { success: true, keywords: result };
+  } catch (e) {
+    console.error(`[A3] Keyword research failed for ${clientId}:`, e.message);
+    return { success: false, error: e.message };
+  }
 }
 
 // ── Rule-based keyword seed builder (no LLM required) ────────────────────────

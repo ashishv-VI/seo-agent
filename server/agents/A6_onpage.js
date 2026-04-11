@@ -20,6 +20,7 @@ function sanitize(obj) {
  * Produces implementation specs for HTML + tracking fixes
  */
 async function runA6(clientId, keys) {
+  try {
   const brief    = await getState(clientId, "A1_brief");
   const audit    = await getState(clientId, "A2_audit");
   const keywords = await getState(clientId, "A3_keywords");
@@ -438,6 +439,10 @@ Return ONLY valid JSON:
   } catch { /* non-blocking */ }
 
   return { success: true, onpage: result };
+  } catch (e) {
+    console.error(`[A6] On-page analysis failed for ${clientId}:`, e.message);
+    return { success: false, error: e.message };
+  }
 }
 
 module.exports = { runA6 };

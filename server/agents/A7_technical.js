@@ -8,6 +8,7 @@ const { db }                  = require("../config/firebase");
  * Runs in parallel with A5/A6
  */
 async function runA7(clientId, keys) {
+  try {
   const brief = await getState(clientId, "A1_brief");
   const audit = await getState(clientId, "A2_audit");
 
@@ -222,6 +223,10 @@ Provide technical fix recommendations. Return ONLY valid JSON:
   } catch { /* non-blocking — collection may not exist yet */ }
 
   return { success: true, technical: result };
+  } catch (e) {
+    console.error(`[A7] Technical audit failed for ${clientId}:`, e.message);
+    return { success: false, error: e.message };
+  }
 }
 
 module.exports = { runA7 };

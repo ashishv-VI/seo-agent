@@ -87,6 +87,7 @@ async function fetchCompetitorUrls(competitorUrl) {
  * @param {object} keys — user API keys (LLM required for counter-content suggestions)
  */
 async function runA15(clientId, keys) {
+  try {
   const brief      = await getState(clientId, "A1_brief");
   const competitor = await getState(clientId, "A4_competitor");
   const keywords   = await getState(clientId, "A3_keywords");
@@ -255,6 +256,10 @@ Analyze these URLs and suggest counter-content. Return ONLY valid JSON:
     alertsCreated:     newAlerts.length,
     message:           output.summary,
   };
+  } catch (e) {
+    console.error(`[A15] Competitor monitor failed for ${clientId}:`, e.message);
+    return { success: false, error: e.message };
+  }
 }
 
 module.exports = { runA15 };

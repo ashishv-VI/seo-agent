@@ -53,6 +53,7 @@ function linearRegression(data) {
 }
 
 async function runA22(clientId, keys) {
+  try {
   const [brief, keywords, rankHistory] = await Promise.all([
     getState(clientId, "A1_brief").catch(() => null),
     getState(clientId, "A3_keywords").catch(() => null),
@@ -228,6 +229,10 @@ async function runA22(clientId, keys) {
 
   await saveState(clientId, "A22_predictive", output);
   return { success: true, forecast: output };
+  } catch (e) {
+    console.error(`[A22] Predictive forecast failed for ${clientId}:`, e.message);
+    return { success: false, error: e.message };
+  }
 }
 
 module.exports = { runA22 };

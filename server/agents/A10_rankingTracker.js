@@ -9,6 +9,7 @@ const { emitTasks }           = require("../utils/taskQueue");
 const { sendRankingAlert }    = require("../utils/emailer");
 
 async function runA10(clientId, keys, gscToken = null) {
+  try {
   const brief    = await getState(clientId, "A1_brief");
   const keywords = await getState(clientId, "A3_keywords");
 
@@ -237,6 +238,10 @@ async function runA10(clientId, keys, gscToken = null) {
 
   await saveState(clientId, "A10_rankings", output);
   return { success: true, rankings: output };
+  } catch (e) {
+    console.error(`[A10] Ranking tracker failed for ${clientId}:`, e.message);
+    return { success: false, error: e.message };
+  }
 }
 
 module.exports = { runA10 };

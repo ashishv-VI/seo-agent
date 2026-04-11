@@ -7,6 +7,7 @@ const { callLLM, parseJSON }  = require("../utils/llm");
  * Runs in parallel with A5/A6/A7
  */
 async function runA8(clientId, keys, googleToken) {
+  try {
   const brief      = await getState(clientId, "A1_brief");
   const audit      = await getState(clientId, "A2_audit");
   const competitor = await getState(clientId, "A4_competitor");
@@ -227,6 +228,10 @@ Provide a comprehensive GEO and off-page analysis. Return ONLY valid JSON:
 
   await saveState(clientId, "A8_geo", result);
   return { success: true, geo: result };
+  } catch (e) {
+    console.error(`[A8] GEO analysis failed for ${clientId}:`, e.message);
+    return { success: false, error: e.message };
+  }
 }
 
 module.exports = { runA8 };
