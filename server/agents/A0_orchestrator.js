@@ -339,6 +339,23 @@ async function runFullPipeline(clientId, keys, googleToken = null) {
       console.log(`[A0] A16 memory updated for ${clientId}`);
     } catch { /* non-blocking */ }
 
+    // ── Stage 9: Auto-run A17 reviewer → CMO decision ─────────────────────
+    // A17 quality-gates all agent outputs; CMO reads the results to decide
+    // what to fix next. Both run non-blocking so a failure doesn't abort the
+    // pipeline completion mark set above.
+    try {
+      const { runA17 }  = require("./A17_reviewer");
+      const { runCMO }  = require("./CMO_agent");
+      await exec("A17", runA17);
+      console.log(`[A0] A17 review complete for ${clientId}`);
+      const cmoResult = await runCMO(clientId, keys);
+      if (cmoResult.success) {
+        console.log(`[A0] CMO decision saved for ${clientId}: ${cmoResult.cmo?.decision}`);
+      }
+    } catch (e) {
+      console.warn(`[A0] Stage 9 (A17+CMO) non-fatal error for ${clientId}:`, e.message);
+    }
+
   } catch (err) {
     console.error(`[A0] Pipeline fatal error for ${clientId}:`, err.message);
     await db.collection("clients").doc(clientId).update({

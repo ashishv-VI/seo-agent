@@ -6,6 +6,7 @@ const { saveState } = require("../shared-state/stateManager");
  * Saves to shared state for all downstream agents
  */
 async function runA1(clientId, rawData) {
+  try {
   const {
     businessName,
     websiteUrl,
@@ -90,6 +91,10 @@ async function runA1(clientId, rawData) {
       ? `Brief saved with ${missing.length} missing field(s): ${missing.join(", ")}`
       : "Brief complete — ready for human sign-off before audit begins",
   };
+  } catch (e) {
+    console.error(`[A1] Onboarding failed for ${clientId}:`, e.message);
+    return { success: false, error: e.message };
+  }
 }
 
 /**

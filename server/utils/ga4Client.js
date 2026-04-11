@@ -58,6 +58,7 @@ async function exchangeCode(code) {
       redirect_uri:  getBackendUrl() + CALLBACK_PATH,
       grant_type:    "authorization_code",
     }).toString(),
+    signal:  AbortSignal.timeout(15000),
   });
 
   const data = await res.json();
@@ -85,6 +86,7 @@ async function refreshAccessToken(refreshToken) {
       client_secret: getClientSecret(),
       grant_type:    "refresh_token",
     }).toString(),
+    signal:  AbortSignal.timeout(15000),
   });
 
   const data = await res.json();
@@ -105,6 +107,7 @@ async function getGoogleEmail(accessToken) {
   try {
     const res  = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
       headers: { Authorization: `Bearer ${accessToken}` },
+      signal:  AbortSignal.timeout(10000),
     });
     const data = await res.json();
     return data.email || null;
@@ -146,6 +149,7 @@ async function listGA4Properties(accessToken) {
   try {
     const res  = await fetch(`${GA4_ADMIN_API}/accountSummaries`, {
       headers: { Authorization: `Bearer ${accessToken}` },
+      signal:  AbortSignal.timeout(15000),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error?.message || "Could not list GA4 properties");
@@ -182,7 +186,8 @@ async function runReport(propertyId, accessToken, body) {
       "Content-Type": "application/json",
       Authorization:  `Bearer ${accessToken}`,
     },
-    body: JSON.stringify(body),
+    body:   JSON.stringify(body),
+    signal: AbortSignal.timeout(20000),
   });
 
   const data = await res.json();
@@ -206,7 +211,8 @@ async function runRealtimeReport(propertyId, accessToken, body) {
       "Content-Type": "application/json",
       Authorization:  `Bearer ${accessToken}`,
     },
-    body: JSON.stringify(body),
+    body:   JSON.stringify(body),
+    signal: AbortSignal.timeout(15000),
   });
 
   const data = await res.json();

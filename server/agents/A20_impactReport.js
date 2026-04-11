@@ -18,6 +18,7 @@ const { db }                   = require("../config/firebase");
  *   7. Next 3 Months Plan
  */
 async function buildImpactReport(clientId) {
+  try {
   const [brief, audit, report, keywords, baseline, scoreHistory] = await Promise.all([
     getState(clientId, "A1_brief").catch(() => null),
     getState(clientId, "A2_audit").catch(() => null),
@@ -144,6 +145,10 @@ async function buildImpactReport(clientId) {
   };
 
   return impactReport;
+  } catch (e) {
+    console.error(`[A20] Impact report failed for ${clientId}:`, e.message);
+    return { success: false, error: e.message };
+  }
 }
 
 // ── Helpers ───────────────────────────────────────

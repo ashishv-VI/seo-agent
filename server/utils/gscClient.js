@@ -56,6 +56,7 @@ async function exchangeCode(code) {
       redirect_uri:  getBackendUrl() + CALLBACK_PATH,
       grant_type:    "authorization_code",
     }).toString(),
+    signal:  AbortSignal.timeout(15000),
   });
 
   const data = await res.json();
@@ -83,6 +84,7 @@ async function refreshAccessToken(refreshToken) {
       client_secret: getClientSecret(),
       grant_type:    "refresh_token",
     }).toString(),
+    signal:  AbortSignal.timeout(15000),
   });
 
   const data = await res.json();
@@ -103,6 +105,7 @@ async function getGoogleEmail(accessToken) {
   try {
     const res  = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
       headers: { Authorization: `Bearer ${accessToken}` },
+      signal:  AbortSignal.timeout(10000),
     });
     const data = await res.json();
     return data.email || null;
@@ -164,7 +167,8 @@ async function querySearchConsole(siteUrl, accessToken, queryBody) {
       "Content-Type": "application/json",
       Authorization:  `Bearer ${accessToken}`,
     },
-    body: JSON.stringify(queryBody),
+    body:   JSON.stringify(queryBody),
+    signal: AbortSignal.timeout(20000),
   });
 
   const data = await res.json();
@@ -182,6 +186,7 @@ async function querySearchConsole(siteUrl, accessToken, queryBody) {
 async function listSites(accessToken) {
   const res = await fetch(`${GSC_API_BASE}/webmasters/v3/sites`, {
     headers: { Authorization: `Bearer ${accessToken}` },
+    signal:  AbortSignal.timeout(15000),
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error?.message || "Could not list sites");
