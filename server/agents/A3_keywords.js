@@ -14,10 +14,10 @@ async function runA3(clientId, keys) {
   if (!brief?.signedOff) return { success: false, error: "A1 brief not signed off" };
   if (!audit || audit.status !== "complete") return { success: false, error: "A2 audit must complete before keyword research" };
 
-  const seedKeywords  = brief.primaryKeywords || [];
-  const services      = brief.services || [];
+  const seedKeywords  = [].concat(brief.primaryKeywords  || []);
+  const services      = [].concat(brief.services         || []);
   const audience      = brief.targetAudience || "";
-  const locations     = brief.targetLocations || [];
+  const locations     = [].concat(brief.targetLocations  || []);
   const businessDesc  = brief.businessDescription || "";
 
   // ── LLM: Expand keywords into clusters ────────────

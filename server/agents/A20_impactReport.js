@@ -1,4 +1,4 @@
-const { getState }             = require("../shared-state/stateManager");
+const { getState, saveState }  = require("../shared-state/stateManager");
 const { getScoreHistory }      = require("../utils/scoreCalculator");
 const { db }                   = require("../config/firebase");
 
@@ -144,6 +144,7 @@ async function buildImpactReport(clientId) {
     },
   };
 
+  await saveState(clientId, "A20_impact", impactReport);
   return impactReport;
   } catch (e) {
     console.error(`[A20] Impact report failed for ${clientId}:`, e.message);

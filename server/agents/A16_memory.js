@@ -34,6 +34,7 @@ const {
  * @param {object} keys — not used directly, but part of standard agent signature
  */
 async function runA16(clientId, keys) {
+  try {
   const brief    = await getState(clientId, "A1_brief");
   const audit    = await getState(clientId, "A2_audit");
   const keywords = await getState(clientId, "A3_keywords");
@@ -181,6 +182,10 @@ async function runA16(clientId, keys) {
 
   await saveState(clientId, "A16_memory", result);
   return { success: true, ...result };
+  } catch (e) {
+    console.error(`[A16] Memory update failed for ${clientId}:`, e.message);
+    return { success: false, error: e.message };
+  }
 }
 
 /**

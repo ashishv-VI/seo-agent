@@ -177,7 +177,7 @@ async function runA15(clientId, keys) {
 Client: ${brief.businessName}
 Website: ${brief.websiteUrl}
 Services: ${(brief.services || []).join(", ")}
-Our target keywords: ${topKeywords.join(", ")}
+Our target keywords: ${[].concat(topKeywords || []).join(", ")}
 
 Competitor new pages/URLs:
 ${allNewUrls.slice(0, 10).join("\n")}

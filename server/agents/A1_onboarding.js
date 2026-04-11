@@ -88,7 +88,7 @@ async function runA1(clientId, rawData) {
     brief,
     readyForAudit: brief.status === "complete",
     message: missing.length > 0
-      ? `Brief saved with ${missing.length} missing field(s): ${missing.join(", ")}`
+      ? `Brief saved with ${missing.length} missing field(s): ${[].concat(missing || []).join(", ")}`
       : "Brief complete — ready for human sign-off before audit begins",
   };
   } catch (e) {
@@ -102,7 +102,7 @@ async function runA1(clientId, rawData) {
  * Used as a fallback so all downstream agents always have a kpiSelection.
  */
 function deriveKpiFromGoals(goals = []) {
-  const g = goals.join(" ").toLowerCase();
+  const g = [].concat(goals || []).join(" ").toLowerCase();
   const kpis = [];
   if (g.includes("traffic") || g.includes("ranking") || g.includes("organic")) kpis.push("Organic Traffic Growth");
   if (g.includes("lead") || g.includes("form") || g.includes("contact"))        kpis.push("Lead Generation");

@@ -15,8 +15,8 @@ async function runA8(clientId, keys, googleToken) {
   if (!audit?.status)    return { success: false, error: "A2 audit must complete first" };
 
   const siteUrl   = brief.websiteUrl;
-  const locations = brief.targetLocations || [];
-  const services  = brief.services || [];
+  const locations = [].concat(brief.targetLocations || []);
+  const services  = [].concat(brief.services        || []);
   const business  = brief.businessName;
 
   // ── Real Google API data enrichment ──────────────
