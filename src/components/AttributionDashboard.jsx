@@ -102,16 +102,31 @@ export default function AttributionDashboard({ dark, clientId, bg2, bg3, bdr, tx
       {activeView === "funnel" && (
         <>
           {total === 0 ? (
-            <div style={{ background: bg2, border: `1px solid ${bdr}`, borderRadius: 12, padding: 40, textAlign: "center" }}>
-              <div style={{ fontSize: 36, marginBottom: 12 }}>📊</div>
-              <div style={{ fontSize: 14, fontWeight: 700, color: txt, marginBottom: 8 }}>No conversions tracked yet</div>
-              <div style={{ fontSize: 12, color: txt2, maxWidth: 400, margin: "0 auto 16px" }}>
-                Install the tracking snippet on your website to start capturing form submissions with UTM attribution.
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <div style={{ background: bg2, border: `1px solid ${bdr}`, borderRadius: 12, padding: 32, textAlign: "center" }}>
+                <div style={{ fontSize: 36, marginBottom: 12 }}>📊</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: txt, marginBottom: 8 }}>No form fills tracked yet</div>
+                <div style={{ fontSize: 12, color: txt2, maxWidth: 420, margin: "0 auto 20px", lineHeight: 1.6 }}>
+                  Install the snippet on your site to capture every form submission with the keyword that drove it.
+                </div>
+                <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
+                  <button onClick={() => setActiveView("snippet")}
+                    style={{ padding: "8px 20px", borderRadius: 8, border: "none", background: B, color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                    📋 Get Tracking Snippet
+                  </button>
+                  <button onClick={() => setActiveView("ga4")}
+                    style={{ padding: "8px 20px", borderRadius: 8, border: `1px solid ${bdr}`, background: "transparent", color: txt, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                    📈 Try GA4 Conversion Join
+                  </button>
+                </div>
               </div>
-              <button onClick={() => setActiveView("snippet")}
-                style={{ padding: "8px 20px", borderRadius: 8, border: "none", background: B, color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
-                Get Tracking Snippet
-              </button>
+              {/* GA4 shortcut */}
+              <div style={{ background: bg2, border: `1px solid ${bdr}`, borderRadius: 10, padding: "14px 18px" }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: txt, marginBottom: 4 }}>💡 Already using GA4?</div>
+                <div style={{ fontSize: 12, color: txt2, lineHeight: 1.6 }}>
+                  If your site already has Google Analytics, switch to the <strong style={{ color: txt }}>GA4 Conversion Join</strong> tab above — it reads real conversion data directly from GA4 and joins it with your keyword rankings. No snippet needed.
+                </div>
+              </div>
             </div>
           ) : (
             <>
@@ -237,10 +252,10 @@ function GA4ConversionView({ ga4Data, ga4Loading, onRefresh, bg2, bg3, bdr, txt,
           <div style={{ fontSize: 12, color: txt2, maxWidth: 460, margin: "0 auto 20px", lineHeight: 1.6 }}>
             Connect your GA4 property to see which keywords drive real conversions — not just clicks. This uses the GA4 Data API to join session source data with your GSC keyword rankings.
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8, maxWidth: 340, margin: "0 auto 20px", textAlign: "left" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, maxWidth: 380, margin: "0 auto 20px", textAlign: "left" }}>
             {[
-              "1. Sign in with Google in Settings",
-              "2. Add your GA4 Property ID (e.g. 123456789)",
+              "1. Go to the Integrations tab (bottom of left sidebar)",
+              "2. Click Connect Google Analytics → sign in → select GA4 property",
               "3. Come back here and click Refresh",
             ].map((s, i) => (
               <div key={i} style={{ fontSize: 12, color: txt2, padding: "8px 12px", background: bg2, border: `1px solid ${bdr}`, borderRadius: 8 }}>{s}</div>

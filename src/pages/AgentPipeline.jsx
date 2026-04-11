@@ -5684,16 +5684,53 @@ function ImpactReportTab({ dark, bg2, bg3, bdr, txt, txt2, clientId, getToken, A
 
 // LOCAL SEO TAB — NAP Checker, Schema, GBP Signals
 // ─────────────────────────────────────────────────────────────────────────────
-function LocalSeoTab({ dark, state, client }) {
+function LocalSeoTab({ dark, state, client, clientId, getToken, API }) {
+  const [liveGeo,    setLiveGeo]    = useState(null);
+  const [liveLoading,setLiveLoading]= useState(false);
+  const [running,    setRunning]    = useState(false);
+
   const bg2 = dark ? "#111" : "#fff";
   const bg3 = dark ? "#1a1a1a" : "#f5f5f0";
   const bdr = dark ? "#2a2a2a" : "#e0e0d8";
   const txt = dark ? "#e8e8e8" : "#1a1a18";
   const txt2= dark ? "#777"   : "#888";
+  const B   = "#443DCB";
 
-  const audit  = state?.A2_audit  || {};
-  const geo    = state?.A8_geo    || {};
-  const brief  = state?.A1_brief  || {};
+  // Fetch fresh A8 data on mount
+  useEffect(() => {
+    (async () => {
+      if (!clientId || !getToken || !API) return;
+      setLiveLoading(true);
+      try {
+        const token = await getToken();
+        const res = await fetch(`${API}/api/agents/${clientId}/A8/data`, { headers: { Authorization: `Bearer ${token}` } });
+        if (res.ok) { const d = await res.json(); if (d && !d.error) setLiveGeo(d); }
+      } catch {}
+      setLiveLoading(false);
+    })();
+  }, [clientId]);
+
+  async function runA8() {
+    if (!clientId || !getToken || !API) return;
+    setRunning(true);
+    try {
+      const token = await getToken();
+      await fetch(`${API}/api/agents/${clientId}/A8/run`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ googleToken: null }),
+      });
+      // re-fetch after run
+      const r2 = await fetch(`${API}/api/agents/${clientId}/A8/data`, { headers: { Authorization: `Bearer ${token}` } });
+      if (r2.ok) { const d = await r2.json(); if (d && !d.error) setLiveGeo(d); }
+    } catch {}
+    setRunning(false);
+  }
+
+  // Use live data if available, else fall back to passed state
+  const audit  = state?.A2_audit        || {};
+  const geo    = liveGeo || state?.A8_geo || {};
+  const brief  = state?.A1_brief        || {};
 
   const url  = client?.website || brief.websiteUrl || "";
   const name = client?.name || brief.businessName || "";
@@ -5738,8 +5775,23 @@ function LocalSeoTab({ dark, state, client }) {
     "Thomson Local", "Checkatrade", "Trustpilot",
   ];
 
+  if (liveLoading) return <div style={{ padding:40, textAlign:"center", color:txt2 }}>Loading Local SEO data...</div>;
+
   return (
     <div>
+      {/* Run A8 banner if no geo data */}
+      {!geo?.localPresenceScore && !geo?.hasGBP && !geo?.citations?.length && (
+        <div style={{ background:`${B}0a`, border:`1px solid ${B}28`, borderRadius:10, padding:"14px 18px", marginBottom:16, display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:12 }}>
+          <div>
+            <div style={{ fontSize:13, fontWeight:700, color:B, marginBottom:3 }}>Run Local SEO Agent (A8) for live data</div>
+            <div style={{ fontSize:12, color:txt2 }}>Checks Google Business Profile, NAP consistency, Knowledge Graph, and local signals.</div>
+          </div>
+          <button onClick={runA8} disabled={running} style={{ padding:"8px 18px", borderRadius:8, border:"none", background:B, color:"#fff", fontSize:12, fontWeight:700, cursor:running?"not-allowed":"pointer", opacity:running?0.7:1, flexShrink:0 }}>
+            {running ? "⏳ Running..." : "▶ Run A8 Local Agent"}
+          </button>
+        </div>
+      )}
+
       {/* Score Overview */}
       <div style={{ display:"grid", gridTemplateColumns:"auto 1fr", gap:20, background:bg2, border:`1px solid ${bdr}`, borderRadius:12, padding:"20px 24px", marginBottom:20, alignItems:"center" }}>
         <div style={{ textAlign:"center" }}>
@@ -5748,8 +5800,11 @@ function LocalSeoTab({ dark, state, client }) {
           <div style={{ fontSize:11, fontWeight:700, color:scoreColor, marginTop:2 }}>{score >= 70 ? "Good" : score >= 40 ? "Needs Work" : "Poor"}</div>
         </div>
         <div>
-          <div style={{ fontSize:14, fontWeight:700, color:txt, marginBottom:6 }}>
+          <div style={{ fontSize:14, fontWeight:700, color:txt, marginBottom:6, display:"flex", alignItems:"center", gap:10 }}>
             🏪 Local SEO Health Check — {name || url}
+            <button onClick={runA8} disabled={running} style={{ padding:"4px 12px", borderRadius:6, border:`1px solid ${bdr}`, background:"transparent", color:txt2, fontSize:11, cursor:running?"not-allowed":"pointer", opacity:running?0.7:1 }}>
+              {running ? "⏳" : "↻ Refresh"}
+            </button>
           </div>
           <div style={{ fontSize:12, color:txt2, lineHeight:1.7, marginBottom:10 }}>
             {score >= 70

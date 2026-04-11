@@ -56,7 +56,8 @@ export default function PredictiveForecastPanel({ dark, clientId, bg2, bg3, bdr,
     const token = await getToken();
     const res   = await fetch(`${API}/api/agents/${clientId}/A22/forecast`, { headers: { Authorization: `Bearer ${token}` } });
     const d     = await res.json().catch(() => ({}));
-    setData(d?.status === "complete" ? d : null);
+    // Accept both "complete" status and score_estimate fallback (which omits status)
+    setData(d?.trafficForecast || d?.status === "complete" ? d : null);
     setLoading(false);
   }
 
@@ -140,13 +141,22 @@ export default function PredictiveForecastPanel({ dark, clientId, bg2, bg3, bdr,
           </div>
 
           {/* ── Traffic Forecast ─────────────────────── */}
+          {view === "forecast" && !tf && (
+            <div style={{ padding: 32, textAlign: "center", background: bg2, border: `1px solid ${bdr}`, borderRadius: 12 }}>
+              <div style={{ fontSize: 32, marginBottom: 10 }}>📡</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: txt, marginBottom: 6 }}>Not enough data for traffic forecast</div>
+              <div style={{ fontSize: 12, color: txt2, lineHeight: 1.6, maxWidth: 380, margin: "0 auto" }}>
+                Connect Google Search Console in the Integrations tab, then run the pipeline to collect weekly click data. Forecast activates after 6 weeks of GSC history.
+              </div>
+            </div>
+          )}
           {view === "forecast" && tf && (
             <>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10, marginBottom: 20 }}>
                 {[
-                  { label: "Current Weekly Clicks", value: tf.currentWeeklyClicks != null ? tf.currentWeeklyClicks.toLocaleString() : "—", color: txt },
-                  { label: "Predicted in 90 Days",  value: tf.predicted90dClicks != null ? tf.predicted90dClicks.toLocaleString() : tf.predicted90dPct || "—", color: trendColor },
-                  { label: "Trend",                 value: tf.trend ? (tf.trend[0].toUpperCase() + tf.trend.slice(1)) : "—", color: trendColor },
+                  { label: "Current Weekly Clicks", value: tf.currentWeeklyClicks != null ? tf.currentWeeklyClicks.toLocaleString() : "No GSC data yet", color: tf.currentWeeklyClicks != null ? txt : txt2 },
+                  { label: "Predicted in 90 Days",  value: tf.predicted90dClicks != null ? tf.predicted90dClicks.toLocaleString() : (tf.predicted90dPct || "Connect GSC"), color: trendColor },
+                  { label: "Trend",                 value: tf.trend && tf.trend !== "unknown" ? (tf.trend[0].toUpperCase() + tf.trend.slice(1)) : "Needs more data", color: tf.trend && tf.trend !== "unknown" ? trendColor : txt2 },
                 ].map(s => (
                   <div key={s.label} style={{ background: bg2, border: `1px solid ${bdr}`, borderRadius: 10, padding: "14px 16px" }}>
                     <div style={{ fontSize: 20, fontWeight: 700, color: s.color, marginBottom: 2 }}>{s.value}</div>

@@ -171,6 +171,17 @@ router.post("/:clientId/A8/run", verifyToken, async (req, res) => {
   }
 });
 
+// ── GET A8: GEO data ──────────────────────────────
+router.get("/:clientId/A8/data", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const data = await getState(req.params.clientId, "A8_geo");
+    return res.json(data || {});
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
 // ── Run A9: Generate Report ────────────────────────
 router.post("/:clientId/A9/report", verifyToken, async (req, res) => {
   try {
