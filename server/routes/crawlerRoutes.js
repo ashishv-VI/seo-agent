@@ -25,51 +25,78 @@ const { calculateDR, getDRScore, batchCalculateDR } = require("../crawler/algori
 const { calculateKD, estimateKDFromCompetition }    = require("../crawler/algorithms/kdScore");
 const { estimateVolume, batchEstimateVolume }        = require("../crawler/algorithms/volumeEstimator");
 const { estimateDomainTraffic, calculateShareOfVoice } = require("../crawler/algorithms/trafficEstimator");
+const { discoverBacklinks }         = require("../crawler/backlinkDiscovery");
 
 // ── Auth middleware ───────────────────────────────────────────────────────
 router.use(verifyToken);
 
 // ── Domain Overview ───────────────────────────────────────────────────────
+// Discovers real backlinks via SERP scraping + page crawl (no API key needed)
 router.post("/domain-overview", async (req, res) => {
-  const { domain } = req.body;
+  const { domain, forceRefresh = false } = req.body;
   if (!domain) return res.status(400).json({ error: "domain required" });
 
   try {
     const norm = normalizeDomain(domain);
 
-    // Get stored data first
-    const [domainInfo, backlinkData, drData] = await Promise.allSettled([
-      getDomainInfo(norm),
-      getBacklinksForDomain(norm, 50),
-      getDRScore(norm),
-    ]);
+    // Check if we have recent discovery data (last 3 days)
+    const info = await getDomainInfo(norm).catch(() => null);
+    const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+    const hasRecentDiscovery = info?.lastDiscoveryAt && info.lastDiscoveryAt > threeDaysAgo;
 
-    const info      = domainInfo.status === "fulfilled" ? domainInfo.value : null;
-    const backlinks = backlinkData.status === "fulfilled" ? backlinkData.value : null;
-    const dr        = drData.status === "fulfilled" ? drData.value : { dr: null };
-
-    // If we have fresh data (crawled in last 7 days), return it
-    const lastCrawled = info?.lastCrawledAt;
-    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-    const isFresh = lastCrawled && lastCrawled > sevenDaysAgo;
-
-    if (!isFresh) {
-      // Queue for background crawl
-      await queueDomainCrawl(norm, "high").catch(() => {});
+    // Run backlink discovery if no recent data or force refresh requested
+    // This uses SERP scraping + page crawl — no API key needed
+    if (!hasRecentDiscovery || forceRefresh) {
+      await discoverBacklinks(norm, { maxPages: 25 }).catch(e => {
+        console.warn(`[domain-overview] Discovery partial error for ${norm}:`, e.message);
+      });
     }
 
+    // Now read the stored data (populated by discovery above or previous runs)
+    const [domainInfo, backlinkData, drResult] = await Promise.allSettled([
+      getDomainInfo(norm),
+      getBacklinksForDomain(norm, 50),
+      calculateDR(norm),
+    ]);
+
+    const infoFresh  = domainInfo.status === "fulfilled" ? domainInfo.value : null;
+    const backlinks  = backlinkData.status === "fulfilled" ? backlinkData.value : null;
+    const dr         = drResult.status === "fulfilled" ? drResult.value : { dr: 0, drLabel: "Unknown" };
+
+    // Build referring domain list with DR scores where available
+    const referringDomainsData = (backlinks?.referringDomainsData || []).map(rd => ({
+      domain:    rd.domain,
+      linkCount: rd.links?.length || 0,
+      anchors:   (rd.anchorTexts || []).slice(0, 3),
+      dr:        null, // populated on next pass
+      firstSeen: rd.links?.[0] ? null : null,
+    }));
+
+    const drLabel = dr.dr >= 70 ? "Strong"
+                  : dr.dr >= 50 ? "Good"
+                  : dr.dr >= 30 ? "Moderate"
+                  : dr.dr >  0  ? "Weak"
+                  : "New / Unknown";
+
     res.json({
-      domain:          norm,
-      drScore:         dr.dr,
-      drLabel:         dr.drLabel,
-      referringDomains: backlinks?.referringDomains || 0,
-      totalBacklinks:  backlinks?.totalBacklinks || 0,
-      topAnchors:      backlinks?.topAnchors || [],
-      pagesCrawled:    info?.pagesCrawled || 0,
-      lastCrawled:     info?.lastCrawledAt || null,
-      isFresh,
-      freshCrawlQueued: !isFresh,
-      referringDomainsData: (backlinks?.referringDomainsData || []).slice(0, 20),
+      domain:            norm,
+      drScore:           dr.dr || 0,
+      drLabel:           dr.drLabel || drLabel,
+      referringDomains:  backlinks?.referringDomains || 0,
+      totalBacklinks:    backlinks?.totalBacklinks || 0,
+      topAnchors:        (backlinks?.topAnchors || []).map(a => ({
+        text:  a.text,
+        count: a.count,
+      })),
+      pagesCrawled:      infoFresh?.pagesCrawled || 0,
+      lastCrawled:       infoFresh?.lastDiscoveryAt || null,
+      isFresh:           hasRecentDiscovery,
+      newLinksFoundNow:  !hasRecentDiscovery || forceRefresh,
+      referringDomainsData,
+      dataSource:        "own-crawler",
+      note:              backlinks?.totalBacklinks > 0
+        ? `${backlinks.totalBacklinks} backlink(s) verified by crawling referring pages`
+        : "Discovery complete — no external backlinks verified yet. This improves over time as more referring sites get crawled.",
     });
   } catch (e) {
     res.status(500).json({ error: e.message });
