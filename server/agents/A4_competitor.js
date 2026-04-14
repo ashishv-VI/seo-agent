@@ -123,6 +123,7 @@ async function discoverCompetitorsFromSERP(keywords, targetDomain, location = "i
 
 // ── Main A4 function ───────────────────────────────────────────────────────
 async function runA4(clientId, keys) {
+  try {
   const brief    = await getState(clientId, "A1_brief");
   const keywords = await getState(clientId, "A3_keywords");
 
@@ -385,6 +386,10 @@ Based on this REAL data, provide deep competitive analysis. Return ONLY valid JS
 
   await saveState(clientId, "A4_competitor", result);
   return { success: true, competitor: result };
+  } catch (e) {
+    console.error(`[A4] Competitor analysis failed for ${clientId}:`, e.message);
+    return { success: false, error: e.message };
+  }
 }
 
 module.exports = { runA4 };

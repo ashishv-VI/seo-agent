@@ -117,6 +117,7 @@ function buildSerpSection(serpIntel) {
 }
 
 async function runA5(clientId, keys) {
+  try {
   const brief      = await getState(clientId, "A1_brief");
   const audit      = await getState(clientId, "A2_audit");
   const keywords   = await getState(clientId, "A3_keywords");
@@ -283,6 +284,10 @@ Generate optimised content recommendations. Return ONLY valid JSON:
   } catch { /* non-blocking */ }
 
   return { success: true, content: result };
+  } catch (e) {
+    console.error(`[A5] Content agent failed for ${clientId}:`, e.message);
+    return { success: false, error: e.message };
+  }
 }
 
 module.exports = { runA5 };

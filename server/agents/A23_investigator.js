@@ -17,6 +17,7 @@ const { callLLM, parseJSON }  = require("../utils/llm");
 const { db, FieldValue }      = require("../config/firebase");
 
 async function runA23(clientId, keys, { alertIds = null } = {}) {
+  try {
   const brief      = await getState(clientId, "A1_brief").catch(() => null);
   if (!brief) return { success: false, error: "No brief — run A1 first" };
 
@@ -136,6 +137,10 @@ async function runA23(clientId, keys, { alertIds = null } = {}) {
 
   await saveState(clientId, "A23_investigation", result);
   return result;
+  } catch (e) {
+    console.error(`[A23] Investigator failed for ${clientId}:`, e.message);
+    return { success: false, error: e.message };
+  }
 }
 
 // ── Rule-based root cause diagnosis ──────────────────

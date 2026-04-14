@@ -212,23 +212,6 @@ router.post("/:clientId/A9/alerts", verifyToken, async (req, res) => {
   }
 });
 
-// ── GET Alerts for client ──────────────────────────
-router.get("/:clientId/alerts", verifyToken, async (req, res) => {
-  try {
-    await getClientDoc(req.params.clientId, req.uid);
-    const snap = await db.collection("alerts")
-      .where("clientId", "==", req.params.clientId)
-      .get();
-    const alerts = snap.docs
-      .map(d => ({ id: d.id, ...d.data() }))
-      .sort((a, b) => (b.createdAt?._seconds || 0) - (a.createdAt?._seconds || 0))
-      .slice(0, 50);
-    return res.json({ alerts });
-  } catch (e) {
-    return res.status(e.code || 500).json({ error: e.message });
-  }
-});
-
 // ── GET Approval Queue for client ─────────────────
 router.get("/:clientId/approvals", verifyToken, async (req, res) => {
   try {

@@ -9,6 +9,7 @@ const { renderPage, isJSRendered } = require("../utils/jsRenderer");
  * Checks: SSL, robots.txt, sitemap, meta tags, redirects, response time
  */
 async function runA2(clientId) {
+  try {
   // Get brief from A1
   const brief = await getState(clientId, "A1_brief");
   if (!brief) {
@@ -471,6 +472,10 @@ async function runA2(clientId) {
   }
 
   return { success: true, audit: auditResult };
+  } catch (e) {
+    console.error(`[A2] Audit failed for ${clientId}:`, e.message);
+    return { success: false, error: e.message };
+  }
 }
 
 // ── HTML Parser ────────────────────────────────────

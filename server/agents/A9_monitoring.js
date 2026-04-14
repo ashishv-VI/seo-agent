@@ -269,6 +269,20 @@ async function checkAlerts(clientId, keys) {
     saved.push(ref.id);
   }
 
+  // Auto-trigger A23 investigator if new P1 alerts were created
+  const newP1Count = alerts.filter(a => a.tier === "P1").length;
+  if (newP1Count > 0) {
+    try {
+      const { runA23 } = require("./A23_investigator");
+      const inv = await runA23(clientId, keys);
+      if (inv?.success) {
+        console.log(`[A9→A23] Investigated ${inv.investigated} P1 alert(s) for ${clientId}`);
+      }
+    } catch (e) {
+      console.warn(`[A9→A23] Auto-investigation failed for ${clientId}:`, e.message);
+    }
+  }
+
   return { success: true, alertsCreated: saved.length, alerts };
 }
 
