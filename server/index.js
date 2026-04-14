@@ -310,9 +310,12 @@ setInterval(async () => {
 
     // ── Weekly Brief — send Monday intelligence email to agency exec ─────
     try {
-      const { sendWeeklyBriefs } = require("./utils/weeklyBrief");
+      const { sendWeeklyBriefs, sendAgencyExecDigests } = require("./utils/weeklyBrief");
       const briefResult = await sendWeeklyBriefs();
       console.log(`[weekly-pull] Weekly briefs sent: ${briefResult.sent}, errors: ${briefResult.errors}`);
+      // Agency exec digest — one aggregated email per agency owner
+      const digestResult = await sendAgencyExecDigests();
+      console.log(`[weekly-pull] Agency exec digests sent: ${digestResult.sent}, errors: ${digestResult.errors}`);
     } catch (e) {
       console.error("[weekly-pull] Weekly brief error:", e.message);
     }

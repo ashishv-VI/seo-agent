@@ -208,35 +208,289 @@ async function sendWeeklyBriefs() {
 }
 
 /**
- * Send HTML brief email via SendGrid
+ * Send HTML brief email — tries SendGrid first, falls back to Nodemailer (Gmail/SMTP)
  */
 async function sendBriefEmail(to, briefData, client) {
+  const html    = buildBriefHtml(briefData);
+  const subject = `📊 Weekly SEO Brief — ${briefData.clientName} | ${briefData.weekOf}`;
+
+  // Try SendGrid first (production preference)
   const sgApiKey = process.env.SENDGRID_API_KEY;
-  if (!sgApiKey) return; // SendGrid not configured — skip silently
-
-  const html = buildBriefHtml(briefData);
-
-  const payload = {
-    personalizations: [{ to: [{ email: to }] }],
-    from:             { email: process.env.SENDGRID_FROM || "reports@seodamco.com", name: "SEO AI Agent" },
-    subject:          `📊 Weekly SEO Brief — ${briefData.clientName} | ${briefData.weekOf}`,
-    content:          [{ type: "text/html", value: html }],
-  };
-
-  const res = await fetch("https://api.sendgrid.com/v3/mail/send", {
-    method:  "POST",
-    headers: {
-      "Authorization": `Bearer ${sgApiKey}`,
-      "Content-Type":  "application/json",
-    },
-    body:   JSON.stringify(payload),
-    signal: AbortSignal.timeout(10000),
-  });
-
-  if (!res.ok) {
-    const err = await res.text().catch(() => "");
-    throw new Error(`SendGrid error ${res.status}: ${err.slice(0, 200)}`);
+  if (sgApiKey) {
+    try {
+      const res = await fetch("https://api.sendgrid.com/v3/mail/send", {
+        method:  "POST",
+        headers: { "Authorization": `Bearer ${sgApiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          personalizations: [{ to: [{ email: to }] }],
+          from:             { email: process.env.SENDGRID_FROM || "reports@seodamco.com", name: "SEO AI Agent" },
+          subject, content: [{ type: "text/html", value: html }],
+        }),
+        signal: AbortSignal.timeout(10000),
+      });
+      if (res.ok) return;
+      console.warn(`[weeklyBrief] SendGrid failed (${res.status}) — falling back to nodemailer`);
+    } catch (e) {
+      console.warn(`[weeklyBrief] SendGrid error — falling back to nodemailer:`, e.message);
+    }
   }
+
+  // Fallback: nodemailer (Gmail/SMTP) via shared emailer
+  try {
+    const nodemailer = require("nodemailer");
+    let transport = null;
+    if (process.env.EMAIL_HOST) {
+      transport = nodemailer.createTransport({
+        host:   process.env.EMAIL_HOST,
+        port:   parseInt(process.env.EMAIL_PORT || "587"),
+        secure: process.env.EMAIL_PORT === "465",
+        auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
+      });
+    } else if (process.env.GMAIL_USER && process.env.GMAIL_PASS) {
+      transport = nodemailer.createTransport({
+        service: "gmail",
+        auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_PASS },
+      });
+    }
+    if (!transport) {
+      console.warn("[weeklyBrief] No email transport configured — brief saved to Firestore only");
+      return;
+    }
+    await transport.sendMail({
+      from: `"SEO AI Agent" <${process.env.EMAIL_FROM || process.env.GMAIL_USER || "noreply@seo-agent.ai"}>`,
+      to, subject, html,
+    });
+  } catch (e) {
+    console.error("[weeklyBrief] Nodemailer send failed:", e.message);
+  }
+}
+
+/**
+ * Agency Exec Digest — one email per agency owner aggregating ALL their clients.
+ * Different from the per-client brief above. This is for the agency head view.
+ */
+async function sendAgencyExecDigests() {
+  let sent = 0, errors = 0;
+  try {
+    const clientsSnap = await db.collection("clients").get();
+    if (clientsSnap.empty) return { sent: 0, errors: 0 };
+
+    // Group clients by ownerId
+    const byOwner = {};
+    for (const d of clientsSnap.docs) {
+      const c = d.data();
+      if (!c.ownerId) continue;
+      if (!byOwner[c.ownerId]) byOwner[c.ownerId] = [];
+      byOwner[c.ownerId].push({ id: d.id, ...c });
+    }
+
+    for (const [ownerId, clients] of Object.entries(byOwner)) {
+      try {
+        // Resolve owner email
+        const userDoc = await db.collection("users").doc(ownerId).get();
+        const ownerEmail = userDoc.data()?.email;
+        if (!ownerEmail) continue;
+
+        // Aggregate per client
+        const perClient = [];
+        let totalP1 = 0, totalFixes = 0, totalAlerts = 0;
+        for (const c of clients) {
+          const [audit, report, alertSnap, pushSnap, cmo] = await Promise.all([
+            getState(c.id, "A2_audit").catch(() => null),
+            getState(c.id, "A9_report").catch(() => null),
+            db.collection("alerts").where("clientId","==",c.id).where("resolved","==",false).limit(20).get().catch(() => null),
+            db.collection("wp_push_log").where("clientId","==",c.id).limit(100).get().catch(() => null),
+            getState(c.id, "CMO_decision").catch(() => null),
+          ]);
+          const p1 = audit?.issues?.p1?.length || 0;
+          const fixes = pushSnap ? pushSnap.size : 0;
+          const open = alertSnap ? alertSnap.size : 0;
+          totalP1 += p1; totalFixes += fixes; totalAlerts += open;
+          perClient.push({
+            name: c.name,
+            websiteUrl: c.website || c.websiteUrl,
+            seoScore: c.seoScore || null,
+            p1Count: p1,
+            openAlerts: open,
+            fixesPushed: fixes,
+            topAction: cmo?.decision || report?.reportData?.next3Actions?.[0]?.action || null,
+            clicks7d: report?.gscSummary?.totalClicks || null,
+          });
+        }
+
+        // Cross-client pattern win rates
+        let patternSummary = [];
+        try {
+          const patSnap = await db.collection("global_patterns")
+            .where("ownerId","==",ownerId).limit(500).get();
+          const byType = {};
+          for (const p of patSnap.docs.map(d => d.data())) {
+            const t = p.fixType || "other";
+            if (!byType[t]) byType[t] = { improved: 0, total: 0 };
+            byType[t].total++;
+            if (p.outcome === "improved") byType[t].improved++;
+          }
+          patternSummary = Object.entries(byType)
+            .filter(([, c]) => c.total >= 2)
+            .map(([fixType, c]) => ({ fixType, winRate: Math.round((c.improved/c.total)*100), sample: c.total }))
+            .sort((a, b) => b.winRate - a.winRate)
+            .slice(0, 4);
+        } catch { /* non-blocking */ }
+
+        const html = buildAgencyDigestHtml({
+          weekOf: getWeekLabel(),
+          clientCount: clients.length,
+          totalP1, totalFixes, totalAlerts,
+          perClient: perClient.sort((a, b) => (a.seoScore || 0) - (b.seoScore || 0)),
+          patternSummary,
+        });
+
+        // Save to Firestore
+        try {
+          await db.collection("agency_digests").add({
+            ownerId, ownerEmail, weekOf: getWeekLabel(),
+            clientCount: clients.length,
+            totalP1, totalFixes, totalAlerts,
+            createdAt: FieldValue.serverTimestamp(),
+          });
+        } catch { /* non-blocking */ }
+
+        // Send email (SendGrid → nodemailer fallback)
+        await sendDigestEmail(ownerEmail, html, getWeekLabel(), clients.length);
+        sent++;
+      } catch (e) {
+        console.error(`[agencyDigest] Failed for owner ${ownerId}:`, e.message);
+        errors++;
+      }
+    }
+  } catch (e) {
+    console.error("[agencyDigest] Fatal:", e.message);
+  }
+  return { sent, errors };
+}
+
+async function sendDigestEmail(to, html, weekOf, clientCount) {
+  const subject = `📈 Agency Weekly Digest — ${clientCount} clients | ${weekOf}`;
+  const sgApiKey = process.env.SENDGRID_API_KEY;
+  if (sgApiKey) {
+    try {
+      const res = await fetch("https://api.sendgrid.com/v3/mail/send", {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${sgApiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          personalizations: [{ to: [{ email: to }] }],
+          from: { email: process.env.SENDGRID_FROM || "reports@seodamco.com", name: "SEO AI Agent" },
+          subject, content: [{ type: "text/html", value: html }],
+        }),
+        signal: AbortSignal.timeout(10000),
+      });
+      if (res.ok) return;
+    } catch { /* fall through */ }
+  }
+  try {
+    const nodemailer = require("nodemailer");
+    let transport = null;
+    if (process.env.EMAIL_HOST) {
+      transport = nodemailer.createTransport({
+        host: process.env.EMAIL_HOST, port: parseInt(process.env.EMAIL_PORT || "587"),
+        secure: process.env.EMAIL_PORT === "465",
+        auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
+      });
+    } else if (process.env.GMAIL_USER && process.env.GMAIL_PASS) {
+      transport = nodemailer.createTransport({
+        service: "gmail",
+        auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_PASS },
+      });
+    }
+    if (!transport) return;
+    await transport.sendMail({
+      from: `"SEO AI Agent" <${process.env.EMAIL_FROM || process.env.GMAIL_USER || "noreply@seo-agent.ai"}>`,
+      to, subject, html,
+    });
+  } catch (e) {
+    console.error("[agencyDigest] send failed:", e.message);
+  }
+}
+
+function buildAgencyDigestHtml(d) {
+  const B = "#443DCB", green = "#059669", red = "#DC2626", amber = "#D97706";
+  const scoreColor = v => v == null ? "#888" : v >= 75 ? green : v >= 50 ? amber : red;
+
+  const clientRows = d.perClient.map(c => `
+    <tr style="border-bottom:1px solid #f0f0ea">
+      <td style="padding:10px 12px">
+        <div style="font-size:13px;font-weight:600;color:#1a1a18">${escHtml(c.name)}</div>
+        <div style="font-size:11px;color:#888">${escHtml((c.websiteUrl || "").replace(/^https?:\/\//, ""))}</div>
+      </td>
+      <td style="padding:10px 12px;text-align:center">
+        <span style="font-size:16px;font-weight:800;color:${scoreColor(c.seoScore)}">${c.seoScore ?? "—"}</span>
+      </td>
+      <td style="padding:10px 12px;text-align:center;color:${c.p1Count > 0 ? red : "#888"};font-weight:${c.p1Count > 0 ? 700 : 400}">${c.p1Count}</td>
+      <td style="padding:10px 12px;text-align:center;color:${c.openAlerts > 0 ? amber : "#888"}">${c.openAlerts}</td>
+      <td style="padding:10px 12px;text-align:center;color:${green}">${c.fixesPushed}</td>
+    </tr>
+    ${c.topAction ? `<tr><td colspan="5" style="padding:0 12px 10px;font-size:12px;color:#555;border-bottom:1px solid #f0f0ea"><strong style="color:${B}">→ Next:</strong> ${escHtml(c.topAction.slice(0, 140))}${c.topAction.length > 140 ? "…" : ""}</td></tr>` : ""}
+  `).join("");
+
+  const patternRows = d.patternSummary.length ? d.patternSummary.map(p => {
+    const color = p.winRate >= 70 ? green : p.winRate >= 50 ? amber : red;
+    return `<li style="margin-bottom:6px"><strong style="color:${color}">${p.winRate}% win rate</strong> — ${escHtml(p.fixType.replace(/_/g, " "))} <span style="color:#888">(${p.sample} fixes)</span></li>`;
+  }).join("") : `<li style="color:#888">No verified fix history yet — run pipeline + wait 21 days for learning data</li>`;
+
+  return `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;background:#f5f5f0;font-family:-apple-system,Arial,sans-serif">
+<div style="max-width:680px;margin:24px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.08)">
+  <div style="background:${B};padding:28px 32px">
+    <h1 style="color:#fff;margin:0;font-size:22px">📈 Agency Weekly Digest</h1>
+    <p style="color:rgba(255,255,255,0.85);margin:6px 0 0;font-size:13px">${escHtml(d.weekOf)} · ${d.clientCount} clients</p>
+  </div>
+  <div style="padding:28px 32px">
+
+    <!-- Summary tiles -->
+    <div style="display:flex;gap:12px;margin-bottom:24px">
+      <div style="flex:1;background:#f5f5f0;border-radius:8px;padding:14px;text-align:center">
+        <div style="font-size:11px;color:#888;text-transform:uppercase">Clients</div>
+        <div style="font-size:24px;font-weight:800;color:${B};margin-top:4px">${d.clientCount}</div>
+      </div>
+      <div style="flex:1;background:#f5f5f0;border-radius:8px;padding:14px;text-align:center">
+        <div style="font-size:11px;color:#888;text-transform:uppercase">P1 Issues</div>
+        <div style="font-size:24px;font-weight:800;color:${d.totalP1 > 0 ? red : green};margin-top:4px">${d.totalP1}</div>
+      </div>
+      <div style="flex:1;background:#f5f5f0;border-radius:8px;padding:14px;text-align:center">
+        <div style="font-size:11px;color:#888;text-transform:uppercase">Open Alerts</div>
+        <div style="font-size:24px;font-weight:800;color:${d.totalAlerts > 0 ? amber : green};margin-top:4px">${d.totalAlerts}</div>
+      </div>
+      <div style="flex:1;background:#f5f5f0;border-radius:8px;padding:14px;text-align:center">
+        <div style="font-size:11px;color:#888;text-transform:uppercase">Fixes Pushed</div>
+        <div style="font-size:24px;font-weight:800;color:${green};margin-top:4px">${d.totalFixes}</div>
+      </div>
+    </div>
+
+    <!-- Client table -->
+    <h2 style="font-size:15px;color:#1a1a18;border-bottom:2px solid #f0f0ea;padding-bottom:8px;margin-top:0">Clients (worst first)</h2>
+    <table style="width:100%;border-collapse:collapse;margin-bottom:24px;font-size:12px">
+      <tr style="background:#f0f0ea">
+        <th style="padding:8px 12px;text-align:left;color:#555">Client</th>
+        <th style="padding:8px 12px;text-align:center;color:#555">Score</th>
+        <th style="padding:8px 12px;text-align:center;color:#555">P1</th>
+        <th style="padding:8px 12px;text-align:center;color:#555">Alerts</th>
+        <th style="padding:8px 12px;text-align:center;color:#555">Fixes</th>
+      </tr>
+      ${clientRows || `<tr><td colspan="5" style="padding:16px;text-align:center;color:#888">No clients</td></tr>`}
+    </table>
+
+    <!-- Cross-client learning -->
+    <h2 style="font-size:15px;color:#1a1a18;border-bottom:2px solid #f0f0ea;padding-bottom:8px">🧠 Agent Learning — Fix Win Rates</h2>
+    <p style="font-size:12px;color:#666;margin-top:8px">What's working across your client base:</p>
+    <ul style="font-size:13px;color:#1a1a18;padding-left:20px;margin-bottom:24px">${patternRows}</ul>
+
+    <div style="border-top:1px solid #f0f0ea;padding-top:20px;font-size:12px;color:#888">
+      <p style="margin:0">Generated by SEO AI Agent · Weekly digest delivered every Monday</p>
+    </div>
+  </div>
+</div>
+</body></html>`;
 }
 
 /**
@@ -398,4 +652,4 @@ function escHtml(str) {
     .replace(/"/g, "&quot;");
 }
 
-module.exports = { generateWeeklyBrief, sendWeeklyBriefs, buildBriefHtml };
+module.exports = { generateWeeklyBrief, sendWeeklyBriefs, sendAgencyExecDigests, buildBriefHtml, buildAgencyDigestHtml };
