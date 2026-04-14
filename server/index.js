@@ -55,7 +55,7 @@ const corsOptions = {
 
 // Explicit OPTIONS preflight handler — must come BEFORE route registration
 // Without this, Express can send a 404 on preflight before cors headers are added
-app.options("*", cors(corsOptions));
+// app.options("*", cors(corsOptions)); // Removed due to path-to-regexp error with '*'
 
 app.use(cors(corsOptions));
 
