@@ -9,6 +9,7 @@ export default function DomainOverview({ dark, getToken }) {
   const [error,    setError]    = useState("");
   const [tab,      setTab]      = useState("overview");
   const [status,   setStatus]   = useState("");
+  const [progress, setProgress] = useState(null); // { pagesChecked, pagesTotal, linksFound, message }
 
   const bg   = dark ? "#0a0a0a" : "#f5f5f0";
   const bg2  = dark ? "#111"    : "#ffffff";
@@ -21,26 +22,58 @@ export default function DomainOverview({ dark, getToken }) {
     const d = domain.trim();
     if (!d) return;
     setLoading(true); setData(null); setError(""); setTab("overview");
-    setStatus("Searching SERP for referring pages…");
+    setProgress({ pagesChecked: 0, pagesTotal: 0, linksFound: 0, message: "Starting discovery…" });
+    setStatus("Starting discovery…");
+
     try {
       const token = getToken ? await getToken() : null;
       const headers = { "Content-Type": "application/json" };
       if (token) headers["Authorization"] = `Bearer ${token}`;
 
-      setStatus("Crawling referring pages to verify links…");
+      // If forceRefresh or no recent data, kick off background discovery first so we can poll progress
+      if (forceRefresh) {
+        await fetch(`${API}/api/crawler/domain-overview/${encodeURIComponent(d)}/start`, {
+          method: "POST", headers,
+          signal: AbortSignal.timeout(10000),
+        }).catch(() => {});
+      }
+
+      // Poll progress in parallel with the main call
+      let polling = true;
+      const pollProgress = async () => {
+        while (polling) {
+          try {
+            const p = await fetch(`${API}/api/crawler/domain-overview/${encodeURIComponent(d)}/progress`, {
+              headers, signal: AbortSignal.timeout(5000),
+            });
+            const pj = await p.json();
+            if (pj.progress) {
+              setProgress(pj.progress);
+              setStatus(pj.progress.message || "Discovering backlinks…");
+              if (pj.progress.status === "complete") break;
+            }
+          } catch {}
+          await new Promise(r => setTimeout(r, 2000));
+        }
+      };
+      pollProgress();
+
+      // Main request — waits for full result
       const res  = await fetch(`${API}/api/crawler/domain-overview`, {
         method: "POST", headers,
         body: JSON.stringify({ domain: d, forceRefresh }),
-        signal: AbortSignal.timeout(60000), // discovery takes ~20-40s
+        signal: AbortSignal.timeout(90000), // discovery can take up to 60s; buffer 30s
       });
+      polling = false;
       const json = await res.json();
       if (json.error) setError(json.error);
       else setData(json);
     } catch (e) {
-      setError(e.name === "TimeoutError" ? "Analysis timed out — try again, results may be cached now" : e.message);
+      setError(e.name === "TimeoutError" ? "Discovery still running — click Refresh in a minute to see results" : e.message);
     }
     setLoading(false);
     setStatus("");
+    setProgress(null);
   }
 
   const drColor = data ? getDRColor(data.drScore) : "#888";
@@ -81,12 +114,29 @@ export default function DomainOverview({ dark, getToken }) {
         </div>
       )}
 
-      {/* Loading */}
+      {/* Loading with live progress */}
       {loading && (
         <div style={{ textAlign: "center", padding: 60, color: txt2 }}>
           <div style={{ fontSize: 32, marginBottom: 12 }}>🔍</div>
-          <div style={{ fontWeight: 600, color: txt, marginBottom: 8 }}>{status || "Analyzing…"}</div>
-          <div style={{ fontSize: 12 }}>Crawling referring pages — takes 20–40 seconds on first run</div>
+          <div style={{ fontWeight: 600, color: txt, marginBottom: 12 }}>{status || "Analyzing…"}</div>
+
+          {progress && progress.pagesTotal > 0 && (
+            <>
+              <div style={{ maxWidth: 440, margin: "0 auto 10px", height: 8, borderRadius: 4, background: bdr, overflow: "hidden" }}>
+                <div style={{
+                  height: "100%",
+                  width: `${Math.min(100, Math.round((progress.pagesChecked / progress.pagesTotal) * 100))}%`,
+                  background: B, borderRadius: 4, transition: "width 0.3s",
+                }} />
+              </div>
+              <div style={{ display: "flex", justifyContent: "center", gap: 24, fontSize: 12, marginBottom: 6 }}>
+                <span><strong style={{ color: txt }}>{progress.pagesChecked}</strong> / {progress.pagesTotal} pages crawled</span>
+                <span><strong style={{ color: "#059669" }}>{progress.linksFound}</strong> links verified</span>
+              </div>
+            </>
+          )}
+
+          <div style={{ fontSize: 12 }}>Real-time crawl — live progress above</div>
         </div>
       )}
 

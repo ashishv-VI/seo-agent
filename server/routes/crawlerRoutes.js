@@ -287,6 +287,37 @@ router.post("/crawl-domain", async (req, res) => {
   }
 });
 
+// ── Domain Overview: Discovery Progress (poll) ───────────────────────────
+// Returns live progress of in-flight backlink discovery for cold-start UX
+router.get("/domain-overview/:domain/progress", async (req, res) => {
+  try {
+    const norm = normalizeDomain(req.params.domain);
+    const info = await getDomainInfo(norm).catch(() => null);
+    const progress = info?.discoveryProgress || {
+      status: "idle", pagesChecked: 0, pagesTotal: 0, linksFound: 0,
+      message: "No discovery run yet",
+    };
+    res.json({ domain: norm, progress });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Domain Overview: Start background discovery ──────────────────────────
+// Fires discovery asynchronously and returns immediately so frontend can poll
+router.post("/domain-overview/:domain/start", async (req, res) => {
+  try {
+    const norm = normalizeDomain(req.params.domain);
+    // Fire-and-forget — frontend polls /progress for live status
+    discoverBacklinks(norm, { maxPages: 25 }).catch(e => {
+      console.warn(`[domain-overview/start] Discovery error for ${norm}:`, e.message);
+    });
+    res.json({ domain: norm, started: true, message: "Discovery started — poll /progress" });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── Crawl Status ──────────────────────────────────────────────────────────
 router.get("/crawl-status/:domain", async (req, res) => {
   const norm = normalizeDomain(req.params.domain);

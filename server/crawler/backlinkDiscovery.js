@@ -33,12 +33,27 @@ function urlHash(url) {
  * @param {object} opts
  * @returns {object} discovery results
  */
+async function writeProgress(domain, patch) {
+  try {
+    await db.collection("crawler_domains").doc(domain).set({
+      domain,
+      discoveryProgress: { ...patch, updatedAt: new Date().toISOString() },
+      updatedAt: new Date().toISOString(),
+    }, { merge: true });
+  } catch { /* non-blocking */ }
+}
+
 async function discoverBacklinks(domain, opts = {}) {
   const { maxPages = 30, location = "in" } = opts;
   domain = normalizeDomain(domain);
 
   const discovered = [];
   const crawledUrls = new Set();
+
+  await writeProgress(domain, {
+    status: "searching_serp", pagesChecked: 0, pagesTotal: 0, linksFound: 0,
+    message: "Searching SERP for pages mentioning this domain…",
+  });
 
   // ── Step 1: SERP queries to find pages mentioning this domain ────────────
   const queries = [
@@ -77,9 +92,23 @@ async function discoverBacklinks(domain, opts = {}) {
   // ── Step 3: Crawl each discovered URL and verify link exists ─────────────
   const urlsToCheck = [...serpUrls].slice(0, maxPages);
 
+  await writeProgress(domain, {
+    status: "crawling", pagesChecked: 0, pagesTotal: urlsToCheck.length, linksFound: 0,
+    message: `Crawling ${urlsToCheck.length} candidate pages to verify links…`,
+  });
+
+  let idx = 0;
   for (const pageUrl of urlsToCheck) {
+    idx++;
     if (crawledUrls.has(pageUrl)) continue;
     crawledUrls.add(pageUrl);
+
+    // Live progress tick — write every page so UI can poll
+    await writeProgress(domain, {
+      status: "crawling", pagesChecked: idx, pagesTotal: urlsToCheck.length,
+      linksFound: discovered.length,
+      message: `Crawling page ${idx}/${urlsToCheck.length} — ${discovered.length} links verified so far`,
+    });
 
     try {
       const { html, status } = await fetchPage(pageUrl, 10000, { retries: 1 });
@@ -135,6 +164,14 @@ async function discoverBacklinks(domain, opts = {}) {
     discoveredCount:  totalNow,
     lastDiscoveredNew: discovered.length,
     updatedAt:        new Date().toISOString(),
+    discoveryProgress: {
+      status: "complete",
+      pagesChecked: urlsToCheck.length,
+      pagesTotal: urlsToCheck.length,
+      linksFound: discovered.length,
+      message: `Discovery complete — ${discovered.length} new link(s) verified from ${urlsToCheck.length} pages`,
+      updatedAt: new Date().toISOString(),
+    },
   }, { merge: true });
 
   return {
