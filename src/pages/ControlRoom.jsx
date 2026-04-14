@@ -105,7 +105,7 @@ export default function ControlRoom({ dark, clientId, clientName }) {
         )}
       </div>
 
-      {/* ── CMO Decision Banner — always visible at top ── */}
+      {/* ── CMO Decision Banner — action-oriented: THIS → WHY → FIX → ASK ── */}
       {hasCMO && (
         <div style={{
           marginBottom: 20,
@@ -113,56 +113,85 @@ export default function ControlRoom({ dark, clientId, clientName }) {
           border:     `1px solid ${B}44`,
           borderLeft: `4px solid ${B}`,
           borderRadius: 12,
-          padding: "16px 20px",
+          padding: "18px 22px",
         }}>
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:12 }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:16 }}>
             <div style={{ flex:1, minWidth:0 }}>
-              <div style={{ fontSize:10, fontWeight:700, color:B, textTransform:"uppercase", letterSpacing:1, marginBottom:6 }}>
-                🧠 Agent Decision — {cmo.confidence ? `${Math.round(cmo.confidence * 100)}% confidence` : ""}
-                {cmo.decidedAt && <span style={{ color:txt2, fontWeight:400, marginLeft:8 }}>· {new Date(cmo.decidedAt).toLocaleDateString()}</span>}
+              {/* Badge row */}
+              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
+                <span style={{ fontSize:10, fontWeight:800, color:"#fff", background:B, textTransform:"uppercase", letterSpacing:1, padding:"3px 8px", borderRadius:4 }}>
+                  🧠 AI Agent Recommendation
+                </span>
+                {cmo.confidence != null && (
+                  <span style={{ fontSize:10, color:txt2, fontWeight:600 }}>
+                    {Math.round(cmo.confidence * 100)}% confidence
+                  </span>
+                )}
+                {cmo.decidedAt && (
+                  <span style={{ fontSize:10, color:txt2 }}>· {new Date(cmo.decidedAt).toLocaleDateString()}</span>
+                )}
               </div>
-              <div style={{ fontSize:14, fontWeight:700, color:txt, marginBottom:6 }}>
-                {cmo.decision}
-              </div>
-              <div style={{ fontSize:12, color:txt2, lineHeight:1.6 }}>{cmo.reasoning}</div>
 
-              {/* KPI impact */}
+              {/* WHAT to do — the headline action */}
+              <div style={{ fontSize:16, fontWeight:800, color:txt, marginBottom:8, lineHeight:1.4 }}>
+                → {cmo.decision}
+              </div>
+
+              {/* WHY it matters — the proof */}
+              <div style={{ fontSize:12, color:txt2, lineHeight:1.65, marginBottom:12 }}>
+                <span style={{ color:txt, fontWeight:700 }}>Why: </span>{cmo.reasoning}
+              </div>
+
+              {/* EXPECTED IMPACT — what changes if we do this */}
               {cmo.kpiImpact?.length > 0 && (
-                <div style={{ display:"flex", gap:8, marginTop:10, flexWrap:"wrap" }}>
-                  {cmo.kpiImpact.map((k, i) => (
-                    <span key={i} style={{ fontSize:11, padding:"3px 10px", borderRadius:8, background:"#05966918", color:"#059669", fontWeight:600 }}>
-                      {k.kpi}: {k.expectedLift}
-                    </span>
-                  ))}
+                <div style={{ marginBottom:12 }}>
+                  <div style={{ fontSize:10, color:txt2, fontWeight:700, textTransform:"uppercase", letterSpacing:0.8, marginBottom:6 }}>Expected Impact</div>
+                  <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                    {cmo.kpiImpact.map((k, i) => (
+                      <div key={i} style={{ fontSize:11, padding:"5px 11px", borderRadius:8, background:"#05966918", border:"1px solid #05966933" }}>
+                        <span style={{ color:"#059669", fontWeight:800 }}>{k.kpi}</span>
+                        <span style={{ color:txt2 }}> → </span>
+                        <span style={{ color:txt, fontWeight:700 }}>{k.expectedLift}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
 
-              {/* Next agents */}
+              {/* HOW the agent will execute — transparency */}
               {cmo.nextAgents?.length > 0 && (
-                <div style={{ display:"flex", gap:6, marginTop:8, alignItems:"center" }}>
-                  <span style={{ fontSize:11, color:txt2 }}>Next:</span>
-                  {cmo.nextAgents.map(a => (
-                    <span key={a} style={{ fontSize:11, padding:"2px 8px", borderRadius:6, background:B+"18", color:B, fontWeight:700 }}>{a}</span>
+                <div style={{ fontSize:11, color:txt2, display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
+                  <span style={{ fontWeight:700 }}>The agent will run:</span>
+                  {cmo.nextAgents.map((a, i) => (
+                    <span key={a} style={{ fontSize:11, padding:"2px 9px", borderRadius:6, background:B+"18", color:B, fontWeight:700 }}>
+                      {a}{i < cmo.nextAgents.length - 1 ? " →" : ""}
+                    </span>
                   ))}
                 </div>
               )}
             </div>
 
-            {/* Approve button */}
+            {/* THE ASK — one-click approve */}
             {cmo.nextAgents?.length > 0 && (
-              <div style={{ flexShrink:0 }}>
+              <div style={{ flexShrink:0, display:"flex", flexDirection:"column", alignItems:"center", gap:6 }}>
                 {approved ? (
-                  <div style={{ fontSize:12, color:"#059669", fontWeight:700, padding:"8px 14px", background:"#05966914", borderRadius:8 }}>
-                    ✓ Queued
+                  <div style={{ fontSize:12, color:"#059669", fontWeight:800, padding:"12px 18px", background:"#05966914", border:"1px solid #05966933", borderRadius:10 }}>
+                    ✓ Executing
                   </div>
                 ) : (
-                  <button onClick={approveCMO} disabled={approving} style={{
-                    padding:"10px 18px", borderRadius:8, border:"none", background:B,
-                    color:"#fff", fontSize:12, fontWeight:700, cursor:approving?"not-allowed":"pointer",
-                    opacity:approving?0.7:1, whiteSpace:"nowrap",
-                  }}>
-                    {approving ? "..." : "Approve & Execute"}
-                  </button>
+                  <>
+                    <button onClick={approveCMO} disabled={approving} style={{
+                      padding:"12px 22px", borderRadius:10, border:"none", background:B,
+                      color:"#fff", fontSize:13, fontWeight:800, cursor:approving?"not-allowed":"pointer",
+                      opacity:approving?0.7:1, whiteSpace:"nowrap",
+                      boxShadow: `0 2px 8px ${B}44`,
+                    }}>
+                      {approving ? "Queuing…" : "✓ Approve & Execute"}
+                    </button>
+                    <div style={{ fontSize:9, color:txt2, textAlign:"center" }}>
+                      or review in Decision tab
+                    </div>
+                  </>
                 )}
               </div>
             )}
