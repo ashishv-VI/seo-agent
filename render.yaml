@@ -26,7 +26,7 @@ services:
   - type: web
     name: seo-agent-frontend
     runtime: static
-    buildCommand: npm install && npm run build
+    buildCommand: npm install && npm run build && cp dist/index.html dist/200.html && mkdir -p dist/audit && cp dist/index.html dist/audit/index.html && mkdir -p dist/portal && cp dist/index.html dist/portal/index.html
     staticPublishPath: dist
     # SPA rewrite: all paths serve index.html so React Router works
     # Covers /audit, /portal, and any future client-side routes
