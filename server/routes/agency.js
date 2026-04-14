@@ -73,10 +73,42 @@ router.get("/dashboard", verifyToken, async (req, res) => {
       })
     );
 
+    // ── Cross-client pattern stats (proves the agent learns) ─────────
+    // Aggregates global_patterns filtered to this agency owner → win rate per fixType
+    let globalPatterns = [];
+    try {
+      const patSnap = await db.collection("global_patterns")
+        .where("ownerId", "==", req.uid)
+        .limit(500).get();
+      const patterns = patSnap.docs.map(d => d.data());
+      const byType = {};
+      const clientsByType = {};
+      for (const p of patterns) {
+        const t = p.fixType || "other";
+        if (!byType[t]) { byType[t] = { improved: 0, total: 0 }; clientsByType[t] = new Set(); }
+        byType[t].total++;
+        if (p.outcome === "improved") byType[t].improved++;
+        if (p.clientId) clientsByType[t].add(p.clientId);
+      }
+      globalPatterns = Object.entries(byType)
+        .filter(([, c]) => c.total >= 2)
+        .map(([fixType, c]) => ({
+          fixType,
+          winRate: Math.round((c.improved / c.total) * 100),
+          sample: c.total,
+          clientCount: clientsByType[fixType].size,
+        }))
+        .sort((a, b) => b.winRate - a.winRate)
+        .slice(0, 6);
+    } catch (e) {
+      console.warn("[agency/dashboard] globalPatterns aggregation failed:", e.message);
+    }
+
     return res.json({
       clients:  enriched.sort((a, b) => (a.seoScore || 0) - (b.seoScore || 0)), // worst first
       summary,
       trends,
+      globalPatterns,
       generatedAt: new Date().toISOString(),
     });
   } catch (e) {

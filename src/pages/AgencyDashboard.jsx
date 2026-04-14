@@ -35,7 +35,17 @@ export default function AgencyDashboard({ dark, onClientSelect }) {
   if (error)   return <div style={{ padding:24, color:"#DC2626", fontSize:13 }}>{error}</div>;
   if (!data)   return null;
 
-  const { summary, clients, trends } = data;
+  const { summary, clients, trends, globalPatterns = [] } = data;
+
+  const fixTypeLabel = (t) => ({
+    meta_title:       "Meta / Title rewrites",
+    content_refresh:  "Content refreshes",
+    link_building:    "Link building",
+    schema:           "Schema markup",
+    technical_speed:  "Technical / Speed",
+    on_page:          "On-page fixes",
+    other:            "Other fixes",
+  }[t] || t);
 
   const sorted = [...(clients || [])].sort((a, b) => {
     if (sort === "score")  return (a.seoScore || 0) - (b.seoScore || 0);
@@ -92,6 +102,44 @@ export default function AgencyDashboard({ dark, onClientSelect }) {
                 <div style={{ width:8, height:8, borderRadius:2, background:c }} />{l}
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Cross-client learning — proves the agent learns */}
+      {globalPatterns.length > 0 && (
+        <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:12, padding:20, marginBottom:20 }}>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:4 }}>
+            <div style={{ fontSize:12, fontWeight:700, color:txt2, textTransform:"uppercase", letterSpacing:1 }}>
+              Agent Learning — Fix Success Rates
+            </div>
+            <div style={{ fontSize:10, color:txt2, background:bg3, padding:"3px 8px", borderRadius:6 }}>
+              Across your {summary.totalClients} clients
+            </div>
+          </div>
+          <div style={{ fontSize:12, color:txt2, marginBottom:14 }}>
+            Historical win rates from verified fixes — the CMO agent uses these to weight new decisions.
+          </div>
+          <div style={{ display:"grid", gap:10 }}>
+            {globalPatterns.map(p => {
+              const color = p.winRate >= 70 ? "#059669" : p.winRate >= 50 ? "#D97706" : "#DC2626";
+              return (
+                <div key={p.fixType} style={{ display:"grid", gridTemplateColumns:"1fr 60px", gap:12, alignItems:"center" }}>
+                  <div>
+                    <div style={{ display:"flex", justifyContent:"space-between", fontSize:12, marginBottom:4 }}>
+                      <span style={{ color:txt, fontWeight:600 }}>{fixTypeLabel(p.fixType)}</span>
+                      <span style={{ color:txt2 }}>
+                        {p.sample} fix{p.sample === 1 ? "" : "es"} · {p.clientCount} client{p.clientCount === 1 ? "" : "s"}
+                      </span>
+                    </div>
+                    <div style={{ height:6, background:bg3, borderRadius:3, overflow:"hidden" }}>
+                      <div style={{ width:`${p.winRate}%`, height:"100%", background:color, transition:"width 0.4s" }} />
+                    </div>
+                  </div>
+                  <div style={{ fontSize:16, fontWeight:800, color, textAlign:"right" }}>{p.winRate}%</div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
