@@ -37,6 +37,15 @@ export default function AgencyDashboard({ dark, onClientSelect }) {
 
   const { summary, clients, trends, globalPatterns = [] } = data;
 
+  const currencySymbol = (cur) => ({ GBP: "£", USD: "$", EUR: "€", INR: "₹" }[cur] || cur + " ");
+  const fmtMoney = (v, cur = "GBP") => {
+    if (v == null || v === 0) return "—";
+    const sym = currencySymbol(cur);
+    if (v >= 1_000_000) return `${sym}${(v / 1_000_000).toFixed(1)}M`;
+    if (v >= 1_000)     return `${sym}${(v / 1_000).toFixed(1)}k`;
+    return `${sym}${v.toLocaleString()}`;
+  };
+
   const fixTypeLabel = (t) => ({
     meta_title:       "Meta / Title rewrites",
     content_refresh:  "Content refreshes",
@@ -48,9 +57,10 @@ export default function AgencyDashboard({ dark, onClientSelect }) {
   }[t] || t);
 
   const sorted = [...(clients || [])].sort((a, b) => {
-    if (sort === "score")  return (a.seoScore || 0) - (b.seoScore || 0);
-    if (sort === "alerts") return b.openAlerts - a.openAlerts;
-    if (sort === "fixes")  return b.fixesPushed - a.fixesPushed;
+    if (sort === "score")   return (a.seoScore || 0) - (b.seoScore || 0);
+    if (sort === "alerts")  return b.openAlerts - a.openAlerts;
+    if (sort === "fixes")   return b.fixesPushed - a.fixesPushed;
+    if (sort === "revenue") return (b.monthlyRevenueEstimate || 0) - (a.monthlyRevenueEstimate || 0);
     return a.name?.localeCompare(b.name);
   });
 
@@ -78,6 +88,8 @@ export default function AgencyDashboard({ dark, onClientSelect }) {
           { l:"Critical",          v: summary.critical,         c:"#DC2626"  },
           { l:"Open Alerts",       v: summary.totalOpenAlerts,  c: summary.totalOpenAlerts > 0 ? "#DC2626" : "#059669" },
           { l:"Fixes Pushed",      v: summary.totalFixesPushed, c:"#059669"  },
+          { l:"Monthly Revenue",   v: fmtMoney(summary.totalMonthlyRevenue, summary.currency), c:"#059669"  },
+          { l:"Gained from Fixes", v: fmtMoney(summary.totalRevenueGained, summary.currency), c: B },
           { l:"Pipeline Complete", v: summary.pipelineComplete, c: B         },
         ].map(s => (
           <div key={s.l} style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, padding:"12px 14px", borderTop:`3px solid ${s.c}` }}>
@@ -147,8 +159,8 @@ export default function AgencyDashboard({ dark, onClientSelect }) {
       {/* Client table */}
       <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:12, overflow:"hidden", marginBottom:20 }}>
         {/* Table header with sort */}
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 80px 90px 80px 80px 100px", gap:0, padding:"10px 16px", borderBottom:`1px solid ${bdr}`, background:bg3 }}>
-          {[["name","Client"], ["score","Score"], ["status","Status"], ["alerts","Alerts"], ["fixes","Fixes"], ["pipeline","Pipeline"]].map(([key, label]) => (
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 80px 90px 80px 80px 100px 100px", gap:0, padding:"10px 16px", borderBottom:`1px solid ${bdr}`, background:bg3 }}>
+          {[["name","Client"], ["score","Score"], ["status","Status"], ["alerts","Alerts"], ["fixes","Fixes"], ["revenue","Revenue/mo"], ["pipeline","Pipeline"]].map(([key, label]) => (
             <div key={key} onClick={() => setSort(key)}
               style={{ fontSize:11, fontWeight:700, color: sort===key ? B : txt2, textTransform:"uppercase", letterSpacing:0.8, cursor:"pointer", userSelect:"none" }}>
               {label} {sort===key ? "↑" : ""}
@@ -162,7 +174,7 @@ export default function AgencyDashboard({ dark, onClientSelect }) {
           sorted.map((client, i) => (
             <div key={client.id}
               onClick={() => onClientSelect?.(client.id)}
-              style={{ display:"grid", gridTemplateColumns:"1fr 80px 90px 80px 80px 100px", gap:0,
+              style={{ display:"grid", gridTemplateColumns:"1fr 80px 90px 80px 80px 100px 100px", gap:0,
                 padding:"12px 16px", borderBottom: i < sorted.length-1 ? `1px solid ${bdr}` : "none",
                 cursor: onClientSelect ? "pointer" : "default",
                 transition:"background 0.1s" }}
@@ -199,6 +211,17 @@ export default function AgencyDashboard({ dark, onClientSelect }) {
                 <span style={{ fontSize:13, fontWeight:600, color:txt }}>
                   {client.fixesPushed > 0 ? `✅ ${client.fixesPushed}` : "—"}
                 </span>
+              </div>
+
+              <div style={{ display:"flex", flexDirection:"column", justifyContent:"center" }}>
+                <span style={{ fontSize:13, fontWeight:700, color:"#059669" }}>
+                  {fmtMoney(client.monthlyRevenueEstimate, client.currency)}
+                </span>
+                {client.revenueGainedFromFixes > 0 && (
+                  <span style={{ fontSize:10, color: B, fontWeight:600 }}>
+                    +{fmtMoney(client.revenueGainedFromFixes, client.currency)} gained
+                  </span>
+                )}
               </div>
 
               <div style={{ display:"flex", alignItems:"center" }}>

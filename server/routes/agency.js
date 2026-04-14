@@ -3,6 +3,7 @@ const router     = express.Router();
 const { db }     = require("../config/firebase");
 const { verifyToken } = require("../middleware/auth");
 const { getLatestScore, getScoreHistory } = require("../utils/scoreCalculator");
+const { calculateROI } = require("../utils/roiTracker");
 
 /**
  * Agency Dashboard API (Sprint 5)
@@ -20,12 +21,13 @@ router.get("/dashboard", verifyToken, async (req, res) => {
     const clients = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     if (clients.length === 0) return res.json({ clients: [], summary: {}, trends: [] });
 
-    // Fetch latest score + alert count per client in parallel
+    // Fetch latest score + alert count + ROI per client in parallel
     const enriched = await Promise.all(clients.map(async client => {
-      const [latestScore, alertSnap, pushSnap] = await Promise.all([
+      const [latestScore, alertSnap, pushSnap, roi] = await Promise.all([
         getLatestScore(client.id).catch(() => null),
         db.collection("alerts").where("clientId","==",client.id).where("resolved","==",false).limit(20).get().catch(() => null),
         db.collection("wp_push_log").where("clientId","==",client.id).limit(100).get().catch(() => null),
+        calculateROI(client.id).catch(() => null),
       ]);
 
       const openAlerts = alertSnap ? alertSnap.size : 0;
@@ -41,6 +43,11 @@ router.get("/dashboard", verifyToken, async (req, res) => {
         openAlerts,
         fixesPushed,
         lastPipeline: client.pipelineCompletedAt || null,
+        // ROI fields for agency head view
+        monthlyRevenueEstimate: roi?.revenue?.currentMonthlyEstimate || 0,
+        revenueGainedFromFixes: roi?.revenue?.gainedFromFixes || 0,
+        monthlyTrafficEstimate: roi?.traffic?.currentMonthlyEstimate || 0,
+        currency:               roi?.currency || "GBP",
         status: score == null ? "no-data"
               : score >= 75 ? "healthy"
               : score >= 50 ? "needs-attention"
@@ -63,6 +70,11 @@ router.get("/dashboard", verifyToken, async (req, res) => {
       totalOpenAlerts: enriched.reduce((s, c) => s + c.openAlerts, 0),
       totalFixesPushed:enriched.reduce((s, c) => s + c.fixesPushed, 0),
       pipelineComplete:enriched.filter(c => c.pipelineStatus === "complete").length,
+      // ROI roll-up across all clients
+      totalMonthlyRevenue:  enriched.reduce((s, c) => s + (c.monthlyRevenueEstimate || 0), 0),
+      totalRevenueGained:   enriched.reduce((s, c) => s + (c.revenueGainedFromFixes || 0), 0),
+      totalMonthlyTraffic:  enriched.reduce((s, c) => s + (c.monthlyTrafficEstimate || 0), 0),
+      currency:             enriched.find(c => c.currency)?.currency || "GBP",
     };
 
     // Score history for each client (last 8 weeks for sparklines)
