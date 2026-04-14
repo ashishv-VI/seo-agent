@@ -403,65 +403,97 @@ async function runA2(clientId) {
 
   // ── Write per-page docs to subcollection (non-blocking) ──────────────────
   // Each URL gets its own Firestore doc: audits/{clientId}/pages/{urlHash}
-  // This enables site-wide pattern detection without hitting the 1MB doc limit
+  // This enables site-wide pattern detection without hitting the 1MB doc limit.
+  // Chunked into batches of 490 so 500+ page crawls fully persist.
   if (pageAudits.length > 5) {
     const { db: fdb } = require("../config/firebase");
     const crawledAt = new Date().toISOString();
-    const batch = fdb.batch();
-    let batchCount = 0;
+    const BATCH_SIZE = 490; // Firestore batch limit is 500
 
-    for (const page of pageAudits) {
-      const urlHash = Buffer.from(page.url || "").toString("base64").replace(/[/+=]/g, "_").slice(0, 50);
-      const ref = fdb.collection("audits").doc(clientId).collection("pages").doc(urlHash);
-      batch.set(ref, {
-        url:             page.url,
-        title:           page.title   || null,
-        metaDescription: page.metaDescription || null,
-        h1:              page.h1       || null,
-        hasH1:           !!page.hasH1,
-        hasMeta:         !!(page.hasMeta || page.metaDescription),
-        hasCanonical:    !!page.hasCanonical,
-        hasSchema:       !!page.hasSchema,
-        wordCount:       page.wordCount || 0,
-        altMissing:      page.altMissing || 0,
-        responseTime:    page.responseTime || null,
-        statusCode:      page.statusCode || 200,
-        h2Count:         page.h2Count  || 0,
-        h3Count:         page.h3Count  || 0,
-        schemas:         page.schemas  || page.schemaTypes || [],
-        noindex:         !!page.noindex,
-        freshness:       page.freshness || null,
-        issueCount:      (page.issues || []).length,
-        issues:          (page.issues || []).slice(0, 10), // cap to stay under 1MB per doc
-        clientId,
-        crawledAt,
-      });
-      batchCount++;
-      // Firestore batch limit is 500
-      if (batchCount >= 490) break;
-    }
+    // First, clear any stale pages from a previous crawl that aren't in the new set
+    // (avoids pattern detection seeing deleted pages as still-broken)
+    const newUrlHashes = new Set(
+      pageAudits.map(p => Buffer.from(p.url || "").toString("base64").replace(/[/+=]/g, "_").slice(0, 50))
+    );
 
-    batch.commit().then(async () => {
-      const { saveState: ss } = require("../shared-state/stateManager");
-
-      // Run pattern detection and cache it
+    (async () => {
       try {
-        const { detectSitePatterns } = require("../utils/auditPatterns");
-        const patterns = await detectSitePatterns(clientId);
-        await ss(clientId, "A2_patterns", patterns);
-      } catch { /* non-blocking */ }
+        // Delete stale pages (those present in subcollection but not in this crawl)
+        try {
+          const existing = await fdb.collection("audits").doc(clientId).collection("pages").get();
+          const staleDocs = existing.docs.filter(d => !newUrlHashes.has(d.id));
+          if (staleDocs.length > 0) {
+            for (let i = 0; i < staleDocs.length; i += BATCH_SIZE) {
+              const deleteBatch = fdb.batch();
+              staleDocs.slice(i, i + BATCH_SIZE).forEach(d => deleteBatch.delete(d.ref));
+              await deleteBatch.commit();
+            }
+            console.log(`[A2] Cleared ${staleDocs.length} stale page docs for ${clientId}`);
+          }
+        } catch (e) {
+          console.warn(`[A2] Stale cleanup failed for ${clientId}:`, e.message);
+        }
 
-      // Run per-page scoring and cache it
-      try {
-        const { scoreAllPages } = require("../utils/pageScorer");
-        const brief = await require("../shared-state/stateManager").getState(clientId, "A1_brief").catch(() => null);
-        const targetKeywords = (brief?.primaryKeywords || []).slice(0, 5);
-        const pageScores = await scoreAllPages(clientId, targetKeywords);
-        await ss(clientId, "A2_page_scores", pageScores);
-        console.log(`[A2] Page scoring complete: ${pageScores.pages?.length} pages, avg score ${pageScores.summary?.avgScore}`);
-      } catch { /* non-blocking */ }
+        // Chunk writes — handles 500+ pages
+        let written = 0;
+        for (let i = 0; i < pageAudits.length; i += BATCH_SIZE) {
+          const chunk = pageAudits.slice(i, i + BATCH_SIZE);
+          const batch = fdb.batch();
+          for (const page of chunk) {
+            const urlHash = Buffer.from(page.url || "").toString("base64").replace(/[/+=]/g, "_").slice(0, 50);
+            const ref = fdb.collection("audits").doc(clientId).collection("pages").doc(urlHash);
+            batch.set(ref, {
+              url:             page.url,
+              title:           page.title   || null,
+              metaDescription: page.metaDescription || null,
+              h1:              page.h1       || null,
+              hasH1:           !!page.hasH1,
+              hasMeta:         !!(page.hasMeta || page.metaDescription),
+              hasCanonical:    !!page.hasCanonical,
+              hasSchema:       !!page.hasSchema,
+              wordCount:       page.wordCount || 0,
+              altMissing:      page.altMissing || 0,
+              responseTime:    page.responseTime || null,
+              statusCode:      page.statusCode || 200,
+              h2Count:         page.h2Count  || 0,
+              h3Count:         page.h3Count  || 0,
+              schemas:         page.schemas  || page.schemaTypes || [],
+              noindex:         !!page.noindex,
+              freshness:       page.freshness || null,
+              issueCount:      (page.issues || []).length,
+              issues:          (page.issues || []).slice(0, 10), // cap to stay under 1MB per doc
+              clientId,
+              crawledAt,
+            });
+          }
+          await batch.commit();
+          written += chunk.length;
+        }
+        console.log(`[A2] Wrote ${written}/${pageAudits.length} page docs to subcollection for ${clientId}`);
 
-    }).catch(() => {});
+        // Run pattern detection across ALL stored pages (not just top 80)
+        const { saveState: ss } = require("../shared-state/stateManager");
+        try {
+          const { detectSitePatterns } = require("../utils/auditPatterns");
+          const patterns = await detectSitePatterns(clientId);
+          await ss(clientId, "A2_patterns", patterns);
+        } catch (e) {
+          console.warn(`[A2] Pattern detection failed for ${clientId}:`, e.message);
+        }
+
+        // Run per-page scoring and cache it
+        try {
+          const { scoreAllPages } = require("../utils/pageScorer");
+          const brief = await require("../shared-state/stateManager").getState(clientId, "A1_brief").catch(() => null);
+          const targetKeywords = (brief?.primaryKeywords || []).slice(0, 5);
+          const pageScores = await scoreAllPages(clientId, targetKeywords);
+          await ss(clientId, "A2_page_scores", pageScores);
+          console.log(`[A2] Page scoring complete: ${pageScores.pages?.length} pages, avg score ${pageScores.summary?.avgScore}`);
+        } catch { /* non-blocking */ }
+      } catch (e) {
+        console.error(`[A2] Subcollection write failed for ${clientId}:`, e.message);
+      }
+    })();
   }
 
   // Emit tool suggestion for missing sitemap (non-blocking)
