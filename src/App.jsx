@@ -96,8 +96,8 @@ function MainApp({ onLogout }) {
   const [showSettings, setShowSettings] = useState(false);
   const [count, setCount]     = useState(0);
   const [dark, setDark]       = useState(true);
-  const [keys, setKeys]       = useState({ groq:"", gemini:"", google:"", openrouter:"", gaPropertyId:"", seranking:"", serpapi:"", semrush:"", dataforseo:"" });
-  const [tmpKeys, setTmpKeys] = useState({ groq:"", gemini:"", google:"", openrouter:"", gaPropertyId:"", seranking:"", serpapi:"", semrush:"", dataforseo:"" });
+  const [keys, setKeys]       = useState({ groq:"", gemini:"", google:"", openrouter:"", gaPropertyId:"", seranking:"", serpapi:"", dataforseo:"" });
+  const [tmpKeys, setTmpKeys] = useState({ groq:"", gemini:"", google:"", openrouter:"", gaPropertyId:"", seranking:"", serpapi:"", dataforseo:"" });
   const [brand, setBrand]     = useState({ agencyName:"", primaryColor:"#443DCB", logoUrl:"" });
   const [tmpBrand, setTmpBrand] = useState({ agencyName:"", primaryColor:"#443DCB", logoUrl:"" });
   const [copied, setCopied]   = useState(null);
@@ -137,7 +137,6 @@ function MainApp({ onLogout }) {
         gaPropertyId:k.gaPropertyId|| prev.gaPropertyId,
         seranking:   k.seranking   ? MASK : "",
         serpapi:     k.serpapi     ? MASK : "",
-        semrush:     k.semrush     ? MASK : "",
         dataforseo:  k.dataforseo  ? MASK : "",
       }));
       if (data.brand) {
@@ -207,7 +206,7 @@ function MainApp({ onLogout }) {
       const token   = await user.getIdToken();
       const MASK    = "••••••••";
       const payload = {};
-      const fields  = ["groq","gemini","google","openrouter","gaPropertyId","seranking","serpapi","semrush","dataforseo"];
+      const fields  = ["groq","gemini","google","openrouter","gaPropertyId","seranking","serpapi","dataforseo"];
       fields.forEach(k => { if (tmpKeys[k] && tmpKeys[k] !== MASK) payload[k] = tmpKeys[k]; });
       if (tmpBrand.agencyName || tmpBrand.primaryColor || tmpBrand.logoUrl) {
         payload._brand = tmpBrand;
@@ -811,10 +810,6 @@ function MainApp({ onLogout }) {
                 <div>
                   <label style={s.label}>SE Ranking Key</label>
                   <input type="password" value={tmpKeys.seranking} onChange={e=>setTmpKeys(k=>({...k,seranking:e.target.value}))} placeholder="seranking.com → API" style={s.inp} />
-                </div>
-                <div>
-                  <label style={s.label}>Semrush API Key</label>
-                  <input type="password" value={tmpKeys.semrush} onChange={e=>setTmpKeys(k=>({...k,semrush:e.target.value}))} placeholder="semrush.com → API" style={s.inp} />
                 </div>
                 <div>
                   <label style={s.label}>DataForSEO <span style={{ color:txt2 }}>(login:password)</span></label>

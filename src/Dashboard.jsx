@@ -59,9 +59,8 @@ export default function Dashboard({ onToolSelect, count, keys, dark, onPageSelec
   const hasOpenRouter = !!keys?.openrouter;
   const hasSerpApi    = !!keys?.serpapi;
   const hasSeRanking  = !!keys?.seranking;
-  const hasSemrush    = !!keys?.semrush;
   const hasDataForSEO = !!keys?.dataforseo;
-  const allApis       = [hasGroq, hasGemini, hasGoogle, hasOpenRouter, hasSerpApi, hasSeRanking, hasSemrush, hasDataForSEO];
+  const allApis       = [hasGroq, hasGemini, hasGoogle, hasOpenRouter, hasSerpApi, hasSeRanking, hasDataForSEO];
   const apiCount      = allApis.filter(Boolean).length;
   const apiTotal      = allApis.length;
 
@@ -83,7 +82,6 @@ export default function Dashboard({ onToolSelect, count, keys, dark, onPageSelec
     { name:"OpenRouter",  desc:"DeepSeek + Mistral",          ok:hasOpenRouter, color:"#A855F7" },
     { name:"SerpAPI",     desc:"Live rank checking",          ok:hasSerpApi,    color:"#0891B2" },
     { name:"SE Ranking",  desc:"Keyword volume + KD + CPC",   ok:hasSeRanking,  color:"#443DCB" },
-    { name:"Semrush",     desc:"Keyword + competitor data",   ok:hasSemrush,    color:"#FF6B35" },
     { name:"DataForSEO",  desc:"Bulk SERP positions",         ok:hasDataForSEO, color:"#059669" },
   ];
 

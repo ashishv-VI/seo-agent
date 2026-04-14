@@ -5,7 +5,7 @@ const { verifyToken }          = require("../middleware/auth");
 
 router.post("/save", verifyToken, async (req, res) => {
   try {
-    const { groq, gemini, google, openrouter, serpapi, perplexity, seranking, dataforseo, semrush, gaPropertyId, _brand } = req.body;
+    const { groq, gemini, google, openrouter, serpapi, seranking, dataforseo, gaPropertyId, _brand } = req.body;
     const update = {
       apiKeys: {
         ...(groq         && { groq }),
@@ -13,10 +13,8 @@ router.post("/save", verifyToken, async (req, res) => {
         ...(google       && { google }),
         ...(openrouter   && { openrouter }),
         ...(serpapi      && { serpapi }),
-        ...(perplexity   && { perplexity }),
         ...(seranking    && { seranking }),
         ...(dataforseo   && { dataforseo }),
-        ...(semrush      && { semrush }),
         ...(gaPropertyId && { gaPropertyId }),
       },
       updatedAt: FieldValue.serverTimestamp(),
