@@ -68,6 +68,14 @@ app.get("/api/presales/audit", async (req, res) => {
   try {
     const url = req.query.url;
     if (!url) return res.status(400).json({ error: "url query param required" });
+
+    // SSRF protection: block private/internal IPs and metadata endpoints
+    const { isPrivateUrl } = require("./utils/urlSafety");
+    const normalizedUrl = url.startsWith("http") ? url : `https://${url}`;
+    if (isPrivateUrl(normalizedUrl)) {
+      return res.status(400).json({ error: "URL points to a private or internal address" });
+    }
+
     const { runPreSalesAudit } = require("./agents/A21_preSales");
     const result = await runPreSalesAudit(url);
     return res.json(result);
@@ -90,16 +98,7 @@ app.get("/health", (req, res) => {
   res.json({ status: "ok" });
 });
 
-// ── Firestore Test (temporary debug) ───────────────
-app.get("/test-db", async (req, res) => {
-  try {
-    const { db } = require("./config/firebase");
-    await db.collection("_test").doc("ping").set({ ping: true, t: new Date().toISOString() });
-    res.json({ status: "✅ Firestore working!" });
-  } catch (e) {
-    res.json({ status: "❌ Firestore FAILED", error: e.message, code: e.code });
-  }
-});
+// /test-db endpoint removed — was a debug route that wrote to Firestore with no auth
 
 // ── API Routes ─────────────────────────────────────
 app.use("/api/auth",         authLimiter,  authRoutes);

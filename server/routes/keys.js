@@ -38,9 +38,17 @@ router.get("/get", verifyToken, async (req, res) => {
   }
 });
 
+const ALLOWED_KEY_NAMES = new Set([
+  "groq", "gemini", "google", "openrouter", "serpapi",
+  "seranking", "dataforseo", "gaPropertyId",
+]);
+
 router.delete("/:keyName", verifyToken, async (req, res) => {
   try {
     const { keyName } = req.params;
+    if (!ALLOWED_KEY_NAMES.has(keyName)) {
+      return res.status(400).json({ error: `Invalid key name: ${keyName}` });
+    }
     await db.collection("users").doc(req.uid).update({
       [`apiKeys.${keyName}`]: FieldValue.delete(),
     });
