@@ -123,8 +123,9 @@ export default function ControlRoom({ dark, clientId, clientName }) {
                   🧠 AI Agent Recommendation
                 </span>
                 {cmo.confidence != null && (
-                  <span style={{ fontSize:10, color:txt2, fontWeight:600 }}>
+                  <span style={{ fontSize:10, color:txt2, fontWeight:600 }} title={cmo.confidenceReasoning || ""}>
                     {Math.round(cmo.confidence * 100)}% confidence
+                    {cmo.confidenceReasoning && <span style={{ marginLeft:4, opacity:0.7 }}>ⓘ</span>}
                   </span>
                 )}
                 {cmo.decidedAt && (

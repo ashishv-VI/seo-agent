@@ -98,6 +98,13 @@ async function runCMO(clientId, keys) {
     decision = ruleBasedDecision(signals, brief);
   }
 
+  // ── Reweight confidence based on historical outcomes ──
+  // If the LLM proposes an action that has historical data, blend its confidence
+  // with the actual win rate from global_patterns + client_memory.
+  const confidenceAdjustment = reweightConfidence(decision, patternStats);
+  decision.confidence = confidenceAdjustment.confidence;
+  decision.confidenceReasoning = confidenceAdjustment.reasoning;
+
   // ── Schedule next agents ──────────────────────────
   const nextAgents = (decision.nextAgents || []).slice(0, 3);
   if (nextAgents.length > 0) {
@@ -118,6 +125,7 @@ async function runCMO(clientId, keys) {
     reasoning:   decision.reasoning   || "Insufficient data for a specific recommendation",
     nextAgents,
     confidence:  decision.confidence  || 0.7,
+    confidenceReasoning: decision.confidenceReasoning || null,
     kpiImpact:   decision.kpiImpact   || [],
     signals,
     patternStats,
@@ -173,6 +181,58 @@ function extractSignals({ brief, audit, keywords, competitor, onpage, technical,
 }
 
 // ── Cross-client pattern summary for CMO prompt ───
+// Reweight LLM confidence using historical win rates + this client's past failures
+function reweightConfidence(decision, patternStats) {
+  const llmConf = Math.max(0, Math.min(1, decision.confidence || 0.7));
+  const nextAgents = decision.nextAgents || [];
+  const decisionText = (decision.decision || "").toLowerCase();
+
+  // Map decision keywords → fix types we track in global_patterns
+  const fixTypeMap = [
+    { kw: ["meta", "title", "ctr"],          fixType: "meta_title" },
+    { kw: ["content", "refresh", "rewrite"], fixType: "content_refresh" },
+    { kw: ["link", "backlink", "outreach"],  fixType: "link_building" },
+    { kw: ["schema", "structured"],          fixType: "schema" },
+    { kw: ["cwv", "pagespeed", "performance", "speed"], fixType: "technical_speed" },
+    { kw: ["h1", "heading"],                 fixType: "on_page" },
+  ];
+  const matched = fixTypeMap.find(m => m.kw.some(k => decisionText.includes(k)));
+  const fixType = matched?.fixType;
+
+  if (!fixType) {
+    return { confidence: llmConf, reasoning: "LLM confidence (no historical match)" };
+  }
+
+  // Look up win rate in ownAgency first, then crossAgency
+  const all = [...(patternStats.ownAgency || []), ...(patternStats.crossAgency || [])];
+  const match = all.find(p => p.fixType === fixType);
+
+  // Check this client's own failure list
+  const failedHere = (patternStats.thisClient?.failed || []).some(f =>
+    f && f.toLowerCase().includes(fixType.split("_")[0])
+  );
+
+  if (failedHere) {
+    return {
+      confidence: Math.max(0.35, llmConf - 0.25),
+      reasoning: `Downweighted: ${fixType} previously failed for this client`,
+    };
+  }
+
+  if (match && match.sample >= 3) {
+    const histRate = match.winRate / 100;
+    // Blend LLM confidence with historical rate (weighted by sample size)
+    const weight = Math.min(1, match.sample / 10);
+    const blended = (llmConf * (1 - weight)) + (histRate * weight);
+    return {
+      confidence: Math.round(blended * 100) / 100,
+      reasoning: `Blended with ${match.winRate}% historical win rate (n=${match.sample})`,
+    };
+  }
+
+  return { confidence: llmConf, reasoning: "LLM confidence (insufficient history)" };
+}
+
 // Structured stats for the UI — returns { ownAgency: [], crossAgency: [], thisClient: {} }
 function buildPatternStats(globalPatterns, clientMemory, businessType = "") {
   const stats = { ownAgency: [], crossAgency: [], thisClient: { worked: [], failed: [] }, businessType };
