@@ -28,6 +28,12 @@ services:
     runtime: static
     buildCommand: npm install && npm run build
     staticPublishPath: dist
+    # SPA rewrite: all paths serve index.html so React Router works
+    # Covers /audit, /portal, and any future client-side routes
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
     envVars:
       - key: VITE_API_URL
         value: https://seo-agent-backend-8m1z.onrender.com
