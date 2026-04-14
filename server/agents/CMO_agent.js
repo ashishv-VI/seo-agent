@@ -18,6 +18,7 @@ const { db }                  = require("../config/firebase");
  * Returns: { decision, reasoning, nextAgents[], confidence, kpiImpact }
  */
 async function runCMO(clientId, keys) {
+  try {
   // Load all available pipeline data
   const [brief, audit, keywords, competitor, onpage, technical, geo, report, rankings] = await Promise.all([
     getState(clientId, "A1_brief").catch(() => null),
@@ -134,6 +135,10 @@ async function runCMO(clientId, keys) {
 
   await saveState(clientId, "CMO_decision", result);
   return { success: true, cmo: result };
+  } catch (e) {
+    console.error(`[CMO] Decision failed for ${clientId}:`, e.message);
+    return { success: false, error: e.message };
+  }
 }
 
 // ── Signal extraction (rule-based, no LLM) ────────

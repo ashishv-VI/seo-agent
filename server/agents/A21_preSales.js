@@ -11,7 +11,8 @@
 const SKIP_EXTENSIONS = /\.(css|js|ico|png|jpg|jpeg|gif|svg|webp|woff|woff2|ttf|pdf|zip|xml|json|mp4)(\?.*)?$/i;
 
 async function runPreSalesAudit(url) {
-  if (!url) throw new Error("URL required");
+  try {
+  if (!url) return { success: false, error: "URL required" };
   const siteUrl = url.startsWith("http") ? url : `https://${url}`;
 
   const issues  = [];
@@ -52,6 +53,7 @@ async function runPreSalesAudit(url) {
   }
 
   return {
+    success: true,
     url: siteUrl,
     estimatedScore: score,
     grade: score >= 80 ? "B+" : score >= 60 ? "C" : score >= 40 ? "D" : "F",
@@ -64,6 +66,10 @@ async function runPreSalesAudit(url) {
     hook: buildHook(score, top3, siteUrl),
     cta: "Run full 8-agent AI pipeline to get a complete 50-page audit with fix plan →",
   };
+  } catch (e) {
+    console.error(`[A21] Pre-sales audit failed for ${url}:`, e.message);
+    return { success: false, error: e.message };
+  }
 }
 
 async function checkAccessibility(siteUrl, checks, issues) {

@@ -10,6 +10,7 @@ const { getState, saveState } = require("../shared-state/stateManager");
  * that need re-running before trust.
  */
 async function runA17(clientId) {
+  try {
   const agents = ["A1_brief","A2_audit","A3_keywords","A4_competitor","A5_content","A6_onpage","A7_technical","A8_geo","A9_report"];
 
   const reviews = await Promise.all(agents.map(async key => {
@@ -38,6 +39,10 @@ async function runA17(clientId) {
 
   await saveState(clientId, "A17_review", result);
   return { success: true, review: result };
+  } catch (e) {
+    console.error(`[A17] Review failed for ${clientId}:`, e.message);
+    return { success: false, error: e.message };
+  }
 }
 
 function reviewAgent(key, data) {

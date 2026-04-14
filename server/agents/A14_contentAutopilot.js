@@ -24,6 +24,7 @@ const wp                       = require("../utils/wpConnector");
  * @param {number} maxArticles — max articles to generate in one run (default 3)
  */
 async function runA14(clientId, keys, maxArticles = 3) {
+  try {
   if (!keys?.groq && !keys?.gemini) {
     return { success: false, error: "LLM key required (Groq or Gemini) — add in Settings" };
   }
@@ -213,6 +214,10 @@ Return ONLY valid JSON:
     articles: created,
     message: `Created ${created.length} draft article(s) in WordPress`,
   };
+  } catch (e) {
+    console.error(`[A14] Content autopilot failed for ${clientId}:`, e.message);
+    return { success: false, error: e.message };
+  }
 }
 
 /**

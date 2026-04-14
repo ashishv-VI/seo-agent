@@ -112,12 +112,15 @@ export default function AlertCenter({ dark, clientId }) {
 
   async function load() {
     setLoading(true);
-    const token = await getToken();
-    const res   = await fetch(`${API}/api/agents/${clientId}/alerts`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    const data = await res.json();
-    setAlerts(data.alerts || []);
+    try {
+      const token = await getToken();
+      const res   = await fetch(`${API}/api/agents/${clientId}/alerts`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) { setLoading(false); return; }
+      const data = await res.json();
+      setAlerts(data.alerts || []);
+    } catch (e) { /* silent — alerts will remain empty */ }
     setLoading(false);
   }
 

@@ -13,6 +13,7 @@ const { getTopTasks }                                  = require("../utils/taskQ
 
 // ── Generate Full Report ───────────────────────────
 async function generateReport(clientId, keys, gscToken = null) {
+  try {
   const brief      = await getState(clientId, "A1_brief");
   const audit      = await getState(clientId, "A2_audit");
   const keywords   = await getState(clientId, "A3_keywords");
@@ -188,10 +189,15 @@ Write an 8-step SEO report. Return ONLY valid JSON:
   } catch { /* non-blocking */ }
 
   return { success: true, report: result };
+  } catch (e) {
+    console.error(`[A9] Report generation failed for ${clientId}:`, e.message);
+    return { success: false, error: e.message };
+  }
 }
 
 // ── Check Alerts (lightweight monitoring) ─────────
 async function checkAlerts(clientId, keys) {
+  try {
   const brief      = await getState(clientId, "A1_brief");
   const audit      = await getState(clientId, "A2_audit");
   const techData   = await getState(clientId, "A7_technical");
@@ -284,6 +290,10 @@ async function checkAlerts(clientId, keys) {
   }
 
   return { success: true, alertsCreated: saved.length, alerts };
+  } catch (e) {
+    console.error(`[A9] checkAlerts failed for ${clientId}:`, e.message);
+    return { success: false, error: e.message };
+  }
 }
 
 module.exports = { generateReport, checkAlerts };

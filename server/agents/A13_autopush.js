@@ -45,6 +45,7 @@ const WP_PUSHABLE_TYPES = new Set([
  * @param {object} keys — user API keys (not needed for WP push but part of standard signature)
  */
 async function runA13(clientId, keys) {
+  try {
   // Get client doc + WP integration config
   const clientDoc = await db.collection("clients").doc(clientId).get();
   if (!clientDoc.exists) return { success: false, error: "Client not found" };
@@ -281,6 +282,10 @@ async function runA13(clientId, keys) {
     failedItems: failed,
     message: `Pushed ${pushed.length} fix(es) to ${wpInt.url}`,
   };
+  } catch (e) {
+    console.error(`[A13] Auto-push failed for ${clientId}:`, e.message);
+    return { success: false, error: e.message };
+  }
 }
 
 /**

@@ -13,28 +13,34 @@ const { db }       = require("../config/firebase");
  */
 
 async function notifyFixPushed(clientId, fixDetails = {}) {
+  try {
   const brief  = await getState(clientId, "A1_brief").catch(() => null);
   const name   = brief?.businessName || "Client";
   const url    = brief?.websiteUrl   || "";
 
-  const message = fixDetails.fixes?.length
-    ? `${fixDetails.fixes.length} SEO fix(es) pushed to ${url}: ${fixDetails.fixes.map(f => f.type || f.title).slice(0, 3).join(", ")}${fixDetails.fixes.length > 3 ? " ..." : ""}`
+  const message = (fixDetails.fixes || []).length
+    ? `${(fixDetails.fixes || []).length} SEO fix(es) pushed to ${url}: ${(fixDetails.fixes || []).map(f => f.type || f.title).slice(0, 3).join(", ")}${(fixDetails.fixes || []).length > 3 ? " ..." : ""}`
     : `SEO fix pushed to ${url}`;
 
-  await createNotification(clientId, "fix_pushed", `✅ Fix Pushed — ${name}`, message, {
-    fixCount: fixDetails.fixes?.length || 1,
-    fixes:    fixDetails.fixes?.slice(0, 5) || [],
+  await createNotification(clientId, "fix_pushed", `Fix Pushed — ${name}`, message, {
+    fixCount: (fixDetails.fixes || []).length || 1,
+    fixes:    (fixDetails.fixes || []).slice(0, 5),
   });
 
   await sendEmail(clientId, {
-    subject: `✅ SEO Fix Applied — ${name}`,
+    subject: `SEO Fix Applied — ${name}`,
     body:    buildFixEmail(name, url, fixDetails.fixes || []),
   });
 
   return { success: true, notified: true };
+  } catch (e) {
+    console.error(`[A18] notifyFixPushed failed for ${clientId}:`, e.message);
+    return { success: false, error: e.message };
+  }
 }
 
 async function notifyReportReady(clientId) {
+  try {
   const brief  = await getState(clientId, "A1_brief").catch(() => null);
   const report = await getState(clientId, "A9_report").catch(() => null);
   const name   = brief?.businessName || "Client";
@@ -42,33 +48,42 @@ async function notifyReportReady(clientId) {
   const score = report?.scoreBreakdown?.overall;
   const scoreText = score != null ? ` — SEO Score: ${score}/100` : "";
 
-  await createNotification(clientId, "report_ready", `📊 Monthly Report Ready — ${name}`,
+  await createNotification(clientId, "report_ready", `Monthly Report Ready — ${name}`,
     `Your monthly SEO report is ready for review${scoreText}`, { score });
 
   await sendEmail(clientId, {
-    subject: `📊 Monthly SEO Report — ${name}`,
+    subject: `Monthly SEO Report — ${name}`,
     body:    buildReportEmail(name, score, report?.reportData),
   });
 
   return { success: true, notified: true };
+  } catch (e) {
+    console.error(`[A18] notifyReportReady failed for ${clientId}:`, e.message);
+    return { success: false, error: e.message };
+  }
 }
 
 async function notifyP1Alert(clientId, alerts = []) {
-  if (!alerts.length) return { success: true, notified: false };
+  try {
+  if (!(alerts || []).length) return { success: true, notified: false };
   const brief = await getState(clientId, "A1_brief").catch(() => null);
   const name  = brief?.businessName || "Client";
 
   await createNotification(clientId, "p1_alert",
-    `🚨 Critical SEO Issue — ${name}`,
-    `${alerts.length} critical issue(s) detected: ${alerts.map(a => a.title || a.type).slice(0, 2).join(", ")}`,
-    { alerts: alerts.slice(0, 5) });
+    `Critical SEO Issue — ${name}`,
+    `${(alerts || []).length} critical issue(s) detected: ${(alerts || []).map(a => a.title || a.type).slice(0, 2).join(", ")}`,
+    { alerts: (alerts || []).slice(0, 5) });
 
   await sendEmail(clientId, {
-    subject: `🚨 Action Required: Critical SEO Issue for ${name}`,
-    body:    buildAlertEmail(name, alerts),
+    subject: `Action Required: Critical SEO Issue for ${name}`,
+    body:    buildAlertEmail(name, alerts || []),
   });
 
   return { success: true, notified: true };
+  } catch (e) {
+    console.error(`[A18] notifyP1Alert failed for ${clientId}:`, e.message);
+    return { success: false, error: e.message };
+  }
 }
 
 // ── In-app notification ────────────────────────────
@@ -188,17 +203,18 @@ function buildAlertEmail(name, alerts) {
 
 // ── Investigation fix notification ────────────────
 async function notifyInvestigationFix(clientId, { alert, rootCause, fix, approvalId }) {
+  try {
   const brief  = await getState(clientId, "A1_brief").catch(() => null);
   const name   = brief?.businessName || "Client";
 
   await createNotification(clientId, "investigation_fix",
-    `🔍 Issue Diagnosed — Action Ready`,
-    `${(alert.type || "P1 Alert").replace(/_/g, " ")}: ${rootCause.slice(0, 100)}`,
-    { alertId: alert.id, approvalId, fix }
+    `Issue Diagnosed — Action Ready`,
+    `${((alert || {}).type || "P1 Alert").replace(/_/g, " ")}: ${(rootCause || "").slice(0, 100)}`,
+    { alertId: (alert || {}).id, approvalId, fix }
   );
 
   await sendEmail(clientId, {
-    subject: `🔍 SEO Issue Diagnosed — ${name}. Fix ready to approve.`,
+    subject: `SEO Issue Diagnosed — ${name}. Fix ready to approve.`,
     body: `
       <div style="font-family:sans-serif;max-width:600px;margin:0 auto;color:#1a1a18">
         <div style="background:#443DCB;padding:24px;border-radius:8px 8px 0 0">
@@ -219,6 +235,10 @@ async function notifyInvestigationFix(clientId, { alert, rootCause, fix, approva
   });
 
   return { success: true };
+  } catch (e) {
+    console.error(`[A18] notifyInvestigationFix failed for ${clientId}:`, e.message);
+    return { success: false, error: e.message };
+  }
 }
 
 module.exports = { notifyFixPushed, notifyReportReady, notifyP1Alert, notifyInvestigationFix };

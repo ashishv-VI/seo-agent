@@ -71,6 +71,12 @@ export default function ControlRoom({ dark, clientId, clientName }) {
   );
   if (!data) return null;
 
+  // Safe defaults — prevent crash if API returns partial data
+  if (!data.siteHealth)  data.siteHealth  = {};
+  if (!data.thisWeek)    data.thisWeek    = {};
+  if (!data.suggestions) data.suggestions = [];
+  if (!data.beforeAfter) data.beforeAfter = {};
+
   const cmo = data.cmo;
   const hasCMO = !!cmo?.decision;
 
@@ -150,12 +156,12 @@ export default function ControlRoom({ dark, clientId, clientName }) {
                     📊 Learned from prior work
                   </div>
                   <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-                    {cmo.patternStats.ownAgency.slice(0, 3).map((p, i) => (
+                    {(cmo.patternStats.ownAgency || []).slice(0, 3).map((p, i) => (
                       <span key={"o"+i} style={{ fontSize:11, color:txt }}>
                         <strong>{p.fixType}</strong>: <span style={{ color:"#059669", fontWeight:700 }}>{p.winRate}%</span> win rate across <strong>{p.sample}</strong> of your clients
                       </span>
                     ))}
-                    {cmo.patternStats.crossAgency.slice(0, 2).map((p, i) => (
+                    {(cmo.patternStats.crossAgency || []).slice(0, 2).map((p, i) => (
                       <span key={"c"+i} style={{ fontSize:11, color:txt2 }}>
                         · <strong>{p.fixType}</strong>: {p.winRate}% across {p.sample} similar {cmo.patternStats.businessType || "businesses"}
                       </span>
@@ -480,7 +486,7 @@ function OverviewTab({ data, bg2, bg3, bdr, txt, txt2, B }) {
                 <div style={{ background:"#05966911", border:"1px solid #05966933", borderRadius:8, padding:"10px 14px" }}>
                   <div style={{ fontSize:10, color:"#059669", marginBottom:3, fontWeight:700 }}>ESTIMATED REVENUE (30D)</div>
                   <div style={{ fontSize:20, fontWeight:800, color:"#059669" }}>₹{leads.estimatedRevenue30d.toLocaleString()}</div>
-                  <div style={{ fontSize:10, color:txt2, marginTop:2 }}>{leads.total30d} leads × ₹{leads.aov.toLocaleString()} avg order value</div>
+                  <div style={{ fontSize:10, color:txt2, marginTop:2 }}>{leads.total30d} leads × ₹{(leads.aov || 0).toLocaleString()} avg order value</div>
                 </div>
               )}
               {leads.keywordLeadBreakdown?.length > 0 && (

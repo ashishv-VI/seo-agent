@@ -8,6 +8,7 @@ const { db, FieldValue }  = require("../config/firebase");
 const { getTopTasks, updateTask } = require("../utils/taskQueue");
 
 async function runA12(clientId, keys) {
+  try {
   // A12 still works without LLM — produces template-based fixes instead of AI-written ones
   const hasLLM = !!(keys?.groq || keys?.gemini || keys?.openrouter);
 
@@ -93,6 +94,10 @@ Return ONLY valid JSON (no markdown):
     fixes,
     message:     `Generated ${fixes.length} auto-fixes — review in Approvals tab`,
   };
+  } catch (e) {
+    console.error(`[A12] Auto-execution failed for ${clientId}:`, e.message);
+    return { success: false, error: e.message };
+  }
 }
 
 // ── Rule-based fix templates — used when LLM is unavailable ──────────────────

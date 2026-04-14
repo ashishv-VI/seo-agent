@@ -1806,7 +1806,7 @@ function FullAuditView({ audit, bg2, bg3, bdr, txt, txt2 }) {
     <div>
       {/* Score Cards */}
       <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:10, marginBottom:16 }}>
-        {[{ l:"Health", v:audit.healthScore+"/100", c:"#443DCB" },{ l:"P1 Critical",v:audit.summary?.p1Count,c:"#DC2626" },{ l:"P2 Important",v:audit.summary?.p2Count,c:"#D97706" },{ l:"P3 Minor",v:audit.summary?.p3Count,c:"#6B7280" }].map(i=>(
+        {[{ l:"Health", v:audit.healthScore != null ? audit.healthScore+"/100" : "—", c:"#443DCB" },{ l:"P1 Critical",v:audit.summary?.p1Count ?? "—",c:"#DC2626" },{ l:"P2 Important",v:audit.summary?.p2Count ?? "—",c:"#D97706" },{ l:"P3 Minor",v:audit.summary?.p3Count ?? "—",c:"#6B7280" }].map(i=>(
           <div key={i.l} style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, padding:"12px 10px", textAlign:"center", borderTop:`2px solid ${i.c}` }}>
             <div style={{ fontSize:20, fontWeight:700, color:i.c }}>{i.v}</div>
             <div style={{ fontSize:10, color:txt2 }}>{i.l}</div>
@@ -4719,7 +4719,7 @@ function DashboardView({ clientId, state, dark, bg2, bg3, bdr, txt, txt2, getTok
                   <span style={{ fontSize:11, fontWeight:800, color:"#443DCB", minWidth:16 }}>#{i+1}</span>
                   <span style={{ flex:1, fontSize:12, color:txt, fontWeight:600 }}>{kw.keyword}</span>
                   <span style={{ fontSize:11, color:txt2 }}>pos {kw.position || "NR"}</span>
-                  <span style={{ fontSize:11, color:"#059669", fontWeight:700 }}>+£{(kw.potentialRevenue - kw.revenue).toLocaleString()}/mo</span>
+                  <span style={{ fontSize:11, color:"#059669", fontWeight:700 }}>+£{((kw.potentialRevenue || 0) - (kw.revenue || 0)).toLocaleString()}/mo</span>
                 </div>
               ))}
             </div>

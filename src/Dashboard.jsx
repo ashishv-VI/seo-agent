@@ -70,11 +70,6 @@ export default function Dashboard({ onToolSelect, count, keys, dark, onPageSelec
     return matchCat && matchSearch;
   });
 
-  const catGroups = CATS.filter(c => c !== "All").map(c => ({
-    name: c, color: CAT_COLORS[c], icon: CAT_ICONS[c],
-    count: TOOLS.filter(t => t.cat === c).length,
-  }));
-
   const apis = [
     { name:"Groq",        desc:"Llama 3.1 — Fast AI",        ok:hasGroq,       color:"#F97316" },
     { name:"Gemini",      desc:"Google AI — Smart",           ok:hasGemini,     color:"#2563EB" },
@@ -244,7 +239,7 @@ export default function Dashboard({ onToolSelect, count, keys, dark, onPageSelec
   );
 }
 
-function ToolCard({ t, dark, bg2, bdr, txt, txt2, onClick }) {
+function ToolCard({ t, bg2, bdr, txt, onClick }) {
   const [hovered, setHovered] = useState(false);
   return (
     <div onClick={onClick}

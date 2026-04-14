@@ -58,8 +58,8 @@ export default function AgencyDashboard({ dark, onClientSelect }) {
 
   const sorted = [...(clients || [])].sort((a, b) => {
     if (sort === "score")   return (a.seoScore || 0) - (b.seoScore || 0);
-    if (sort === "alerts")  return b.openAlerts - a.openAlerts;
-    if (sort === "fixes")   return b.fixesPushed - a.fixesPushed;
+    if (sort === "alerts")  return (b.openAlerts || 0) - (a.openAlerts || 0);
+    if (sort === "fixes")   return (b.fixesPushed || 0) - (a.fixesPushed || 0);
     if (sort === "revenue") return (b.monthlyRevenueEstimate || 0) - (a.monthlyRevenueEstimate || 0);
     return a.name?.localeCompare(b.name);
   });
@@ -75,7 +75,7 @@ export default function AgencyDashboard({ dark, onClientSelect }) {
       <div style={{ marginBottom:24 }}>
         <div style={{ fontSize:11, fontWeight:700, color:txt2, textTransform:"uppercase", letterSpacing:1, marginBottom:4 }}>Agency Dashboard</div>
         <div style={{ fontSize:22, fontWeight:800, color:txt }}>All Clients Overview</div>
-        <div style={{ fontSize:12, color:txt2, marginTop:2 }}>Sprint 5 — {summary.totalClients} clients · Generated {new Date(data.generatedAt).toLocaleString()}</div>
+        <div style={{ fontSize:12, color:txt2, marginTop:2 }}>Sprint 5 — {summary.totalClients} clients{data.generatedAt ? ` · Generated ${new Date(data.generatedAt).toLocaleString()}` : ""}</div>
       </div>
 
       {/* Summary tiles */}
@@ -245,7 +245,7 @@ export default function AgencyDashboard({ dark, onClientSelect }) {
             {trends.filter(t => t.history?.length > 1).map(client => (
               <div key={client.clientId} style={{ background:bg3, borderRadius:10, padding:14 }}>
                 <div style={{ fontSize:12, fontWeight:600, color:txt, marginBottom:8 }}>{client.name}</div>
-                <Sparkline data={client.history} />
+                <Sparkline data={client.history} txt2={txt2} />
               </div>
             ))}
           </div>
@@ -255,7 +255,7 @@ export default function AgencyDashboard({ dark, onClientSelect }) {
   );
 }
 
-function Sparkline({ data }) {
+function Sparkline({ data, txt2 = "#888" }) {
   if (!data?.length) return null;
   const vals  = data.map(d => d.overall || 0);
   const max   = Math.max(...vals, 100);
@@ -272,8 +272,8 @@ function Sparkline({ data }) {
         ))}
       </div>
       <div style={{ display:"flex", justifyContent:"space-between", marginTop:6, fontSize:11 }}>
-        <span style={{ color:"#888" }}>{first}/100</span>
-        <span style={{ color: trend > 0 ? "#059669" : trend < 0 ? "#DC2626" : "#888", fontWeight:700 }}>
+        <span style={{ color:txt2 }}>{first}/100</span>
+        <span style={{ color: trend > 0 ? "#059669" : trend < 0 ? "#DC2626" : txt2, fontWeight:700 }}>
           {trend > 0 ? `+${trend}` : trend < 0 ? String(trend) : "="} → {last}/100
         </span>
       </div>
