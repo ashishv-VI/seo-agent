@@ -96,8 +96,8 @@ async function runA15(clientId, keys) {
 
   // Get competitor list from brief + A4 data
   const competitorList = [
-    ...(brief.competitors     || []),
-    ...(competitor?.competitors?.map(c => c.url || c.domain) || []),
+    ...[].concat(brief.competitors || []),
+    ...[].concat(competitor?.competitors?.map(c => c.url || c.domain) || []),
   ]
     .filter(Boolean)
     .filter(c => typeof c === "string" && c.startsWith("http"))
@@ -177,7 +177,7 @@ async function runA15(clientId, keys) {
 
 Client: ${brief.businessName}
 Website: ${brief.websiteUrl}
-Services: ${(brief.services || []).join(", ")}
+Services: ${[].concat(brief.services || []).join(", ")}
 Our target keywords: ${[].concat(topKeywords || []).join(", ")}
 
 Competitor new pages/URLs:

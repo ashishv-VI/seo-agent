@@ -49,27 +49,27 @@ async function runA1(clientId, rawData) {
     websiteUrl: websiteUrl?.startsWith("http") ? websiteUrl : `https://${websiteUrl}`,
     businessDescription,
     businessLocation: businessLocation || "Not specified",
-    services,
+    services: [].concat(services || []),
 
     // Strategy
     targetAudience,
-    goals,
+    goals: [].concat(goals || []),
     conversionGoal,
     currentTraffic: currentTraffic || "unknown",
 
     // Sprint 1 — KPI & Performance
-    kpiSelection:   derivedKpi,
+    kpiSelection:   [].concat(derivedKpi || []),
     avgOrderValue:  avgOrderValue || null,
-    socialLinks,
+    socialLinks:    [].concat(socialLinks || []),
     pastSeoHistory: pastSeoHistory || null,
 
     // Research Inputs (will be validated by A3 - not final)
-    primaryKeywords,
-    targetLocations,
-    competitors,
+    primaryKeywords:  [].concat(primaryKeywords || []),
+    targetLocations:  [].concat(targetLocations || []),
+    competitors:      [].concat(competitors || []),
 
     // New Pages
-    newPagesNeeded,
+    newPagesNeeded: [].concat(newPagesNeeded || []),
 
     // Notes
     notes,

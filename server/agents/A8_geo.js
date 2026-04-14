@@ -150,7 +150,7 @@ Business: ${business}
 Website: ${siteUrl}
 Services: ${services.join(", ")}
 Target Locations: ${locations.join(", ")}
-Competitors: ${(brief.competitors || []).join(", ")}
+Competitors: ${[].concat(brief.competitors || []).join(", ")}
 
 Provide a comprehensive GEO and off-page analysis. Return ONLY valid JSON:
 {

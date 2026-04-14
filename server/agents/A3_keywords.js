@@ -82,7 +82,7 @@ Generate 5-8 keywords per cluster. Make them realistic and specific to the busin
 
     for (const kw of allKeywords) {
       try {
-        const locationStr = (brief.targetLocations || []).join(" ").toLowerCase();
+        const locationStr = [].concat(brief.targetLocations || []).join(" ").toLowerCase();
         const gl = locationStr.includes("uk") || locationStr.includes("united kingdom") ? "gb"
                  : locationStr.includes("australia") ? "au"
                  : locationStr.includes("canada") ? "ca"
@@ -117,7 +117,7 @@ Generate 5-8 keywords per cluster. Make them realistic and specific to the busin
     ].map(k => k.keyword).filter(Boolean);
 
     // Detect country from locations
-    const locationStr = (brief.targetLocations || []).join(" ").toLowerCase();
+    const locationStr = [].concat(brief.targetLocations || []).join(" ").toLowerCase();
     const country = locationStr.includes("uk") || locationStr.includes("united kingdom") ? "GB"
                   : locationStr.includes("australia") ? "AU"
                   : locationStr.includes("canada") ? "CA"
