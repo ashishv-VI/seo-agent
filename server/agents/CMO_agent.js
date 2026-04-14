@@ -81,6 +81,9 @@ async function runCMO(clientId, keys) {
   // Summarise patterns into a prompt-friendly string
   const patternSummary = buildPatternSummary(globalPatterns, clientMemory, businessType);
 
+  // Structured pattern stats for the UI (separate from LLM prompt text)
+  const patternStats = buildPatternStats(globalPatterns, clientMemory, businessType);
+
   // ── Rule-based signal extraction ─────────────────
   const signals = extractSignals({ brief, audit, keywords, competitor, onpage, technical, geo, report, rankings });
 
@@ -117,6 +120,7 @@ async function runCMO(clientId, keys) {
     confidence:  decision.confidence  || 0.7,
     kpiImpact:   decision.kpiImpact   || [],
     signals,
+    patternStats,
     decidedAt:   new Date().toISOString(),
   };
 
@@ -169,6 +173,42 @@ function extractSignals({ brief, audit, keywords, competitor, onpage, technical,
 }
 
 // ── Cross-client pattern summary for CMO prompt ───
+// Structured stats for the UI — returns { ownAgency: [], crossAgency: [], thisClient: {} }
+function buildPatternStats(globalPatterns, clientMemory, businessType = "") {
+  const stats = { ownAgency: [], crossAgency: [], thisClient: { worked: [], failed: [] }, businessType };
+  if (!globalPatterns.length && !clientMemory?.fixOutcomes?.length) return stats;
+
+  const own   = globalPatterns.filter(p => !p._crossAgency);
+  const cross = globalPatterns.filter(p => p._crossAgency);
+
+  const aggregate = (arr) => {
+    const byType = {};
+    for (const p of arr) {
+      if (!byType[p.fixType]) byType[p.fixType] = { improved: 0, total: 0 };
+      byType[p.fixType].total++;
+      if (p.outcome === "improved") byType[p.fixType].improved++;
+    }
+    return Object.entries(byType)
+      .map(([fixType, c]) => ({
+        fixType,
+        winRate: Math.round((c.improved / c.total) * 100),
+        sample: c.total,
+      }))
+      .sort((a, b) => b.winRate - a.winRate)
+      .slice(0, 5);
+  };
+
+  stats.ownAgency   = aggregate(own);
+  stats.crossAgency = aggregate(cross);
+
+  const fixOutcomes = clientMemory?.fixOutcomes || [];
+  const recent = fixOutcomes.slice(-10);
+  stats.thisClient.worked = [...new Set(recent.filter(f => f.outcome === "improved").map(f => f.field))];
+  stats.thisClient.failed = [...new Set(recent.filter(f => f.outcome === "degraded" || f.outcome === "no_change").map(f => f.field))];
+
+  return stats;
+}
+
 function buildPatternSummary(globalPatterns, clientMemory, businessType = "") {
   if (!globalPatterns.length && !clientMemory?.fixOutcomes?.length) return null;
 

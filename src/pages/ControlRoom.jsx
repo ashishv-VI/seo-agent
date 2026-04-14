@@ -142,6 +142,27 @@ export default function ControlRoom({ dark, clientId, clientName }) {
                 <span style={{ color:txt, fontWeight:700 }}>Why: </span>{cmo.reasoning}
               </div>
 
+              {/* LEARNED FROM — cross-client pattern confidence */}
+              {(cmo.patternStats?.ownAgency?.length > 0 || cmo.patternStats?.crossAgency?.length > 0) && (
+                <div style={{ marginBottom:12, padding:"8px 12px", background:"#0891B211", border:"1px solid #0891B233", borderRadius:8 }}>
+                  <div style={{ fontSize:10, color:"#0891B2", fontWeight:800, textTransform:"uppercase", letterSpacing:0.8, marginBottom:5 }}>
+                    📊 Learned from prior work
+                  </div>
+                  <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                    {cmo.patternStats.ownAgency.slice(0, 3).map((p, i) => (
+                      <span key={"o"+i} style={{ fontSize:11, color:txt }}>
+                        <strong>{p.fixType}</strong>: <span style={{ color:"#059669", fontWeight:700 }}>{p.winRate}%</span> win rate across <strong>{p.sample}</strong> of your clients
+                      </span>
+                    ))}
+                    {cmo.patternStats.crossAgency.slice(0, 2).map((p, i) => (
+                      <span key={"c"+i} style={{ fontSize:11, color:txt2 }}>
+                        · <strong>{p.fixType}</strong>: {p.winRate}% across {p.sample} similar {cmo.patternStats.businessType || "businesses"}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* EXPECTED IMPACT — what changes if we do this */}
               {cmo.kpiImpact?.length > 0 && (
                 <div style={{ marginBottom:12 }}>
