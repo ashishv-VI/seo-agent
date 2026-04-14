@@ -91,13 +91,28 @@ router.get("/:clientId/control-room", verifyToken, async (req, res) => {
       const kw = c.gscKeyword || c.utmTerm || "(direct)";
       kwConvMap[kw] = (kwConvMap[kw] || 0) + 1;
     }
-    const topConvKeyword = Object.entries(kwConvMap).sort((a, b) => b[1] - a[1])[0];
+    const sortedKwConv = Object.entries(kwConvMap).sort((a, b) => b[1] - a[1]);
+    const topConvKeyword = sortedKwConv[0];
+
+    // Pull AOV from brief for revenue projection
+    const aov = Number(brief?.avgOrderValue) || 0;
+
+    // Build top-5 keyword → lead → revenue breakdown
+    const keywordLeadBreakdown = sortedKwConv.slice(0, 5).map(([keyword, count]) => ({
+      keyword,
+      leads:            count,
+      estimatedRevenue: aov > 0 ? Math.round(count * aov) : null,
+      percentOfLeads:   conversions30d.length > 0 ? Math.round((count / conversions30d.length) * 100) : 0,
+    }));
 
     const leads = {
       total30d:          conversions30d.length,
       totalAllTime:      allConversions.length,
       topKeyword:        topConvKeyword ? topConvKeyword[0] : null,
       topKeywordCount:   topConvKeyword ? topConvKeyword[1] : 0,
+      keywordLeadBreakdown,
+      estimatedRevenue30d: aov > 0 ? Math.round(conversions30d.length * aov) : null,
+      aov,
       recentConversions: conversions30d.slice(0, 5).map(c => ({
         keyword:   c.gscKeyword || c.utmTerm || "(direct)",
         source:    c.utmSource  || "direct",

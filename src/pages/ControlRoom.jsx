@@ -425,11 +425,31 @@ function OverviewTab({ data, bg2, bg3, bdr, txt, txt2, B }) {
                   <div style={{ fontSize:10, color:txt2 }}>All-time leads</div>
                 </div>
               </div>
-              {leads.topKeyword && (
-                <div style={{ background:bg3, borderRadius:8, padding:"10px 14px" }}>
-                  <div style={{ fontSize:10, color:txt2, marginBottom:3 }}>TOP LEAD-DRIVING KEYWORD</div>
-                  <div style={{ fontSize:13, fontWeight:700, color:txt }}>{leads.topKeyword}</div>
-                  <div style={{ fontSize:11, color:"#059669", marginTop:2 }}>{leads.topKeywordCount} conversion{leads.topKeywordCount !== 1 ? "s" : ""}</div>
+              {leads.estimatedRevenue30d != null && leads.estimatedRevenue30d > 0 && (
+                <div style={{ background:"#05966911", border:"1px solid #05966933", borderRadius:8, padding:"10px 14px" }}>
+                  <div style={{ fontSize:10, color:"#059669", marginBottom:3, fontWeight:700 }}>ESTIMATED REVENUE (30D)</div>
+                  <div style={{ fontSize:20, fontWeight:800, color:"#059669" }}>₹{leads.estimatedRevenue30d.toLocaleString()}</div>
+                  <div style={{ fontSize:10, color:txt2, marginTop:2 }}>{leads.total30d} leads × ₹{leads.aov.toLocaleString()} avg order value</div>
+                </div>
+              )}
+              {leads.keywordLeadBreakdown?.length > 0 && (
+                <div>
+                  <div style={{ fontSize:10, color:txt2, marginBottom:6, textTransform:"uppercase", letterSpacing:0.5 }}>Keywords → Leads → Revenue</div>
+                  {leads.keywordLeadBreakdown.map((k, i) => (
+                    <div key={i} style={{ padding:"8px 10px", background:bg3, borderRadius:6, marginBottom:4 }}>
+                      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:4 }}>
+                        <span style={{ fontSize:12, fontWeight:700, color:txt, flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{k.keyword}</span>
+                        <span style={{ fontSize:11, color:"#059669", fontWeight:700, marginLeft:8 }}>{k.leads} lead{k.leads !== 1 ? "s" : ""}</span>
+                      </div>
+                      <div style={{ height:3, background:bdr, borderRadius:2, overflow:"hidden", marginBottom:3 }}>
+                        <div style={{ height:"100%", width:`${k.percentOfLeads}%`, background:"#059669" }} />
+                      </div>
+                      <div style={{ display:"flex", justifyContent:"space-between", fontSize:10, color:txt2 }}>
+                        <span>{k.percentOfLeads}% of leads</span>
+                        {k.estimatedRevenue != null && <span style={{ color:"#059669", fontWeight:700 }}>₹{k.estimatedRevenue.toLocaleString()}</span>}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
               {leads.recentConversions?.length > 0 && (
