@@ -139,7 +139,9 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
       }
       // Stop polling when done, auto-navigate to results
       if (ps === "complete" || ps === "failed") {
-        if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+        if (pollRef.current)      { clearInterval(pollRef.current);      pollRef.current      = null; }
+        if (crawlPollRef.current) { clearInterval(crawlPollRef.current); crawlPollRef.current = null; }
+        setCrawlProgress(null);
         if (ps === "complete") setActiveTab("dashboard");
       }
     } catch (e) { setError(e.message || "Failed to load pipeline"); }
@@ -177,10 +179,31 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
 
       setPipelineStatus("running");
       setActiveTab("pipeline");
+      setCrawlProgress(null);
 
       // Poll every 4 seconds for live progress (always calls latest load via ref)
       if (pollRef.current) clearInterval(pollRef.current);
       pollRef.current = setInterval(() => loadLatest.current(true), 4000);
+
+      // Also poll A2 crawl status every 3s while pipeline is running
+      if (crawlPollRef.current) clearInterval(crawlPollRef.current);
+      crawlPollRef.current = setInterval(async () => {
+        try {
+          const t = await getToken();
+          const r = await fetch(`${API}/api/agents/${clientId}/A2/crawl-status`, {
+            headers: { Authorization: `Bearer ${t}` },
+          });
+          if (r.ok) {
+            const d = await r.json();
+            if (d.crawlProgress) setCrawlProgress(d.crawlProgress);
+            // Stop crawl polling once A2 has completed — keeps working if pipeline still runs
+            if (d.status === "complete" || d.status === "signed_off") {
+              if (crawlPollRef.current) { clearInterval(crawlPollRef.current); crawlPollRef.current = null; }
+              setCrawlProgress(null);
+            }
+          }
+        } catch { /* non-blocking */ }
+      }, 3000);
     } catch (e) {
       setError(e.message || "Failed to start pipeline");
     }
@@ -322,8 +345,12 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
 
         {pipelineStatus === "running" ? (
           <div style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 16px", borderRadius:20, background:"#D9770611", border:"1px solid #D9770644" }}>
-            <span style={{ fontSize:12, color:"#D97706", animation:"spin 1s linear infinite" }}>⏳</span>
-            <span style={{ fontSize:12, color:"#D97706", fontWeight:600 }}>Analysing...</span>
+            <span style={{ fontSize:12, color:"#D97706" }}>⏳</span>
+            <span style={{ fontSize:12, color:"#D97706", fontWeight:600 }}>
+              {crawlProgress && crawlProgress.crawled > 0
+                ? `Crawling ${crawlProgress.crawled}/${crawlProgress.total || "?"} pages (${crawlProgress.pct || 0}%)`
+                : "Analysing..."}
+            </span>
           </div>
         ) : (
           <button
@@ -337,6 +364,21 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
       </div>
 
       {error && <div style={{ padding:"10px 14px", borderRadius:8, background:"#DC262611", color:"#DC2626", fontSize:12, marginBottom:14 }}>{error}<button onClick={()=>setError("")} style={{ marginLeft:10, background:"none", border:"none", color:"#DC2626", cursor:"pointer" }}>×</button></div>}
+
+      {/* Live crawl progress banner — shows during pipeline or standalone A2 run */}
+      {pipelineStatus === "running" && crawlProgress && crawlProgress.total > 0 && (
+        <div style={{ background:bg2, border:`1px solid ${bdr}`, borderLeft:"4px solid #443DCB", borderRadius:10, padding:"12px 16px", marginBottom:14 }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
+            <span style={{ fontSize:12, fontWeight:700, color:"#443DCB" }}>🕷️ Site Crawler (A2)</span>
+            <span style={{ fontSize:11, color:txt2 }}>
+              {crawlProgress.crawled} / {crawlProgress.total} pages · {crawlProgress.pct || 0}%
+            </span>
+          </div>
+          <div style={{ height:6, background:bg3, borderRadius:3, overflow:"hidden" }}>
+            <div style={{ height:"100%", width:`${crawlProgress.pct || 0}%`, background:"#443DCB", transition:"width .5s" }} />
+          </div>
+        </div>
+      )}
 
       {/* Tabs — grouped to reduce overwhelm */}
       <div style={{ display:"flex", flexDirection:"column", gap:6, marginBottom:20 }}>
