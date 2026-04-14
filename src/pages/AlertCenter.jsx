@@ -97,6 +97,8 @@ export default function AlertCenter({ dark, clientId }) {
   const [resolving,   setResolving]   = useState(null);
   const [expanded,    setExpanded]    = useState(null);
   const [dismissingAll, setDismissingAll] = useState(false);
+  const [investigating, setInvestigating] = useState(false);
+  const [investigation, setInvestigation] = useState(null);
 
   const bg   = dark ? "#0a0a0a" : "#f5f5f0";
   const bg2  = dark ? "#111"    : "#ffffff";
@@ -132,6 +134,23 @@ export default function AlertCenter({ dark, clientId }) {
     setResolving(null);
   }
 
+  async function investigate() {
+    setInvestigating(true);
+    setInvestigation(null);
+    try {
+      const token = await getToken();
+      const res = await fetch(`${API}/api/agents/${clientId}/A23/investigate`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      });
+      const data = await res.json();
+      setInvestigation(data);
+    } catch (e) {
+      setInvestigation({ error: e.message });
+    }
+    setInvestigating(false);
+  }
+
   async function dismissAll() {
     setDismissingAll(true);
     const token = await getToken();
@@ -163,13 +182,61 @@ export default function AlertCenter({ dark, clientId }) {
           <div style={{ fontSize: 15, fontWeight: 700, color: txt, marginBottom: 2 }}>🚨 Alert Center</div>
           <div style={{ fontSize: 11, color: txt2 }}>P1 = fix immediately · P2 = next business day · P3 = weekly review</div>
         </div>
-        {open.length > 1 && (
-          <button onClick={dismissAll} disabled={dismissingAll}
-            style={{ padding: "7px 16px", borderRadius: 8, border: `1px solid ${bdr}`, background: bg2, color: txt2, fontSize: 12, cursor: "pointer", fontWeight: 600 }}>
-            {dismissingAll ? "Dismissing…" : `Dismiss All (${open.length})`}
-          </button>
-        )}
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {open.some(a => a.tier === "P1") && (
+            <button onClick={investigate} disabled={investigating}
+              style={{
+                padding: "7px 16px", borderRadius: 8, border: "none",
+                background: "#443DCB", color: "#fff",
+                fontSize: 12, fontWeight: 700,
+                cursor: investigating ? "not-allowed" : "pointer",
+                opacity: investigating ? 0.7 : 1,
+                boxShadow: "0 2px 8px #443DCB44",
+              }}>
+              {investigating ? "🔍 Diagnosing…" : "🔍 Diagnose P1 Alerts (A23)"}
+            </button>
+          )}
+          {open.length > 1 && (
+            <button onClick={dismissAll} disabled={dismissingAll}
+              style={{ padding: "7px 16px", borderRadius: 8, border: `1px solid ${bdr}`, background: bg2, color: txt2, fontSize: 12, cursor: "pointer", fontWeight: 600 }}>
+              {dismissingAll ? "Dismissing…" : `Dismiss All (${open.length})`}
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* Investigation result */}
+      {investigation && !investigation.error && investigation.investigated > 0 && (
+        <div style={{ background: "#05966911", border: "1px solid #05966944", borderRadius: 12, padding: "14px 18px", marginBottom: 16 }}>
+          <div style={{ fontSize: 13, fontWeight: 800, color: "#059669", marginBottom: 8 }}>
+            ✓ A23 Investigator — {investigation.investigated} root cause(s) diagnosed
+          </div>
+          <div style={{ fontSize: 11, color: txt2, lineHeight: 1.6, marginBottom: 10 }}>
+            Investigation complete. Proposed fixes have been queued in the Approval Queue.
+          </div>
+          {(investigation.investigation || []).slice(0, 3).map((inv, i) => (
+            <div key={i} style={{ padding: "8px 12px", background: bg2, borderRadius: 8, marginBottom: 6, fontSize: 11 }}>
+              <div style={{ color: txt, fontWeight: 700, marginBottom: 3 }}>{inv.alertType}</div>
+              <div style={{ color: txt2, lineHeight: 1.5 }}>
+                <strong>Root cause:</strong> {inv.rootCause}
+              </div>
+              <div style={{ color: "#059669", marginTop: 3 }}>
+                → {inv.proposedFix}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {investigation?.error && (
+        <div style={{ background: "#DC262611", border: "1px solid #DC262644", borderRadius: 10, padding: "10px 14px", marginBottom: 16, fontSize: 12, color: "#DC2626" }}>
+          Investigation failed: {investigation.error}
+        </div>
+      )}
+      {investigation && !investigation.error && investigation.investigated === 0 && (
+        <div style={{ background: "#0891B211", border: "1px solid #0891B244", borderRadius: 10, padding: "10px 14px", marginBottom: 16, fontSize: 12, color: "#0891B2" }}>
+          No unresolved P1 alerts to investigate.
+        </div>
+      )}
 
       {/* Root-cause banner: LLM key missing */}
       {open.filter(a => (a.message||"").toLowerCase().includes("llm") || (a.message||"").toLowerCase().includes("no llm")).length > 0 && (
