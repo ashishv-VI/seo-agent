@@ -13,7 +13,7 @@ const { runA8 }              = require("../agents/A8_geo");
 const { generateReport, checkAlerts } = require("../agents/A9_monitoring");
 const { getTasks, getTopTasks, updateTask, clearTasks } = require("../utils/taskQueue");
 const { calculateScore, saveScoreHistory, getLatestScore, getScoreHistory, generateForecast, calculateRevenue } = require("../utils/scoreCalculator");
-const { getState } = require("../shared-state/stateManager");
+const { getState, saveState } = require("../shared-state/stateManager");
 const { translateAlert, SEVERITY_LABELS } = require("../utils/alertTranslator");
 
 // ── Helper: check client ownership ────────────────
@@ -715,8 +715,12 @@ router.get("/:clientId/pages", verifyToken, async (req, res) => {
       ...(audit.issues?.p3||[]).map(i => ({ ...i, severity:"info"     })),
     ];
 
-    // ── Use rich pageAudits from A2 (real per-page data: title, meta, h1, wordCount)
-    const pageAudits = audit.checks?.pageAudits || [];
+    // ── Load per-page data from subcollection (pageAudits is deleted from shared_state doc before save)
+    let pageAudits = [];
+    try {
+      const subSnap = await db.collection("audits").doc(req.params.clientId).collection("pages").get();
+      pageAudits = subSnap.docs.map(d => d.data());
+    } catch { /* fallback to empty — handled below */ }
 
     // Homepage as separate entry with its own on-page data
     const homepage = {
@@ -1744,9 +1748,10 @@ router.get("/:clientId/A2/patterns", verifyToken, async (req, res) => {
       if (cached) return res.json(cached);
     }
 
-    // Compute live from subcollection
+    // Compute live from subcollection and cache
     const { detectSitePatterns } = require("../utils/auditPatterns");
     const patterns = await detectSitePatterns(req.params.clientId);
+    await saveState(req.params.clientId, "A2_patterns", patterns).catch(() => {});
     return res.json(patterns);
   } catch (e) {
     return res.status(e.code || 500).json({ error: e.message });

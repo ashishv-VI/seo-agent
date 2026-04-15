@@ -85,51 +85,57 @@ async function runA16(clientId, keys) {
     });
   }
 
-  // ── Step 4: Record push log outcomes (did the fix improve rankings?) ──────
-  const pushLogSnap = await db.collection("wp_push_log")
-    .where("clientId", "==", clientId)
-    .get();
+  // ── Step 4: Import GSC-verified outcomes from fix_verification ──────
+  // The daily cron (index.js) checks GSC 21 days after each push.
+  // A16 reads those verified outcomes and records them to client_memory.
+  // This replaces the old heuristic (A10 ranking gains).
+  try {
+    const verifiedSnap = await db.collection("fix_verification")
+      .where("clientId", "==", clientId)
+      .where("status", "==", "checked")
+      .limit(50)
+      .get();
 
-  const pushLogs = pushLogSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const memRef  = db.collection("client_memory").doc(clientId);
+    const memSnap = await memRef.get();
+    const existingOutcomes = memSnap.exists ? (memSnap.data().fixOutcomes || []) : [];
+    const recordedUrls = new Set(existingOutcomes.map(o => `${o.field}:${o.url}:${o.checkedAt}`));
 
-  // Cross-reference with rankings to detect improvements
-  if (rankings?.rankings && pushLogs.length > 0) {
-    const rankMap = {};
-    (rankings.rankings || []).forEach(r => { rankMap[r.keyword] = r.position; });
+    let newOutcomes = 0;
+    for (const doc of verifiedSnap.docs) {
+      const v = doc.data();
+      const key = `${v.field}:${v.wpPostUrl}:${v.checkedAt}`;
+      if (recordedUrls.has(key)) continue; // already imported
 
-    for (const log of pushLogs) {
-      // Only process logs that have a pushedAt date but no rankingAfter recorded yet
-      if (log.rankingAfter !== null && !log.pushedAt) continue;
+      await recordFixOutcome(clientId, {
+        field:     v.field      || v.issueType,
+        issueType: v.issueType  || v.field,
+        outcome:   v.outcome,
+        url:       v.wpPostUrl  || null,
+        checkedAt: v.checkedAt,
+      });
+      newOutcomes++;
 
-      // Find ranking changes for keywords related to this fix
-      // We use a simple heuristic: check if any ranking improved since the push date
-      const pushedDate = new Date(log.pushedAt);
-      const daysSince  = (Date.now() - pushedDate.getTime()) / (1000 * 60 * 60 * 24);
-
-      if (daysSince >= 7) { // Only assess after 7+ days
-        const improvedKeywords = (rankings.gains || []).filter(g => {
-          const gainDate = new Date(rankings.snapshotDate || "");
-          return gainDate > pushedDate;
-        });
-
-        if (improvedKeywords.length > 0) {
-          // Mark this fix as having a positive outcome
-          await db.collection("wp_push_log").doc(log.id).update({
-            rankingAfter:    "improved",
-            outcomeAssessedAt: new Date().toISOString(),
-          });
-
-          await recordFixOutcome(clientId, {
-            fixType:       log.field || log.issueType,
-            appliedAt:     log.pushedAt,
-            rankingBefore: log.rankingBefore,
-            rankingAfter:  "improved",
-            keyword:       log.keyword || null,
-            worked:        true,
-          });
-        }
+      // Also update wp_push_log if approval matches
+      if (v.approvalId) {
+        try {
+          const logSnap = await db.collection("wp_push_log")
+            .where("clientId", "==", clientId)
+            .where("approvalId", "==", v.approvalId)
+            .limit(1)
+            .get();
+          if (!logSnap.empty) {
+            await db.collection("wp_push_log").doc(logSnap.docs[0].id).update({
+              rankingAfter: v.outcome,
+              outcomeAssessedAt: v.checkedAt,
+            });
+          }
+        } catch { /* non-blocking */ }
       }
     }
+    if (newOutcomes > 0) console.log(`[A16] Imported ${newOutcomes} verified fix outcomes for ${clientId}`);
+  } catch (e) {
+    console.error(`[A16] Fix verification import error:`, e.message);
   }
 
   // ── Step 5: Update content memory with published drafts ──────────────────

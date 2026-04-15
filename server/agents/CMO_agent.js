@@ -47,36 +47,37 @@ async function runCMO(clientId, keys) {
   const businessType = (brief?.businessType || brief?.industry || "").toLowerCase().trim();
 
   let globalPatterns = [];
-  if (ownerId) {
-    // Own-agency patterns
-    const ownPatterns = await db.collection("global_patterns")
-      .where("ownerId", "==", ownerId)
-      .limit(30)
-      .get()
-      .then(s => s.docs.map(d => d.data()))
-      .catch(() => []);
 
-    // Cross-agency similar-business patterns (no ownerId filter — any agency, same business type)
-    let similarPatterns = [];
-    if (businessType) {
-      similarPatterns = await db.collection("global_patterns")
-        .where("businessType", "==", businessType)
-        .limit(20)
+  // Own-agency patterns (skip query only if truly no ownerId)
+  const ownPatterns = ownerId
+    ? await db.collection("global_patterns")
+        .where("ownerId", "==", ownerId)
+        .limit(30)
         .get()
-        .then(s => s.docs.map(d => d.data()).filter(p => p.ownerId !== ownerId))
-        .catch(() => []);
-    }
+        .then(s => s.docs.map(d => d.data()))
+        .catch(() => [])
+    : [];
 
-    // Mark cross-agency, then merge deduplicated
-    const seen = new Set();
-    for (const p of ownPatterns) {
-      const key = `${p.fixType}:${p.ownerId}:${p.recordedAt}`;
-      if (!seen.has(key)) { seen.add(key); globalPatterns.push(p); }
-    }
-    for (const p of similarPatterns) {
-      const key = `${p.fixType}:${p.ownerId}:${p.recordedAt}`;
-      if (!seen.has(key)) { seen.add(key); globalPatterns.push({ ...p, _crossAgency: true }); }
-    }
+  // Cross-agency similar-business patterns — normalize to lowercase for fuzzy match
+  let similarPatterns = [];
+  if (businessType) {
+    similarPatterns = await db.collection("global_patterns")
+      .where("businessType", "==", businessType)
+      .limit(20)
+      .get()
+      .then(s => s.docs.map(d => d.data()).filter(p => p.ownerId !== ownerId))
+      .catch(() => []);
+  }
+
+  // Mark cross-agency, then merge deduplicated
+  const seen = new Set();
+  for (const p of ownPatterns) {
+    const key = `${p.fixType}:${p.ownerId}:${p.recordedAt}`;
+    if (!seen.has(key)) { seen.add(key); globalPatterns.push(p); }
+  }
+  for (const p of similarPatterns) {
+    const key = `${p.fixType}:${p.ownerId}:${p.recordedAt}`;
+    if (!seen.has(key)) { seen.add(key); globalPatterns.push({ ...p, _crossAgency: true }); }
   }
 
   // Summarise patterns into a prompt-friendly string

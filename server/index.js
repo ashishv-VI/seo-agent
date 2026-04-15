@@ -453,10 +453,12 @@ setInterval(async () => {
   try {
     const snap = await db.collection("fix_verification")
       .where("status", "==", "pending")
+      .where("checkAfter", "<=", now.toISOString())
+      .orderBy("checkAfter", "asc")
       .limit(50)
       .get();
 
-    const dueDocs = snap.docs.filter(d => new Date(d.data().checkAfter) < now);
+    const dueDocs = snap.docs; // already filtered by query — all are due
     console.log(`[fix-verify] ${dueDocs.length} fix(es) due for verification`);
 
     for (const doc of dueDocs) {
@@ -553,12 +555,13 @@ setInterval(async () => {
             const clientDoc = await db.collection("clients").doc(fix.clientId).get();
             const cData     = clientDoc.data() || {};
             await db.collection("global_patterns").add({
+              clientId:     fix.clientId,
               fixType:      fix.field,
               issueType:    fix.issueType,
               outcome,
               ownerId:      fix.ownerId,
-              industry:     cData.industry   || null,
-              businessType: cData.businessType || null,
+              industry:     (cData.industry || "").toLowerCase().trim() || null,
+              businessType: (cData.businessType || "").toLowerCase().trim() || null,
               ctrBefore:    gscResult?.ctrBefore  || null,
               ctrAfter:     gscResult?.ctrAfter   || null,
               posBefore:    gscResult?.posBefore  || null,
@@ -566,6 +569,19 @@ setInterval(async () => {
               recordedAt:   now.toISOString(),
             });
           } catch { /* non-blocking */ }
+        }
+
+        // ── If fix degraded → trigger CMO re-assessment ──
+        if (outcome === "degraded") {
+          try {
+            const { getUserKeys } = require("./utils/getUserKeys");
+            const cmoKeys = await getUserKeys(fix.ownerId).catch(() => ({}));
+            const { runCMO } = require("./agents/CMO_agent");
+            await runCMO(fix.clientId, cmoKeys);
+            console.log(`[fix-verify] CMO re-triggered for ${fix.clientId} (degraded fix)`);
+          } catch (cmoErr) {
+            console.error(`[fix-verify] CMO re-trigger failed:`, cmoErr.message);
+          }
         }
 
         console.log(`[fix-verify] ${fix.field} on ${fix.wpPostUrl} → ${outcome}`);

@@ -106,16 +106,21 @@ async function updateMemorySection(clientId, section, updates) {
 
 /**
  * Record the outcome of a pushed fix (for learning + ROI)
- * Called when A10 ranking tracker detects changes after a fix
+ * Canonical schema: { field, issueType, outcome, checkedAt, url }
+ * — matches fix_verification cron output so CMO reads a single format.
  *
  * @param {string} clientId
- * @param {object} outcome — { fixType, appliedAt, rankingBefore, rankingAfter, keyword, worked }
+ * @param {object} data — { field, issueType, outcome, url } (required) + optional extras
  */
-async function recordFixOutcome(clientId, outcome) {
+async function recordFixOutcome(clientId, data) {
   const ref = db.collection(COLLECTION).doc(clientId);
   await ref.set({
     fixOutcomes: FieldValue.arrayUnion({
-      ...outcome,
+      field:      data.field      || data.fixType || "unknown",
+      issueType:  data.issueType  || data.field   || "unknown",
+      outcome:    data.outcome    || (data.worked ? "improved" : "no_change"),
+      checkedAt:  data.checkedAt  || new Date().toISOString(),
+      url:        data.url        || null,
       recordedAt: new Date().toISOString(),
     }),
     updatedAt: new Date().toISOString(),
