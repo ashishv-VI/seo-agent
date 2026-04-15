@@ -17,6 +17,48 @@ import AuditPatternsPanel from "../components/AuditPatternsPanel";
 import PageScoresPanel from "../components/PageScoresPanel";
 import RulesEnginePanel from "../components/RulesEnginePanel";
 
+// ── Backend Health Gate ─────────────────────────────────────────────────────
+// Render free tier sleeps after 15min idle. Cold-start returns 502 without
+// CORS headers, which the browser reports as "missing Access-Control-Allow-Origin".
+// Problem: polling loops (4s pipeline + 3s crawl) fire multi-request bursts every
+// tick, amplifying a single cold-start into hundreds of blocked requests.
+// Fix: a shared gate that pauses ALL polling when /health fails, with exponential
+// backoff. Polling tick early-exits if backend is "cold"; a background waker
+// re-probes /health and resumes only when it's actually up.
+const _healthGate = {
+  cold: false,           // true = skip all fetches, backend is dead
+  nextProbe: 0,          // earliest timestamp to retry /health
+  consecutiveFailures: 0,
+};
+async function probeBackend(API) {
+  try {
+    const r = await fetch(`${API}/health`, { signal: AbortSignal.timeout(8000) });
+    if (r.ok) {
+      _healthGate.cold = false;
+      _healthGate.consecutiveFailures = 0;
+      _healthGate.nextProbe = 0;
+      return true;
+    }
+    throw new Error("not ok");
+  } catch {
+    _healthGate.cold = true;
+    _healthGate.consecutiveFailures += 1;
+    // Exponential backoff: 3s → 6s → 12s → 20s → 30s (cap)
+    const delays = [3000, 6000, 12000, 20000, 30000];
+    const delay  = delays[Math.min(_healthGate.consecutiveFailures - 1, delays.length - 1)];
+    _healthGate.nextProbe = Date.now() + delay;
+    return false;
+  }
+}
+// Callers use this before firing any request burst. Returns true when backend
+// is alive; false means "skip this tick, backend is warming up."
+async function ensureBackendUp(API) {
+  if (!_healthGate.cold) return true;
+  if (Date.now() < _healthGate.nextProbe) return false;
+  return probeBackend(API);
+}
+// ────────────────────────────────────────────────────────────────────────────
+
 const ALL_AGENTS = [
   { id:"A1",  label:"Client Brief",       icon:"📋", phase:1 },
   { id:"A2",  label:"Technical Audit",    icon:"🏥", phase:1 },
@@ -107,20 +149,21 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
   async function load(silent = false, retries = 4) {
     if (!silent) setLoading(true);
     setError("");
+    // ── Health gate: skip entirely if backend is cold ──
+    // For silent polling ticks this is critical — otherwise 5 parallel fetches
+    // fire every 4s against a dead backend and flood the console with CORS errors.
+    const up = await ensureBackendUp(API);
+    if (!up) {
+      if (!silent) {
+        setError("Backend is warming up (Render cold-start). Retrying in a few seconds…");
+        // Schedule a follow-up load so the user sees data once the backend is alive
+        setTimeout(() => loadLatest.current && loadLatest.current(false), 4000);
+        setLoading(false);
+      }
+      return;
+    }
     try {
       const token = await getToken();
-      // ── Wake backend before parallel flood — Render free tier sleeps after 15min idle ──
-      // On cold start, Render's proxy returns 502 with no CORS headers. Browser logs this as
-      // "No 'Access-Control-Allow-Origin' header". The only real fix is to wait for warm-up.
-      if (!silent) {
-        try {
-          const ping = await fetch(`${API}/health`, { signal: AbortSignal.timeout(8000) });
-          if (!ping.ok) throw new Error("health not ok");
-        } catch {
-          // first ping failed — probably cold start, give it a moment then continue
-          await new Promise(r => setTimeout(r, 2000));
-        }
-      }
       const [clientRes, pipelineRes, alertsRes, notifRes, keysRes] = await Promise.all([
         fetch(`${API}/api/clients/${clientId}`, { headers: { Authorization: `Bearer ${token}` } }),
         fetch(`${API}/api/agents/${clientId}/pipeline`, { headers: { Authorization: `Bearer ${token}` } }),
@@ -157,17 +200,23 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
         if (ps === "complete") setActiveTab("dashboard");
       }
     } catch (e) {
-      // Auto-retry with progressive backoff on network errors
-      // (Render free-tier cold-start can take 30+ seconds; 502 responses arrive with no CORS headers)
+      // Network error = backend likely cold-started mid-request.
+      // Mark the gate cold so ALL polling ticks skip until health comes back,
+      // instead of each tick retrying in parallel and amplifying the failure.
       const isNetworkError = e.message === "Failed to fetch" || e.name === "TypeError" || e.message?.includes("NetworkError");
-      if (retries > 0 && isNetworkError) {
-        // backoff: 4 retries → 3s, 6s, 10s, 15s (≈34s total, covers cold-start window)
-        const delays = [3000, 6000, 10000, 15000];
-        const delay  = delays[4 - retries] || 5000;
-        await new Promise(r => setTimeout(r, delay));
-        return load(silent, retries - 1);
+      if (isNetworkError) {
+        _healthGate.cold = true;
+        _healthGate.consecutiveFailures = Math.max(1, _healthGate.consecutiveFailures);
+        _healthGate.nextProbe = Date.now() + 3000;
+        if (!silent && retries > 0) {
+          // For the user-facing initial load only: wait + retry once via the gate
+          await new Promise(r => setTimeout(r, 4000));
+          return load(silent, retries - 1);
+        }
+        if (!silent) setError("Backend is warming up. The page will refresh automatically once it's ready.");
+      } else if (!silent) {
+        setError(e.message || "Failed to load pipeline");
       }
-      setError(e.message || "Failed to load pipeline");
     }
     if (!silent) setLoading(false);
   }
@@ -212,6 +261,8 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
       // Also poll A2 crawl status every 3s while pipeline is running
       if (crawlPollRef.current) clearInterval(crawlPollRef.current);
       crawlPollRef.current = setInterval(async () => {
+        // Skip tick if backend is cold — avoid piling requests on a dead service
+        if (_healthGate.cold) return;
         try {
           const t = await getToken();
           const r = await fetch(`${API}/api/agents/${clientId}/A2/crawl-status`, {
@@ -226,7 +277,11 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
               setCrawlProgress(null);
             }
           }
-        } catch { /* non-blocking */ }
+        } catch {
+          // Network error — mark cold so all polling pauses until health recovers
+          _healthGate.cold = true;
+          _healthGate.nextProbe = Date.now() + 3000;
+        }
       }, 3000);
     } catch (e) {
       setError(e.message || "Failed to start pipeline");
@@ -265,11 +320,15 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
     // Poll crawl progress every 3s while audit runs
     if (crawlPollRef.current) clearInterval(crawlPollRef.current);
     crawlPollRef.current = setInterval(async () => {
+      if (_healthGate.cold) return; // backend warming up, skip
       try {
         const t = await getToken();
         const r = await fetch(`${API}/api/agents/${clientId}/A2/crawl-status`, { headers: { Authorization: `Bearer ${t}` } });
         if (r.ok) { const d = await r.json(); if (d.crawlProgress) setCrawlProgress(d.crawlProgress); }
-      } catch {}
+      } catch {
+        _healthGate.cold = true;
+        _healthGate.nextProbe = Date.now() + 3000;
+      }
     }, 3000);
     const token = await getToken();
     const res   = await fetch(`${API}/api/clients/${clientId}/audit`, {
