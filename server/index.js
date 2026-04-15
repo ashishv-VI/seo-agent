@@ -207,16 +207,36 @@ setInterval(async () => {
         try {
           const { runCMO } = require("./agents/CMO_agent");
           const cmoResult = await runCMO(doc.id, keys);
-          if (cmoResult?.decision?.nextAgents?.length > 0) {
-            console.log(`[daily-monitor] CMO: queued ${cmoResult.decision.nextAgents.length} action(s) for ${data.name}: ${cmoResult.decision.nextAgents.join(", ")}`);
+          // runCMO returns { success, cmo: { decision, reasoning, nextAgents, confidence } }
+          // The previous code read cmoResult.decision.nextAgents which was always
+          // undefined — the whole daily wake-up block silently no-op'd.
+          const cmoDecision = cmoResult?.cmo;
+          if (cmoDecision?.nextAgents?.length > 0) {
+            console.log(`[daily-monitor] CMO: queued ${cmoDecision.nextAgents.length} action(s) for ${data.name}: ${cmoDecision.nextAgents.join(", ")} (conf ${cmoDecision.confidence})`);
             await db.collection("notifications").add({
               clientId:  doc.id,
               ownerId:   data.ownerId,
               type:      "cmo_daily_decision",
-              message:   `CMO daily check: ${cmoResult.decision.reasoning || "action plan ready"}`,
+              title:     `Daily CMO decision — ${data.name}`,
+              message:   `${cmoDecision.decision}. ${cmoDecision.reasoning || ""}`.slice(0, 400),
               read:      false,
               createdAt: new Date().toISOString(),
             }).catch(() => {});
+
+            // Auto-execute if confidence is high enough AND playbook veto already ran.
+            // The cmo_queue item was already written by runCMO with status="pending".
+            // For high-confidence (≥0.85) decisions we fire the agents directly so the
+            // agent actually acts on its own — not just "wakes up and files a ticket".
+            if ((cmoDecision.confidence || 0) >= 0.85) {
+              const { runAgentById } = require("./agents/agentRunner");
+              for (const agentId of cmoDecision.nextAgents.slice(0, 3)) {
+                runAgentById(agentId, doc.id, keys).then(r => {
+                  console.log(`[daily-monitor] auto-exec ${agentId} for ${data.name} → ${r?.success ? "ok" : r?.error || "skip"}`);
+                }).catch(e => {
+                  console.error(`[daily-monitor] auto-exec ${agentId} failed:`, e.message);
+                });
+              }
+            }
           }
         } catch (cmoErr) {
           console.error(`[daily-monitor] CMO error for ${data.name}:`, cmoErr.message);

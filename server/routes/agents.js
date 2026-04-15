@@ -1647,31 +1647,24 @@ router.post("/:clientId/cmo-decisions/:decisionId", verifyToken, async (req, res
       reviewedBy: req.uid,
     });
 
-    // If approved, trigger the listed agents in the background
+    // If approved, trigger the listed agents in the background.
+    // Uses the central agentRunner so every agent (including A2/A8/A10/A19/A23)
+    // can be auto-triggered. The old inline RUNNABLE map was missing half of
+    // them, so A24 lead-gen/traffic/local pivots silently dropped agents.
     if (action === "approve") {
       const decSnap  = await db.collection("cmo_queue").doc(req.params.decisionId).get();
       const decision = decSnap.data() || {};
-      const agentsToRun = decision.nextAgents || [];
+      const agentsToRun = (decision.nextAgents || []).slice(0, 3);
 
-      const RUNNABLE = {
-        A3: async (id, k) => { const { runA3 } = require("../agents/A3_keywords"); return runA3(id, k); },
-        A5: async (id, k) => { const { runA5 } = require("../agents/A5_content"); return runA5(id, k); },
-        A6: async (id, k) => { const { runA6 } = require("../agents/A6_onpage"); return runA6(id, k); },
-        A7: async (id, k) => { const { runA7 } = require("../agents/A7_technical"); return runA7(id, k); },
-        A11: async (id, k) => { const { runA11 } = require("../agents/A11_linkBuilder"); return runA11(id, k); },
-        A14: async (id, k) => { const { runA14 } = require("../agents/A14_contentAutopilot"); return runA14(id, k); },
-      };
-
+      const { runAgentById } = require("../agents/agentRunner");
       const keys = await getUserKeys(req.uid);
+
       for (const agentId of agentsToRun) {
-        const fn = RUNNABLE[agentId];
-        if (fn) {
-          fn(req.params.clientId, keys).then(result => {
-            console.log(`[cmo-decision] ${agentId} auto-triggered → ${result.success ? "ok" : result.error}`);
-          }).catch(e => {
-            console.error(`[cmo-decision] ${agentId} failed:`, e.message);
-          });
-        }
+        runAgentById(agentId, req.params.clientId, keys).then(result => {
+          console.log(`[cmo-decision] ${agentId} auto-triggered → ${result.success ? "ok" : result.error}`);
+        }).catch(e => {
+          console.error(`[cmo-decision] ${agentId} failed:`, e.message);
+        });
       }
     }
 
