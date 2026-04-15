@@ -186,7 +186,28 @@ setInterval(async () => {
         } catch { /* non-blocking */ }
 
         // A16: update client AI memory after daily check
-        runA16(doc.id, keys).catch(() => {});
+        await runA16(doc.id, keys).catch(() => {});
+
+        // CMO: daily self-scheduled wake-up — reads current state + memory,
+        // decides if any action is needed today (re-audit, new content, fix push, etc).
+        // This is what makes the agent "wake up and decide" instead of waiting for a human.
+        try {
+          const { runCMO } = require("./agents/CMO_agent");
+          const cmoResult = await runCMO(doc.id, keys);
+          if (cmoResult?.decision?.nextAgents?.length > 0) {
+            console.log(`[daily-monitor] CMO: queued ${cmoResult.decision.nextAgents.length} action(s) for ${data.name}: ${cmoResult.decision.nextAgents.join(", ")}`);
+            await db.collection("notifications").add({
+              clientId:  doc.id,
+              ownerId:   data.ownerId,
+              type:      "cmo_daily_decision",
+              message:   `CMO daily check: ${cmoResult.decision.reasoning || "action plan ready"}`,
+              read:      false,
+              createdAt: new Date().toISOString(),
+            }).catch(() => {});
+          }
+        } catch (cmoErr) {
+          console.error(`[daily-monitor] CMO error for ${data.name}:`, cmoErr.message);
+        }
 
       } catch { /* skip client on error */ }
     }

@@ -25,13 +25,26 @@ async function runA12(clientId, keys) {
 
   for (const task of autoFixable.slice(0, 10)) {
     try {
+      // ── Self-healing: block retries that exceed max attempts ──
+      if (task.isRetry && (task.retryCount || 0) >= (task.maxRetries || 3)) {
+        await updateTask(clientId, task.id, { status: "abandoned", abandonReason: "max retries exceeded" });
+        errors.push({ taskId: task.id, error: `Abandoned after ${task.retryCount} failed attempts` });
+        continue;
+      }
+
+      // Retry attempts vary the approach: higher temperature + explicit instruction to try differently
+      const isRetry = !!task.isRetry;
+      const retryNote = isRetry
+        ? `\n\nIMPORTANT: Previous attempt failed with: "${task.lastError || "unknown error"}". Try a DIFFERENT approach this time — different wording, different structure, or a more conservative fix.`
+        : "";
+
       const prompt = `You are a senior SEO consultant. Generate an exact, ready-to-implement fix.
 
 Business: ${brief.businessName || "N/A"}
 Website: ${brief.websiteUrl || "N/A"}
 Services: ${(brief.services || []).join(", ") || "N/A"}
 Issue: ${task.issueType}
-Detail: ${task.title}
+Detail: ${task.title}${retryNote}
 
 Return ONLY valid JSON (no markdown):
 {
@@ -48,7 +61,11 @@ Return ONLY valid JSON (no markdown):
 
       if (hasLLM) {
         try {
-          const response = await callLLM(prompt, keys, { maxTokens: 500 });
+          // Retries use higher temperature to force variation
+          const llmOpts = isRetry
+            ? { maxTokens: 500, temperature: 0.8 }
+            : { maxTokens: 500, temperature: 0.3 };
+          const response = await callLLM(prompt, keys, llmOpts);
           const llmResult = parseJSON(response);
           if (llmResult.suggestedFix) result = { ...ruleResult, ...llmResult, generatedBy: "llm" };
         } catch {
@@ -56,30 +73,65 @@ Return ONLY valid JSON (no markdown):
         }
       }
 
-      // ── Auto-approve low-risk fixes if confidence + win rate are high ──
-      // Low-risk: text-only changes (title, meta description) — easily reversible
-      const LOW_RISK_TYPES = new Set([
-        "seo_title", "meta_description", "missing_title", "missing_meta_desc",
-        "short_title", "short_meta", "title_tag", "meta_desc",
-      ]);
-      const isLowRisk = LOW_RISK_TYPES.has(task.issueType);
+      // ── Tiered auto-approve: every fix type has a risk level + threshold ──
+      // LOW:    text-only, fully reversible → 70% win rate + 0.85 confidence
+      // MEDIUM: structural but reversible → 80% win rate + 0.90 confidence
+      // HIGH:   irreversible / schema / redirects → never auto-approve
+      const RISK_TIERS = {
+        low: new Set([
+          "seo_title", "meta_description", "missing_title", "missing_meta_desc",
+          "short_title", "short_meta", "long_title", "long_meta", "title_tag", "meta_desc",
+          "missing_alt_text", "missing_og_tags", "missing_twitter_card",
+        ]),
+        medium: new Set([
+          "missing_h1", "multiple_h1", "missing_canonical", "canonical_tag",
+          "missing_schema", "no_viewport", "missing_lang", "missing_robots",
+          "low_internal_links", "orphan_page",
+        ]),
+        high: new Set([
+          "redirect_chain", "broken_internal_link", "mixed_content",
+          "missing_ssl", "slow_ttfb", "slow_response_time", "thin_content",
+          "keyword_cannibalization",
+        ]),
+      };
+      const getRiskTier = (type) => {
+        if (RISK_TIERS.low.has(type))    return "low";
+        if (RISK_TIERS.medium.has(type)) return "medium";
+        if (RISK_TIERS.high.has(type))   return "high";
+        return "unknown";
+      };
+      const THRESHOLDS = {
+        low:    { minWinRate: 70, minConfidence: 0.85, minSamples: 2 },
+        medium: { minWinRate: 80, minConfidence: 0.90, minSamples: 3 },
+        high:   { minWinRate: 101, minConfidence: 2,   minSamples: 999 }, // never auto-approve
+        unknown:{ minWinRate: 101, minConfidence: 2,   minSamples: 999 },
+      };
 
-      // Check win rate from client_memory
+      const riskTier  = getRiskTier(task.issueType);
+      const threshold = THRESHOLDS[riskTier];
+
+      // Check win rate from client_memory for this specific fix type
       let winRate = 0;
-      if (isLowRisk) {
-        try {
-          const memSnap = await db.collection("client_memory").doc(clientId).get();
-          const fixOutcomes = memSnap.exists ? (memSnap.data().fixOutcomes || []) : [];
-          const relevant = fixOutcomes.filter(f => LOW_RISK_TYPES.has(f.field) || LOW_RISK_TYPES.has(f.issueType));
-          if (relevant.length >= 2) {
-            const improved = relevant.filter(f => f.outcome === "improved").length;
-            winRate = Math.round((improved / relevant.length) * 100);
-          }
-        } catch { /* non-blocking — default to manual approval */ }
-      }
+      let samples = 0;
+      try {
+        const memSnap = await db.collection("client_memory").doc(clientId).get();
+        const fixOutcomes = memSnap.exists ? (memSnap.data().fixOutcomes || []) : [];
+        // Match by exact issue type OR by risk tier (pooled learning within the tier)
+        const tierSet = RISK_TIERS[riskTier] || new Set();
+        const relevant = fixOutcomes.filter(f => {
+          const field = f.field || f.issueType;
+          return field === task.issueType || tierSet.has(field);
+        });
+        samples = relevant.length;
+        if (samples >= threshold.minSamples) {
+          const improved = relevant.filter(f => f.outcome === "improved").length;
+          winRate = Math.round((improved / samples) * 100);
+        }
+      } catch { /* non-blocking — default to manual approval */ }
 
-      // Auto-approve if: low-risk + confidence >= 0.85 + win rate >= 70%
-      const autoApprove = isLowRisk && (task.confidence || 0.7) >= 0.85 && winRate >= 70;
+      const autoApprove = winRate >= threshold.minWinRate
+                       && (task.confidence || 0.7) >= threshold.minConfidence
+                       && samples >= threshold.minSamples;
       const status = autoApprove ? "approved" : "pending";
 
       // Push to approval queue
@@ -101,7 +153,8 @@ Return ONLY valid JSON (no markdown):
           codeSnippet:  result.codeSnippet  || null,
           estimatedImpact: result.estimatedImpact || `+${task.expectedScoreGain || 3} score pts`,
           currentValue: task.currentValue   || null,
-          ...(autoApprove && { autoApproveReason: `Low-risk fix (${task.issueType}), ${winRate}% win rate, confidence ${task.confidence || 0.7}` }),
+          ...(autoApprove && { autoApproveReason: `${riskTier.toUpperCase()}-risk fix (${task.issueType}), ${winRate}% win rate across ${samples} samples, confidence ${task.confidence || 0.7}` }),
+          riskTier,
         },
         createdAt:   FieldValue.serverTimestamp(),
       });

@@ -1,6 +1,7 @@
 const { saveState, getState } = require("../shared-state/stateManager");
 const { callLLM, parseJSON }  = require("../utils/llm");
 const { emitToolSuggestion }  = require("../utils/toolBridge");
+const { db }                  = require("../config/firebase");
 
 /**
  * A3 — Keyword Research & Mapping Agent
@@ -246,6 +247,47 @@ Generate 5-8 keywords per cluster. Make them realistic and specific to the busin
     },
     generatedAt:    new Date().toISOString(),
   };
+
+  // ── Kill-signal: deprioritize keywords that produced 0 leads in 90 days ──
+  // If a keyword has been ranking but hasn't converted, it's dead weight.
+  // Only applies to keywords that have existed for 90+ days AND have attribution data.
+  try {
+    const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+    const convSnap = await db.collection("conversions")
+      .where("clientId", "==", clientId)
+      .where("submittedAt", ">=", ninetyDaysAgo)
+      .get();
+
+    const leadsByKeyword = {};
+    convSnap.docs.forEach(d => {
+      const kw = (d.data().gscKeyword || "").toLowerCase();
+      if (kw) leadsByKeyword[kw] = (leadsByKeyword[kw] || 0) + 1;
+    });
+
+    // Check historical rankings — if keyword has had rankings for 90+ days with 0 leads, deprioritize
+    const rankings = await getState(clientId, "A10_rankings") || {};
+    const rankedKeywords = (rankings.keywords || []).map(r => (r.keyword || "").toLowerCase());
+    let deprioritized = 0;
+
+    for (const kw of result.keywordMap) {
+      const normalized = (kw.keyword || "").toLowerCase();
+      const isRanked   = rankedKeywords.includes(normalized);
+      const leadCount  = leadsByKeyword[normalized] || 0;
+      // Mark dead keywords: ranked for 90+ days, 0 leads, and wasn't already low priority
+      if (isRanked && leadCount === 0 && kw.priority !== "low") {
+        kw.priority      = "low";
+        kw.deprioritized = true;
+        kw.killReason    = "0 leads in 90 days despite rankings";
+        deprioritized++;
+      }
+    }
+    if (deprioritized > 0) {
+      console.log(`[A3] Deprioritized ${deprioritized} keyword(s) for ${clientId} — 0 leads in 90 days`);
+      result.killSignals = { deprioritized, reason: "no_conversions_90d" };
+    }
+  } catch (e) {
+    console.error(`[A3] Kill-signal check failed:`, e.message);
+  }
 
   await saveState(clientId, "A3_keywords", result);
 

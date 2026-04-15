@@ -265,6 +265,36 @@ async function runA13(clientId, keys) {
   // Commit the push log batch
   try { await logBatch.commit(); } catch { /* non-blocking */ }
 
+  // ── Self-healing: if any push failed, re-queue with retry flag ──
+  // A12 will regenerate with a different approach (LLM temperature bump,
+  // alternate rule template, or skip if already retried max times).
+  if (failed.length > 0) {
+    try {
+      const batch = db.batch();
+      for (const f of failed) {
+        const retryRef = db.collection("tasks").doc();
+        batch.set(retryRef, {
+          id:           retryRef.id,
+          clientId,
+          issueType:    f.issue,
+          status:       "pending",
+          autoFixable:  true,
+          isRetry:      true,
+          retryCount:   (f.retryCount || 0) + 1,
+          maxRetries:   3,
+          lastError:    f.error,
+          originalTaskId: f.id,
+          title:        `Retry: ${f.issue} (attempt ${(f.retryCount || 0) + 1})`,
+          createdAt:    FieldValue.serverTimestamp(),
+        });
+      }
+      await batch.commit();
+      console.log(`[A13] Re-queued ${failed.length} failed push(es) for retry via A12`);
+    } catch (e) {
+      console.error(`[A13] Retry re-queue failed:`, e.message);
+    }
+  }
+
   // Sprint 2 — A18: notify client when fixes are pushed
   if (pushed.length > 0) {
     try {
