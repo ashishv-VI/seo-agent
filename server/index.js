@@ -3,6 +3,19 @@ const express = require("express");
 const cors    = require("cors");
 const { db }  = require("./config/firebase");
 
+// ── Process-level safety net ──────────────────────
+// Any unhandled rejection or uncaught exception anywhere in the 25 agents /
+// dozen routes / 4 cron loops would otherwise crash the Node process. On
+// Render free tier that causes a restart → next request trips a new crash →
+// crash loop → the frontend sees a mix of 200s and 502s ("flapping").
+// Log loudly and keep the server alive so one bad async doesn't take it down.
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("[fatal] Unhandled promise rejection:", reason?.stack || reason);
+});
+process.on("uncaughtException", (err) => {
+  console.error("[fatal] Uncaught exception:", err?.stack || err);
+});
+
 // Load rate limiters — graceful fallback if express-rate-limit not yet installed
 let authLimiter, agentLimiter, chatLimiter, apiLimiter;
 try {
