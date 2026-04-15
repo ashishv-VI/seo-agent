@@ -54,8 +54,8 @@ const corsOptions = {
 };
 
 // Explicit OPTIONS preflight handler — must come BEFORE route registration
-// Without this, Express can send a 404 on preflight before cors headers are added
-// app.options("*", cors(corsOptions)); // Removed due to path-to-regexp error with '*'
+// Handles preflight for all routes so CORS headers are always sent
+app.options("/(.*)", cors(corsOptions));
 
 app.use(cors(corsOptions));
 
@@ -596,6 +596,11 @@ setInterval(async () => {
 
 // ── 404 Handler ────────────────────────────────────
 app.use((req, res) => {
+  const origin = req.headers.origin || "";
+  if (!origin || origin.endsWith(".onrender.com") || origin === process.env.FRONTEND_URL || origin.startsWith("http://localhost")) {
+    res.header("Access-Control-Allow-Origin", origin || "*");
+    res.header("Access-Control-Allow-Credentials", "true");
+  }
   res.status(404).json({ error: "Route not found" });
 });
 

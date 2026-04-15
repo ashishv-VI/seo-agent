@@ -323,14 +323,20 @@ export default function ClientManager({ dark }) {
 
   async function getToken() { return user?.getIdToken?.() || ""; }
 
-  async function loadClients() {
+  async function loadClients(retries = 2) {
     setLoading(true);
     try {
       const token = await getToken();
       const res   = await fetch(`${API}/api/clients`, { headers: { Authorization: `Bearer ${token}` } });
       const data  = await res.json();
       setClients(data.clients || []);
-    } catch { setError("Failed to load clients"); }
+    } catch (e) {
+      if (retries > 0) {
+        await new Promise(r => setTimeout(r, 3000));
+        return loadClients(retries - 1);
+      }
+      setError("Server is starting up — please refresh in a few seconds");
+    }
     setLoading(false);
   }
 
