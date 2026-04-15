@@ -370,6 +370,20 @@ setInterval(async () => {
         });
 
         console.log(`[scheduler] Started monthly re-run for ${data.name} (${doc.id})`);
+
+        // A24: check if KPI goals are on track after the re-run completes
+        // Runs in background — doesn't block the pipeline
+        setTimeout(async () => {
+          try {
+            const { runA24 } = require("./agents/A24_strategist");
+            const strategyResult = await runA24(doc.id, keys);
+            if (strategyResult?.success && !strategyResult.onTrack) {
+              console.log(`[scheduler] A24: ${data.name} is OFF TRACK — ${strategyResult.verdict}`);
+            }
+          } catch (e) {
+            console.error(`[scheduler] A24 error for ${data.name}:`, e.message);
+          }
+        }, 60 * 60 * 1000); // wait 1 hour for the pipeline to finish first
       }
     }
   } catch (err) {

@@ -107,6 +107,18 @@ async function runCMO(clientId, keys) {
   decision.confidence = confidenceAdjustment.confidence;
   decision.confidenceReasoning = confidenceAdjustment.reasoning;
 
+  // ── Playbook meta-learning veto ──
+  // If CMO wants to run an agent whose playbook is failing (<40% win rate with
+  // ≥5 samples in this industry), abandon the playbook and flag it in the output.
+  // This prevents the agent from wasting effort on approaches that aren't working.
+  const playbookVeto = vetoFailingPlaybooks(decision.nextAgents || [], patternStats);
+  if (playbookVeto.abandoned.length > 0) {
+    decision.nextAgents = playbookVeto.kept;
+    decision.playbookAbandoned = playbookVeto.abandoned;
+    decision.reasoning = `${decision.reasoning || ""} [Abandoned playbooks: ${playbookVeto.abandoned.map(p => p.playbook).join(", ")} — historical win rate too low]`;
+    console.log(`[CMO] Abandoned ${playbookVeto.abandoned.length} failing playbook(s) for ${clientId}`);
+  }
+
   // ── Schedule next agents ──────────────────────────
   const nextAgents = (decision.nextAgents || []).slice(0, 3);
   if (nextAgents.length > 0) {
@@ -239,6 +251,70 @@ function reweightConfidence(decision, patternStats) {
   return { confidence: llmConf, reasoning: "LLM confidence (insufficient history)" };
 }
 
+// ── Playbook meta-learning ─────────────────────────
+// Maps raw fix types to high-level playbooks. If an entire playbook is failing
+// in an industry, CMO should try a different playbook instead of retrying.
+const FIX_TO_PLAYBOOK = {
+  seo_title: "on_page", meta_description: "on_page", missing_title: "on_page",
+  missing_meta_desc: "on_page", short_title: "on_page", long_title: "on_page",
+  missing_h1: "on_page", multiple_h1: "on_page", title_tag: "on_page", meta_desc: "on_page",
+  missing_canonical: "technical", canonical_tag: "technical", no_viewport: "technical",
+  slow_response_time: "technical", redirect_chain: "technical", missing_ssl: "technical",
+  slow_ttfb: "technical", mixed_content: "technical",
+  missing_schema: "schema", schema_tag: "schema",
+  thin_content: "content", content_gap: "content", keyword_cannibalization: "content",
+  content_refresh: "content", blog_post: "content",
+  low_internal_links: "linking", broken_internal_link: "linking",
+  link_building: "linking", backlink: "linking",
+  citation_missing: "local", gmb_not_optimized: "local", nap_inconsistent: "local",
+};
+const AGENT_TO_PLAYBOOK = {
+  A5: "content", A6: "on_page", A7: "technical",
+  A8: "local",   A11: "linking", A14: "content",
+};
+
+function computePlaybookStats(patterns) {
+  const byPlaybook = {};
+  for (const p of patterns) {
+    const pb = FIX_TO_PLAYBOOK[p.fixType] || "other";
+    if (!byPlaybook[pb]) byPlaybook[pb] = { improved: 0, total: 0 };
+    byPlaybook[pb].total++;
+    if (p.outcome === "improved") byPlaybook[pb].improved++;
+  }
+  return Object.entries(byPlaybook).map(([playbook, c]) => ({
+    playbook,
+    winRate: Math.round((c.improved / c.total) * 100),
+    sample:  c.total,
+    verdict: c.total >= 5 && (c.improved / c.total) < 0.4 ? "failing"
+           : c.total >= 3 && (c.improved / c.total) >= 0.7 ? "winning"
+           : "neutral",
+  }));
+}
+
+// Remove next-agents whose playbook is proven to fail in this industry.
+// Returns { kept: [...], abandoned: [{ agent, playbook, winRate, sample }] }.
+function vetoFailingPlaybooks(nextAgents, patternStats) {
+  const result = { kept: [], abandoned: [] };
+  // Combine own + cross-agency playbook stats, preferring cross-agency data for
+  // industry-wide signal (it's the "does this playbook work for businesses like mine?" question).
+  const allStats = [
+    ...((patternStats.playbooks?.crossAgency) || []),
+    ...((patternStats.playbooks?.ownAgency)   || []),
+  ];
+  const failing = new Set(allStats.filter(s => s.verdict === "failing").map(s => s.playbook));
+
+  for (const agent of nextAgents) {
+    const playbook = AGENT_TO_PLAYBOOK[agent];
+    if (playbook && failing.has(playbook)) {
+      const stat = allStats.find(s => s.playbook === playbook);
+      result.abandoned.push({ agent, playbook, winRate: stat?.winRate, sample: stat?.sample });
+    } else {
+      result.kept.push(agent);
+    }
+  }
+  return result;
+}
+
 // Structured stats for the UI — returns { ownAgency: [], crossAgency: [], thisClient: {} }
 function buildPatternStats(globalPatterns, clientMemory, businessType = "") {
   const stats = { ownAgency: [], crossAgency: [], thisClient: { worked: [], failed: [] }, businessType };
@@ -266,6 +342,12 @@ function buildPatternStats(globalPatterns, clientMemory, businessType = "") {
 
   stats.ownAgency   = aggregate(own);
   stats.crossAgency = aggregate(cross);
+
+  // Playbook-level rollup for meta-learning
+  stats.playbooks = {
+    ownAgency:   computePlaybookStats(own),
+    crossAgency: computePlaybookStats(cross),
+  };
 
   const fixOutcomes = clientMemory?.fixOutcomes || [];
   const recent = fixOutcomes.slice(-10);

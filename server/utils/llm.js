@@ -1,7 +1,9 @@
 /**
  * LLM Utility — Groq → Gemini → OpenRouter (3-provider fallback)
  * Each provider retries once on timeout before falling to the next.
+ * Records usage via costTracker when options.clientId is provided.
  */
+const { recordUsage, checkBudget } = require("./costTracker");
 
 const RETRY_DELAY_MS     = 1500;
 const RATE_LIMIT_WAIT_MS = 60000; // 60s — standard rate-limit window
@@ -45,6 +47,16 @@ async function callLLM(prompt, keys, options = {}) {
   ];
   const maxTokens  = options.maxTokens  || 3000;
   const temperature = options.temperature || 0.3;
+  const clientId   = options.clientId || null;
+
+  // ── Budget gate: block expensive calls if monthly budget exceeded ──
+  // Callers can pass skipBudgetCheck=true for critical system calls.
+  if (clientId && !options.skipBudgetCheck) {
+    const budget = await checkBudget(clientId);
+    if (!budget.allowed) {
+      throw new Error(`LLM call blocked: ${budget.reason}`);
+    }
+  }
 
   // ── 1. Groq ───────────────────────────────────────────────────────────────
   if (keys.groq) {
@@ -66,7 +78,10 @@ async function callLLM(prompt, keys, options = {}) {
       const data = await res.json();
       return data.choices?.[0]?.message?.content || null;
     }, "Groq");
-    if (result) return result;
+    if (result) {
+      recordUsage(clientId, "groq", prompt, result).catch(() => {});
+      return result;
+    }
   }
 
   // ── 2. Gemini ─────────────────────────────────────────────────────────────
@@ -91,7 +106,10 @@ async function callLLM(prompt, keys, options = {}) {
       const data = await res.json();
       return data.candidates?.[0]?.content?.parts?.[0]?.text || null;
     }, "Gemini");
-    if (result) return result;
+    if (result) {
+      recordUsage(clientId, "gemini", prompt, result).catch(() => {});
+      return result;
+    }
   }
 
   // ── 3. OpenRouter (3rd fallback) ──────────────────────────────────────────
@@ -119,7 +137,10 @@ async function callLLM(prompt, keys, options = {}) {
       const data = await res.json();
       return data.choices?.[0]?.message?.content || null;
     }, "OpenRouter");
-    if (result) return result;
+    if (result) {
+      recordUsage(clientId, "openrouter", prompt, result).catch(() => {});
+      return result;
+    }
   }
 
   throw new Error("All LLM providers failed — add Groq, Gemini, or OpenRouter key in Settings");
