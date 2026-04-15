@@ -268,24 +268,43 @@ async function runA13(clientId, keys) {
   // ── Self-healing: if any push failed, re-queue with retry flag ──
   // A12 will regenerate with a different approach (LLM temperature bump,
   // alternate rule template, or skip if already retried max times).
+  //
+  // CRITICAL: write to the same collection A12 reads from. A12 uses
+  // getTopTasks() → task_queue/{clientId}/tasks subcollection. Writing to a
+  // flat "tasks/" collection leaves the retry invisible → broken self-heal.
   if (failed.length > 0) {
     try {
       const batch = db.batch();
       for (const f of failed) {
-        const retryRef = db.collection("tasks").doc();
+        // Read the original task to get the correct retryCount and priority.
+        // If the original is gone, fall back to retryCount=0.
+        let originalTask = null;
+        if (f.id) {
+          try {
+            const origSnap = await db.collection("task_queue").doc(clientId).collection("tasks").doc(f.id).get();
+            if (origSnap.exists) originalTask = origSnap.data();
+          } catch { /* non-blocking */ }
+        }
+        const prevRetryCount = originalTask?.retryCount || 0;
+        const retryRef = db.collection("task_queue").doc(clientId).collection("tasks").doc();
         batch.set(retryRef, {
-          id:           retryRef.id,
+          taskId:         retryRef.id,
           clientId,
-          issueType:    f.issue,
-          status:       "pending",
-          autoFixable:  true,
-          isRetry:      true,
-          retryCount:   (f.retryCount || 0) + 1,
-          maxRetries:   3,
-          lastError:    f.error,
+          issueType:      f.issue,
+          status:         "pending",
+          autoFixable:    true,
+          isRetry:        true,
+          retryCount:     prevRetryCount + 1,
+          maxRetries:     3,
+          lastError:      f.error,
           originalTaskId: f.id,
-          title:        `Retry: ${f.issue} (attempt ${(f.retryCount || 0) + 1})`,
-          createdAt:    FieldValue.serverTimestamp(),
+          title:          `Retry: ${f.issue} (attempt ${prevRetryCount + 1})`,
+          // Carry forward priority + expected gain so A12 + getTopTasks pick it up properly.
+          priorityScore:  originalTask?.priorityScore || 50,
+          expectedScoreGain: originalTask?.expectedScoreGain || 3,
+          sourceAgent:    "A13_retry",
+          createdAt:      FieldValue.serverTimestamp(),
+          updatedAt:      FieldValue.serverTimestamp(),
         });
       }
       await batch.commit();

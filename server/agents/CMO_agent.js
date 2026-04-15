@@ -38,6 +38,21 @@ async function runCMO(clientId, keys) {
   const clientMemory = await db.collection("client_memory").doc(clientId).get()
     .then(d => d.exists ? d.data() : null).catch(() => null);
 
+  // ── Load fresh fix_verification outcomes (the real feedback loop) ──
+  // A16 writes to client_memory.fixOutcomes on a cadence, but the source of
+  // truth is the fix_verification collection. Pull the last 50 checked docs
+  // directly so CMO always sees the most recent win/fail signal.
+  let recentVerifications = [];
+  try {
+    const verifySnap = await db.collection("fix_verification")
+      .where("clientId", "==", clientId)
+      .where("status",   "==", "checked")
+      .orderBy("checkedAt", "desc")
+      .limit(50)
+      .get();
+    recentVerifications = verifySnap.docs.map(d => d.data());
+  } catch { /* non-blocking — index may not exist yet */ }
+
   // ── Load cross-client global patterns ──────────────
   // 1. Same-owner patterns: what worked across this agency's clients
   // 2. Same-businessType patterns: what worked for similar industries
@@ -84,13 +99,24 @@ async function runCMO(clientId, keys) {
   const patternSummary = buildPatternSummary(globalPatterns, clientMemory, businessType);
 
   // Structured pattern stats for the UI (separate from LLM prompt text)
-  const patternStats = buildPatternStats(globalPatterns, clientMemory, businessType);
+  // Includes per-client playbook stats built from the fresh fix_verification pull
+  // so the veto can check personal win rate, not just industry aggregate.
+  const patternStats = buildPatternStats(globalPatterns, clientMemory, businessType, recentVerifications);
+
+  // ── Pre-filter: identify playbooks that are failing for this client ─────
+  // Done BEFORE the LLM sees the prompt so we can tell it which agents to avoid.
+  // This is the "closed feedback loop" — historical outcomes directly shape the
+  // decision space the LLM is allowed to propose from.
+  const failingPlaybooks = identifyFailingPlaybooks(patternStats);
+  const allowedAgents    = filterAllowedAgents(failingPlaybooks);
 
   // ── Rule-based signal extraction ─────────────────
   const signals = extractSignals({ brief, audit, keywords, competitor, onpage, technical, geo, report, rankings });
 
   // ── LLM decision ──────────────────────────────────
-  const prompt = buildCMOPrompt(brief, signals, patternSummary);
+  // Prompt now tells the LLM which playbooks are proven to fail for this client
+  // + industry, so it stops proposing them in the first place.
+  const prompt = buildCMOPrompt(brief, signals, patternSummary, { failingPlaybooks, allowedAgents });
   let decision;
   try {
     const raw = await callLLM(prompt, keys, { maxTokens: 2000, temperature: 0.2 });
@@ -102,15 +128,14 @@ async function runCMO(clientId, keys) {
 
   // ── Reweight confidence based on historical outcomes ──
   // If the LLM proposes an action that has historical data, blend its confidence
-  // with the actual win rate from global_patterns + client_memory.
-  const confidenceAdjustment = reweightConfidence(decision, patternStats);
+  // with the actual win rate from global_patterns + client_memory + fresh verifications.
+  const confidenceAdjustment = reweightConfidence(decision, patternStats, recentVerifications);
   decision.confidence = confidenceAdjustment.confidence;
   decision.confidenceReasoning = confidenceAdjustment.reasoning;
 
-  // ── Playbook meta-learning veto ──
-  // If CMO wants to run an agent whose playbook is failing (<40% win rate with
-  // ≥5 samples in this industry), abandon the playbook and flag it in the output.
-  // This prevents the agent from wasting effort on approaches that aren't working.
+  // ── Playbook meta-learning veto (safety net) ──
+  // Pre-filter should already have handled this, but the LLM can still ignore
+  // instructions — this is the backstop that enforces the rule regardless.
   const playbookVeto = vetoFailingPlaybooks(decision.nextAgents || [], patternStats);
   if (playbookVeto.abandoned.length > 0) {
     decision.nextAgents = playbookVeto.kept;
@@ -199,10 +224,10 @@ function extractSignals({ brief, audit, keywords, competitor, onpage, technical,
 }
 
 // ── Cross-client pattern summary for CMO prompt ───
-// Reweight LLM confidence using historical win rates + this client's past failures
-function reweightConfidence(decision, patternStats) {
+// Reweight LLM confidence using historical win rates + this client's past failures.
+// recentVerifications = fresh fix_verification rows that may not yet be in client_memory.
+function reweightConfidence(decision, patternStats, recentVerifications = []) {
   const llmConf = Math.max(0, Math.min(1, decision.confidence || 0.7));
-  const nextAgents = decision.nextAgents || [];
   const decisionText = (decision.decision || "").toLowerCase();
 
   // Map decision keywords → fix types we track in global_patterns
@@ -219,6 +244,22 @@ function reweightConfidence(decision, patternStats) {
 
   if (!fixType) {
     return { confidence: llmConf, reasoning: "LLM confidence (no historical match)" };
+  }
+
+  // Fresh fix_verification signal — takes precedence over everything else
+  // because it's the most recent, un-aggregated truth for THIS client.
+  const recentForType = recentVerifications.filter(v =>
+    v.field && v.field.toLowerCase().includes(fixType.split("_")[0])
+  );
+  if (recentForType.length >= 2) {
+    const improved = recentForType.filter(v => v.outcome === "improved").length;
+    const clientRate = improved / recentForType.length;
+    // If this client has recent direct evidence, anchor confidence to it heavily.
+    const blended = (llmConf * 0.3) + (clientRate * 0.7);
+    return {
+      confidence: Math.round(blended * 100) / 100,
+      reasoning: `Blended with this client's recent ${Math.round(clientRate * 100)}% win rate on ${fixType} (n=${recentForType.length}, from fix_verification)`,
+    };
   }
 
   // Look up win rate in ownAgency first, then crossAgency
@@ -295,13 +336,12 @@ function computePlaybookStats(patterns) {
 // Returns { kept: [...], abandoned: [{ agent, playbook, winRate, sample }] }.
 function vetoFailingPlaybooks(nextAgents, patternStats) {
   const result = { kept: [], abandoned: [] };
-  // Combine own + cross-agency playbook stats, preferring cross-agency data for
-  // industry-wide signal (it's the "does this playbook work for businesses like mine?" question).
+  const failing = identifyFailingPlaybooks(patternStats);
   const allStats = [
+    ...((patternStats.playbooks?.thisClient) || []),
     ...((patternStats.playbooks?.crossAgency) || []),
     ...((patternStats.playbooks?.ownAgency)   || []),
   ];
-  const failing = new Set(allStats.filter(s => s.verdict === "failing").map(s => s.playbook));
 
   for (const agent of nextAgents) {
     const playbook = AGENT_TO_PLAYBOOK[agent];
@@ -315,10 +355,51 @@ function vetoFailingPlaybooks(nextAgents, patternStats) {
   return result;
 }
 
+// ── Per-client + industry playbook veto identification ───────────────
+// Per-client data wins over industry data — a client that actually succeeds with
+// a playbook should keep using it even if the industry average is bad.
+// Returns a Set of playbook names that should be abandoned.
+function identifyFailingPlaybooks(patternStats) {
+  const failing = new Set();
+
+  // 1. Per-client playbook stats take precedence. If this specific client has
+  //    ≥3 samples of a playbook and <40% win rate, veto it immediately.
+  for (const s of (patternStats.playbooks?.thisClient || [])) {
+    if (s.sample >= 3 && s.winRate < 40) failing.add(s.playbook);
+  }
+
+  // 2. Industry-wide signal — only applied if per-client has no opinion.
+  //    (If per-client says it works, don't let the global aggregate override.)
+  const perClientPlaybooks = new Set((patternStats.playbooks?.thisClient || [])
+    .filter(s => s.sample >= 3)
+    .map(s => s.playbook));
+
+  const industryStats = [
+    ...((patternStats.playbooks?.crossAgency) || []),
+    ...((patternStats.playbooks?.ownAgency)   || []),
+  ];
+  for (const s of industryStats) {
+    if (perClientPlaybooks.has(s.playbook)) continue; // client data trumps industry
+    if (s.verdict === "failing") failing.add(s.playbook);
+  }
+
+  return failing;
+}
+
+// Invert: given the failing set, return the list of agents CMO IS allowed
+// to propose. Used to shape the LLM prompt up-front.
+function filterAllowedAgents(failingPlaybooks) {
+  return Object.entries(AGENT_TO_PLAYBOOK)
+    .filter(([_agent, playbook]) => !failingPlaybooks.has(playbook))
+    .map(([agent]) => agent);
+}
+
 // Structured stats for the UI — returns { ownAgency: [], crossAgency: [], thisClient: {} }
-function buildPatternStats(globalPatterns, clientMemory, businessType = "") {
+// recentVerifications = fresh rows from fix_verification collection for *this* client.
+// These build per-client playbook stats so the veto can trust personal history.
+function buildPatternStats(globalPatterns, clientMemory, businessType = "", recentVerifications = []) {
   const stats = { ownAgency: [], crossAgency: [], thisClient: { worked: [], failed: [] }, businessType };
-  if (!globalPatterns.length && !clientMemory?.fixOutcomes?.length) return stats;
+  if (!globalPatterns.length && !clientMemory?.fixOutcomes?.length && !recentVerifications.length) return stats;
 
   const own   = globalPatterns.filter(p => !p._crossAgency);
   const cross = globalPatterns.filter(p => p._crossAgency);
@@ -343,10 +424,26 @@ function buildPatternStats(globalPatterns, clientMemory, businessType = "") {
   stats.ownAgency   = aggregate(own);
   stats.crossAgency = aggregate(cross);
 
+  // Per-client playbook stats — built from both A16 memory AND the fresh
+  // fix_verification pull. These are normalised into the same shape that
+  // computePlaybookStats produces for agency/cross-agency data.
+  const thisClientPatterns = [];
+  for (const v of recentVerifications) {
+    if (v.field && v.outcome && v.outcome !== "no_data") {
+      thisClientPatterns.push({ fixType: v.field, outcome: v.outcome });
+    }
+  }
+  for (const f of (clientMemory?.fixOutcomes || [])) {
+    if (f.field && f.outcome && f.outcome !== "no_data") {
+      thisClientPatterns.push({ fixType: f.field, outcome: f.outcome });
+    }
+  }
+
   // Playbook-level rollup for meta-learning
   stats.playbooks = {
     ownAgency:   computePlaybookStats(own),
     crossAgency: computePlaybookStats(cross),
+    thisClient:  computePlaybookStats(thisClientPatterns),
   };
 
   const fixOutcomes = clientMemory?.fixOutcomes || [];
@@ -432,7 +529,17 @@ function buildPatternSummary(globalPatterns, clientMemory, businessType = "") {
 }
 
 // ── LLM prompt ────────────────────────────────────
-function buildCMOPrompt(brief, signals, patternSummary = null) {
+function buildCMOPrompt(brief, signals, patternSummary = null, vetoContext = {}) {
+  const { failingPlaybooks = new Set(), allowedAgents = null } = vetoContext;
+  const allAgents = ["A2", "A5", "A6", "A7", "A11", "A14"];
+  const pickFrom  = allowedAgents && allowedAgents.length > 0
+    ? allowedAgents.filter(a => allAgents.includes(a))
+    : allAgents;
+
+  const vetoBlock = failingPlaybooks.size > 0
+    ? `\n## DO NOT PROPOSE THESE PLAYBOOKS\nThe following playbooks have been proven to FAIL (either for this client or this industry):\n${[...failingPlaybooks].map(p => `- ${p}`).join("\n")}\nDo NOT propose any agent that belongs to these playbooks. Pick a different approach.\n`
+    : "";
+
   return `You are the CMO Agent for an SEO AI platform. Your job is to analyse the signals below and decide the single most impactful next action for this client.
 
 Client: ${brief.businessName} (${brief.websiteUrl})
@@ -448,14 +555,12 @@ Goals: ${[].concat(brief.goals || []).join(", ")}
 - CTR low vs expected: ${signals.ctrLow ? "YES" : "NO"} (CTR: ${((signals.avgCtr || 0)*100).toFixed(1)}% at pos ${(signals.avgPos||0).toFixed(1)})
 - Content gaps found: ${signals.contentGaps}
 
-## Available Agents to Trigger
-- A2: Re-audit (if critical issues or drops)
-- A5: Title/meta rewrite (if CTR is low)
-- A6: On-page optimisation (if on-page issues)
-- A7: Technical/speed fix (if PageSpeed poor)
-- A11: Link building (if keywords stuck on page 2)
-- A14: Content creation (if content gaps found)
-${patternSummary ? `\n## Learning — What Has Worked (use this to improve confidence)\n${patternSummary}\n` : ""}
+## Available Agents to Trigger (pick ONLY from this list)
+${pickFrom.map(a => {
+  const labels = { A2: "Re-audit (if critical issues or drops)", A5: "Title/meta rewrite (if CTR is low)", A6: "On-page optimisation (if on-page issues)", A7: "Technical/speed fix (if PageSpeed poor)", A11: "Link building (if keywords stuck on page 2)", A14: "Content creation (if content gaps found)" };
+  return `- ${a}: ${labels[a] || a}`;
+}).join("\n")}
+${vetoBlock}${patternSummary ? `\n## Learning — What Has Worked (use this to improve confidence)\n${patternSummary}\n` : ""}
 Return ONLY valid JSON:
 {
   "decision": "one sentence describing the strategic focus",
