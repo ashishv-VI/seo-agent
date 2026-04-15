@@ -104,7 +104,7 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
     }, 800);
   }
 
-  async function load(silent = false) {
+  async function load(silent = false, retries = 1) {
     if (!silent) setLoading(true);
     setError("");
     try {
@@ -144,7 +144,14 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
         setCrawlProgress(null);
         if (ps === "complete") setActiveTab("dashboard");
       }
-    } catch (e) { setError(e.message || "Failed to load pipeline"); }
+    } catch (e) {
+      // Auto-retry once on network errors (Render cold-start can cause "Failed to fetch")
+      if (retries > 0 && (e.message === "Failed to fetch" || e.name === "TypeError")) {
+        await new Promise(r => setTimeout(r, 3000));
+        return load(silent, retries - 1);
+      }
+      setError(e.message || "Failed to load pipeline");
+    }
     if (!silent) setLoading(false);
   }
 
