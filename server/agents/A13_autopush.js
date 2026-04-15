@@ -217,11 +217,36 @@ async function runA13(clientId, keys) {
         });
 
         // ── Fix Verification: schedule a 21-day outcome check ─────────────
-        // Cron reads this collection daily and checks GSC to see if the fix worked
+        // Cron reads this collection daily and checks GSC to see if the fix worked.
+        //
+        // Retry attribution: if the approval came from a retry task, carry over
+        // the originalTaskId + retryCount so the verify loop can credit the
+        // original fix type (not the one-off retry task ID) in client_memory.
+        // Without this, the retry's outcome would be recorded against a task
+        // nobody else references and CMO would never learn "retries work here".
+        let retryMeta = { isRetry: false, originalTaskId: null, retryCount: 0 };
+        if (item.taskId) {
+          try {
+            const taskSnap = await db.collection("task_queue").doc(clientId).collection("tasks").doc(item.taskId).get();
+            if (taskSnap.exists) {
+              const t = taskSnap.data();
+              retryMeta = {
+                isRetry:        !!t.isRetry,
+                originalTaskId: t.originalTaskId || (t.isRetry ? null : item.taskId),
+                retryCount:     t.retryCount || 0,
+              };
+            }
+          } catch { /* non-blocking — verification still works without retry metadata */ }
+        }
+
         db.collection("fix_verification").add({
           clientId,
           ownerId:       clientData.ownerId || null,
           approvalId:    item.id,
+          taskId:        item.taskId || null,
+          originalTaskId: retryMeta.originalTaskId,
+          isRetry:       retryMeta.isRetry,
+          retryCount:    retryMeta.retryCount,
           wpPostId:      wpItem.id,
           wpPostUrl:     wpItem.url,
           wpPostTitle:   wpItem.title,

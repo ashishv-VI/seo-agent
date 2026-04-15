@@ -448,10 +448,23 @@ setInterval(async () => {
         if (latestScore?.overall != null && prevScore != null) {
           const drop = prevScore - latestScore.overall;
           if (drop >= 5) {
-            // Auto-run CMO to re-assess strategy
+            // Auto-run CMO to re-assess strategy, then auto-execute high-confidence decisions.
+            // Mirrors the daily-monitor pattern: watchdog previously fired CMO but never ran
+            // the agents it proposed, so a score drop just filed a ticket nobody actioned.
             try {
-              const { runCMO } = require("./agents/CMO_agent");
-              await runCMO(doc.id, keys);
+              const { runCMO }        = require("./agents/CMO_agent");
+              const { runAgentById }  = require("./agents/agentRunner");
+              const cmoResult = await runCMO(doc.id, keys);
+              const cmoDecision = cmoResult?.cmo;
+              if (cmoDecision?.nextAgents?.length > 0 && (cmoDecision.confidence || 0) >= 0.85) {
+                for (const agentId of cmoDecision.nextAgents.slice(0, 3)) {
+                  runAgentById(agentId, doc.id, keys).then(r => {
+                    console.log(`[watchdog] auto-exec ${agentId} for ${data.name} → ${r?.success ? "ok" : r?.error || "skip"}`);
+                  }).catch(e => {
+                    console.error(`[watchdog] auto-exec ${agentId} failed:`, e.message);
+                  });
+                }
+              }
             } catch { /* non-blocking */ }
 
             await db.collection("notifications").add({
@@ -610,9 +623,36 @@ setInterval(async () => {
           const memSnap = await memRef.get();
           const mem     = memSnap.exists ? memSnap.data() : {};
           const fixLog  = mem.fixOutcomes || [];
-          fixLog.push({ field: fix.field, issueType: fix.issueType, outcome, checkedAt: now.toISOString(), url: fix.wpPostUrl });
+          fixLog.push({
+            field:          fix.field,
+            issueType:      fix.issueType,
+            outcome,
+            checkedAt:      now.toISOString(),
+            url:            fix.wpPostUrl,
+            // Retry attribution: carry retry metadata so CMO's reweightConfidence
+            // can tell "direct success" from "succeeded on attempt 2" when reading
+            // fixOutcomes for this issue type.
+            isRetry:        !!fix.isRetry,
+            retryCount:     fix.retryCount || 0,
+            originalTaskId: fix.originalTaskId || null,
+          });
           await memRef.set({ ...mem, fixOutcomes: fixLog.slice(-50), lastUpdated: now.toISOString() }, { merge: true });
         } catch { /* non-blocking */ }
+
+        // ── If this was a retry, mark the ORIGINAL task with the final outcome ──
+        // Otherwise the original task stays "failed" forever and CMO can't tell
+        // the fix type eventually worked — it just sees two failed tasks for
+        // the same page and assumes the playbook is broken.
+        if (fix.isRetry && fix.originalTaskId && outcome !== "no_data") {
+          try {
+            await db.collection("task_queue").doc(fix.clientId).collection("tasks").doc(fix.originalTaskId).update({
+              retryOutcome:       outcome,
+              retryOutcomeAt:     now.toISOString(),
+              retryAttempts:      fix.retryCount || 1,
+              finalStatus:        outcome === "improved" ? "resolved_via_retry" : "retry_failed",
+            }).catch(() => {});
+          } catch { /* non-blocking */ }
+        }
 
         // ── Write to global_patterns (Sprint 5 — cross-client) ─
         if (outcome !== "no_data") {
@@ -658,6 +698,73 @@ setInterval(async () => {
     console.error("[fix-verify] Error:", err.message);
   }
 }, 60 * 60 * 1000); // check every hour — guarded to run at 03:00 UTC only
+
+// ── CMO Queue Consumer — runs every 30 min ──────────────────────────────────
+// A23 (investigator), A24 (strategist), watchdog, rulesEngine, and CMO itself
+// all write decisions to `cmo_queue` with status="pending". Before this cron,
+// those items just sat there — only a manual click in the UI ran them. For
+// an autonomous agent that's a dead-end: the agent files a ticket and waits.
+//
+// This consumer picks up pending items with confidence ≥0.85 and auto-runs
+// their nextAgents. Lower-confidence items remain "pending" for human approval.
+setInterval(async () => {
+  try {
+    const snap = await db.collection("cmo_queue")
+      .where("status", "==", "pending")
+      .limit(25)
+      .get();
+    if (snap.empty) return;
+
+    const { runAgentById } = require("./agents/agentRunner");
+    const { getUserKeys }  = require("./utils/getUserKeys");
+
+    for (const queueDoc of snap.docs) {
+      const item = queueDoc.data();
+      const confidence = item.confidence || 0;
+      if (confidence < 0.85) continue; // leave for human review
+      if (!item.clientId || !Array.isArray(item.nextAgents) || item.nextAgents.length === 0) {
+        await queueDoc.ref.update({ status: "skipped", skippedReason: "no nextAgents", skippedAt: new Date().toISOString() }).catch(() => {});
+        continue;
+      }
+
+      try {
+        const clientSnap = await db.collection("clients").doc(item.clientId).get();
+        if (!clientSnap.exists) {
+          await queueDoc.ref.update({ status: "skipped", skippedReason: "client gone", skippedAt: new Date().toISOString() }).catch(() => {});
+          continue;
+        }
+        const ownerId = clientSnap.data().ownerId;
+        const keys    = await getUserKeys(ownerId).catch(() => null);
+        if (!keys) {
+          await queueDoc.ref.update({ status: "skipped", skippedReason: "no keys", skippedAt: new Date().toISOString() }).catch(() => {});
+          continue;
+        }
+
+        // Mark in-flight first so a slow run doesn't get picked up twice
+        await queueDoc.ref.update({ status: "executing", executingAt: new Date().toISOString() });
+
+        const results = [];
+        for (const agentId of item.nextAgents.slice(0, 3)) {
+          const r = await runAgentById(agentId, item.clientId, keys);
+          results.push({ agent: agentId, success: !!r?.success, error: r?.error || null });
+          console.log(`[cmo-queue] auto-exec ${agentId} for ${item.clientId} → ${r?.success ? "ok" : r?.error || "skip"}`);
+        }
+
+        await queueDoc.ref.update({
+          status:       "auto_executed",
+          executedAt:   new Date().toISOString(),
+          executedBy:   "cmo_queue_consumer",
+          executeResults: results,
+        });
+      } catch (e) {
+        console.error(`[cmo-queue] Failed to process ${queueDoc.id}:`, e.message);
+        await queueDoc.ref.update({ status: "failed", failedReason: e.message, failedAt: new Date().toISOString() }).catch(() => {});
+      }
+    }
+  } catch (err) {
+    console.error("[cmo-queue] Consumer error:", err.message);
+  }
+}, 30 * 60 * 1000); // every 30 min
 
 // ── 404 Handler ────────────────────────────────────
 app.use((req, res) => {
