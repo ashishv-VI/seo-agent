@@ -56,6 +56,32 @@ Return ONLY valid JSON (no markdown):
         }
       }
 
+      // ── Auto-approve low-risk fixes if confidence + win rate are high ──
+      // Low-risk: text-only changes (title, meta description) — easily reversible
+      const LOW_RISK_TYPES = new Set([
+        "seo_title", "meta_description", "missing_title", "missing_meta_desc",
+        "short_title", "short_meta", "title_tag", "meta_desc",
+      ]);
+      const isLowRisk = LOW_RISK_TYPES.has(task.issueType);
+
+      // Check win rate from client_memory
+      let winRate = 0;
+      if (isLowRisk) {
+        try {
+          const memSnap = await db.collection("client_memory").doc(clientId).get();
+          const fixOutcomes = memSnap.exists ? (memSnap.data().fixOutcomes || []) : [];
+          const relevant = fixOutcomes.filter(f => LOW_RISK_TYPES.has(f.field) || LOW_RISK_TYPES.has(f.issueType));
+          if (relevant.length >= 2) {
+            const improved = relevant.filter(f => f.outcome === "improved").length;
+            winRate = Math.round((improved / relevant.length) * 100);
+          }
+        } catch { /* non-blocking — default to manual approval */ }
+      }
+
+      // Auto-approve if: low-risk + confidence >= 0.85 + win rate >= 70%
+      const autoApprove = isLowRisk && (task.confidence || 0.7) >= 0.85 && winRate >= 70;
+      const status = autoApprove ? "approved" : "pending";
+
       // Push to approval queue
       const ref = db.collection("approval_queue").doc();
       await ref.set({
@@ -63,9 +89,10 @@ Return ONLY valid JSON (no markdown):
         clientId,
         type:        "auto_fix",
         agent:       "A12",
-        status:      "pending",
+        status,
         taskId:      task.id,
         issueType:   task.issueType,
+        autoApproved: autoApprove,
         data: {
           taskTitle:    task.title,
           suggestedFix: result.suggestedFix || "",
@@ -74,25 +101,32 @@ Return ONLY valid JSON (no markdown):
           codeSnippet:  result.codeSnippet  || null,
           estimatedImpact: result.estimatedImpact || `+${task.expectedScoreGain || 3} score pts`,
           currentValue: task.currentValue   || null,
+          ...(autoApprove && { autoApproveReason: `Low-risk fix (${task.issueType}), ${winRate}% win rate, confidence ${task.confidence || 0.7}` }),
         },
         createdAt:   FieldValue.serverTimestamp(),
       });
 
-      // Mark task as "in_review"
-      await updateTask(clientId, task.id, { status: "in_review" });
+      if (autoApprove) console.log(`[A12] Auto-approved: ${task.issueType} for ${clientId} (win rate ${winRate}%)`);
 
-      fixes.push({ taskId: task.id, approvalId: ref.id, issue: task.issueType });
+      // Mark task as "in_review" or "approved"
+      await updateTask(clientId, task.id, { status: autoApprove ? "approved" : "in_review" });
+
+      fixes.push({ taskId: task.id, approvalId: ref.id, issue: task.issueType, autoApproved: autoApprove });
     } catch (e) {
       errors.push({ taskId: task.id, error: e.message });
     }
   }
 
+  const autoApprovedCount = fixes.filter(f => f.autoApproved).length;
   return {
     success:     true,
     generated:   fixes.length,
+    autoApproved: autoApprovedCount,
     errors:      errors.length,
     fixes,
-    message:     `Generated ${fixes.length} auto-fixes — review in Approvals tab`,
+    message:     autoApprovedCount > 0
+      ? `Generated ${fixes.length} fixes — ${autoApprovedCount} auto-approved (low-risk + high confidence), ${fixes.length - autoApprovedCount} need review`
+      : `Generated ${fixes.length} auto-fixes — review in Approvals tab`,
   };
   } catch (e) {
     console.error(`[A12] Auto-execution failed for ${clientId}:`, e.message);

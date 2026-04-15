@@ -281,51 +281,69 @@ function buildPatternSummary(globalPatterns, clientMemory, businessType = "") {
   const lines = [];
 
   if (globalPatterns.length > 0) {
-    // Split by source: same-owner vs same-businessType (different agency)
     const ownAgency   = globalPatterns.filter(p => !p._crossAgency);
     const crossAgency = globalPatterns.filter(p => p._crossAgency);
 
-    // Same-owner aggregate
-    if (ownAgency.length > 0) {
+    // Aggregate with unique client counts and avg CTR delta
+    const deepAggregate = (arr) => {
       const byType = {};
-      for (const p of ownAgency) {
-        if (!byType[p.fixType]) byType[p.fixType] = { improved: 0, total: 0 };
+      for (const p of arr) {
+        if (!byType[p.fixType]) byType[p.fixType] = { improved: 0, total: 0, clients: new Set(), ctrDeltas: [] };
         byType[p.fixType].total++;
         if (p.outcome === "improved") byType[p.fixType].improved++;
+        if (p.clientId) byType[p.fixType].clients.add(p.clientId);
+        if (p.ctrBefore != null && p.ctrAfter != null) {
+          byType[p.fixType].ctrDeltas.push(p.ctrAfter - p.ctrBefore);
+        }
       }
-      const sorted = Object.entries(byType).sort((a, b) => (b[1].improved / b[1].total) - (a[1].improved / a[1].total));
+      return Object.entries(byType)
+        .map(([fixType, c]) => {
+          const winRate = Math.round((c.improved / c.total) * 100);
+          const avgCtrDelta = c.ctrDeltas.length > 0
+            ? (c.ctrDeltas.reduce((a, b) => a + b, 0) / c.ctrDeltas.length * 100).toFixed(1)
+            : null;
+          return { fixType, winRate, improved: c.improved, total: c.total, clientCount: c.clients.size, avgCtrDelta };
+        })
+        .sort((a, b) => b.winRate - a.winRate);
+    };
+
+    // Own-agency: deep aggregate with confidence language
+    if (ownAgency.length > 0) {
+      const agg = deepAggregate(ownAgency);
       lines.push("Fix success rates across your clients:");
-      for (const [fixType, counts] of sorted.slice(0, 5)) {
-        const rate = Math.round((counts.improved / counts.total) * 100);
-        lines.push(`  - ${fixType}: ${rate}% success (${counts.improved}/${counts.total})`);
+      for (const a of agg.slice(0, 5)) {
+        const conf = a.winRate >= 80 && a.total >= 3 ? "HIGH CONFIDENCE" : a.winRate >= 60 ? "MODERATE" : "LOW";
+        const ctr = a.avgCtrDelta ? `, avg CTR change: ${a.avgCtrDelta > 0 ? "+" : ""}${a.avgCtrDelta}%` : "";
+        const clients = a.clientCount > 1 ? ` across ${a.clientCount} clients` : "";
+        lines.push(`  - ${a.fixType}: ${a.winRate}% success (${a.improved}/${a.total}${clients}${ctr}) → ${conf}`);
       }
     }
 
-    // Cross-agency same-business-type
+    // Cross-agency: reasoning about similar businesses
     if (crossAgency.length > 0 && businessType) {
-      const byType = {};
-      for (const p of crossAgency) {
-        if (!byType[p.fixType]) byType[p.fixType] = { improved: 0, total: 0 };
-        byType[p.fixType].total++;
-        if (p.outcome === "improved") byType[p.fixType].improved++;
-      }
-      const sorted = Object.entries(byType).sort((a, b) => (b[1].improved / b[1].total) - (a[1].improved / a[1].total));
-      lines.push(`Industry benchmarks for "${businessType}" businesses:`);
-      for (const [fixType, counts] of sorted.slice(0, 3)) {
-        const rate = Math.round((counts.improved / counts.total) * 100);
-        lines.push(`  - ${fixType}: ${rate}% success across ${counts.total} similar sites`);
+      const agg = deepAggregate(crossAgency);
+      lines.push(`\nIndustry intelligence for "${businessType}" businesses (from other agencies):`);
+      for (const a of agg.slice(0, 3)) {
+        const ctr = a.avgCtrDelta ? ` (avg ${a.avgCtrDelta > 0 ? "+" : ""}${a.avgCtrDelta}% CTR)` : "";
+        if (a.winRate >= 70 && a.total >= 2) {
+          lines.push(`  - ${a.fixType}: worked for ${a.improved}/${a.total} similar ${businessType} sites${ctr} — RECOMMEND for this client`);
+        } else if (a.winRate < 40) {
+          lines.push(`  - ${a.fixType}: only ${a.winRate}% success for ${businessType} sites — AVOID or try different approach`);
+        } else {
+          lines.push(`  - ${a.fixType}: ${a.winRate}% success (${a.total} data points)${ctr}`);
+        }
       }
     }
   }
 
-  // This client's own fix history
+  // This client's own fix history — with recency
   const fixOutcomes = clientMemory?.fixOutcomes || [];
   if (fixOutcomes.length > 0) {
     const recent = fixOutcomes.slice(-10);
-    const worked = recent.filter(f => f.outcome === "improved").map(f => f.field);
-    const failed = recent.filter(f => f.outcome === "degraded" || f.outcome === "no_change").map(f => f.field);
-    if (worked.length > 0) lines.push(`This client — fixes that worked: ${[...new Set(worked)].join(", ")}`);
-    if (failed.length > 0) lines.push(`This client — fixes that didn't work: ${[...new Set(failed)].join(", ")}`);
+    const worked = [...new Set(recent.filter(f => f.outcome === "improved").map(f => f.field))];
+    const failed = [...new Set(recent.filter(f => f.outcome === "degraded" || f.outcome === "no_change").map(f => f.field))];
+    if (worked.length > 0) lines.push(`\nThis client — fixes that WORKED: ${worked.join(", ")} (repeat these)`);
+    if (failed.length > 0) lines.push(`This client — fixes that FAILED: ${failed.join(", ")} (try different approach)`);
   }
 
   return lines.length > 0 ? lines.join("\n") : null;
