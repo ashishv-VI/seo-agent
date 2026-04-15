@@ -53,10 +53,7 @@ const corsOptions = {
   credentials: true,
 };
 
-// Explicit OPTIONS preflight handler — must come BEFORE route registration
-// Handles preflight for all routes so CORS headers are always sent
-app.options("/(.*)", cors(corsOptions));
-
+// CORS middleware — handles preflight (OPTIONS) and normal requests
 app.use(cors(corsOptions));
 
 app.use(express.json({ limit: "10mb" }));
