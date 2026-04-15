@@ -297,6 +297,7 @@ export default function ClientManager({ dark }) {
   const [saving,   setSaving]   = useState(false);
   const [error,    setError]    = useState("");
   const [selected, setSelected] = useState(null);
+  const [editingId, setEditingId] = useState(null); // clientId being edited, null = new
 
   const bg   = dark ? "#0a0a0a" : "#f5f5f0";
   const bg2  = dark ? "#111"    : "#ffffff";
@@ -347,19 +348,55 @@ export default function ClientManager({ dark }) {
         primaryKeywords: form.primaryKeywords.split(",").map(s => s.trim()).filter(Boolean),
         // competitors is already an array
       };
-      const res  = await fetch(`${API}/api/clients`, {
-        method: "POST",
+      const url    = editingId ? `${API}/api/clients/${editingId}` : `${API}/api/clients`;
+      const method = editingId ? "PUT" : "POST";
+      const res  = await fetch(url, {
+        method,
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify(body),
       });
       const data = await res.json();
-      if (!res.ok) { setError(data.error || "Failed to create client"); setSaving(false); return; }
+      if (!res.ok) { setError(data.error || `Failed to ${editingId ? "update" : "create"} client`); setSaving(false); return; }
       setShowForm(false);
       setForm(blankForm);
+      setEditingId(null);
       await loadClients();
-      if (data.clientId) setSelected(data.clientId);
+      if (!editingId && data.clientId) setSelected(data.clientId);
     } catch (e) { setError(e.message); }
     setSaving(false);
+  }
+
+  async function editClient(clientId, e) {
+    e.stopPropagation();
+    setError("");
+    try {
+      const token = await getToken();
+      const res   = await fetch(`${API}/api/clients/${clientId}`, { headers: { Authorization: `Bearer ${token}` } });
+      const data  = await res.json();
+      const brief = data.state?.A1_brief || {};
+      setForm({
+        businessName:        brief.businessName        || data.client?.name || "",
+        websiteUrl:          brief.websiteUrl          || data.client?.website || "",
+        businessDescription: brief.businessDescription || "",
+        businessLocation:    brief.businessLocation    || brief.location || "",
+        services:            brief.services            || [],
+        goals:               brief.goals               || [],
+        targetAudience:      Array.isArray(brief.targetAudience) ? brief.targetAudience : (brief.targetAudience ? brief.targetAudience.split(", ").filter(Boolean) : []),
+        conversionGoals:     Array.isArray(brief.conversionGoals) ? brief.conversionGoals : (brief.conversionGoal ? brief.conversionGoal.split(", ").filter(Boolean) : []),
+        targetLocations:     brief.targetLocations     || [],
+        competitors:         brief.competitors         || [],
+        primaryKeywords:     Array.isArray(brief.primaryKeywords) ? brief.primaryKeywords.join(", ") : (brief.primaryKeywords || ""),
+        kpiSelection:        brief.kpiSelection        || [],
+        avgOrderValue:       brief.avgOrderValue       || "",
+        socialLinks:         brief.socialLinks          || [],
+        pastSeoHistory:      brief.pastSeoHistory      || "",
+        notes:               brief.notes               || "",
+      });
+      setEditingId(clientId);
+      setShowForm(true);
+    } catch {
+      setError("Failed to load client brief for editing");
+    }
   }
 
   async function deleteClient(clientId, e) {
@@ -403,7 +440,7 @@ export default function ClientManager({ dark }) {
             {clients.length > 0 ? `${clients.length} client${clients.length === 1 ? "" : "s"}` : "No clients yet"} · Run AI Pipeline · Export Reports
           </div>
         </div>
-        <button onClick={() => { setShowForm(true); setError(""); setForm(blankForm); }} style={s.btn()}>+ Add Client</button>
+        <button onClick={() => { setShowForm(true); setError(""); setForm(blankForm); setEditingId(null); }} style={s.btn()}>+ Add Client</button>
       </div>
 
       {error && <div style={{ padding:"10px 14px", borderRadius:8, background:"#DC262611", color:"#DC2626", fontSize:13, marginBottom:14 }}>{error}</div>}
@@ -411,8 +448,8 @@ export default function ClientManager({ dark }) {
       {/* Add Client Form */}
       {showForm && (
         <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:12, padding:24, marginBottom:20 }}>
-          <div style={{ fontSize:16, fontWeight:700, color:txt, marginBottom:6 }}>New Client Brief — A1</div>
-          <div style={{ fontSize:13, color:txt2, marginBottom:20 }}>Fill in the brief. Downstream agents use this as their source of truth.</div>
+          <div style={{ fontSize:16, fontWeight:700, color:txt, marginBottom:6 }}>{editingId ? "Edit Client Brief — A1" : "New Client Brief — A1"}</div>
+          <div style={{ fontSize:13, color:txt2, marginBottom:20 }}>{editingId ? "Update the brief. A1 will re-run to restructure agent data." : "Fill in the brief. Downstream agents use this as their source of truth."}</div>
 
           <form onSubmit={handleSubmit}>
             <div style={s.grid}>
@@ -575,8 +612,8 @@ export default function ClientManager({ dark }) {
             </div>
 
             <div style={{ display:"flex", gap:10, marginTop:20 }}>
-              <button type="submit" disabled={saving} style={s.btn()}>{saving ? "Saving..." : "Save Brief (A1)"}</button>
-              <button type="button" onClick={() => setShowForm(false)} style={{ ...s.btn(bg3), color:txt, border:`1px solid ${bdr}` }}>Cancel</button>
+              <button type="submit" disabled={saving} style={s.btn()}>{saving ? "Saving..." : editingId ? "Update Brief (A1)" : "Save Brief (A1)"}</button>
+              <button type="button" onClick={() => { setShowForm(false); setEditingId(null); }} style={{ ...s.btn(bg3), color:txt, border:`1px solid ${bdr}` }}>Cancel</button>
             </div>
           </form>
         </div>
@@ -638,6 +675,10 @@ export default function ClientManager({ dark }) {
                 {client.pipelineStatus === "running"  && <span style={{ fontSize:11, color:"#D97706", fontWeight:600 }}>⏳ Running</span>}
                 {client.pipelineStatus === "failed"   && <span style={{ fontSize:11, color:"#DC2626", fontWeight:600 }}>❌ Failed</span>}
                 <span style={{ fontSize:12, color:txt3 }}>View Pipeline →</span>
+                <button onClick={(e) => editClient(client.id, e)}
+                  style={{ padding:"5px 12px", borderRadius:6, border:"1px solid #443DCB33", background:"transparent", color:"#443DCB", fontSize:12, cursor:"pointer" }}>
+                  Edit
+                </button>
                 <button onClick={(e) => deleteClient(client.id, e)}
                   style={{ padding:"5px 12px", borderRadius:6, border:"1px solid #DC262633", background:"transparent", color:"#DC2626", fontSize:12, cursor:"pointer" }}>
                   Delete
