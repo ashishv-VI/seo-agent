@@ -12,8 +12,8 @@ The difference: it senses data, decides what to fix, acts autonomously, verifies
 SENSE → DECIDE → ACT → VERIFY → LEARN → repeat forever
 ```
 
-**Current honest state**: SENSE ✅ ACT ✅ DECIDE ✅ VERIFY ✅ LEARN ⚠️ (CMO reads memory, not yet fully cross-client)
-The loop is mostly closed. Alert→Investigate→Fix chain built. Remaining: cross-client learning depth.
+**Current honest state**: SENSE ✅ ACT ✅ DECIDE ✅ VERIFY ✅ LEARN ✅
+The loop is closed. CMO reads A16 memory + cross-client global_patterns, vetoes failing playbooks, tiered auto-approve based on historical win rates, self-healing retry on A13 failures, keyword kill signal deprioritizes zero-lead keywords, LLM cost tracking with per-client monthly budgets, daily CMO self-wake-up, A24 monthly goal-revision strategist. Autonomy milestone commits: `220138a`, `1af31c4`.
 
 **3 User Types:**
 | User | Need | Platform Delivers |
@@ -40,23 +40,24 @@ git push origin main
 
 ---
 
-## Agent Architecture — All 24 Agents
+## Agent Architecture — All 25 Agents
 
 ### STRATEGY LAYER
 | Agent | File | Purpose | Status |
 |-------|------|---------|--------|
-| **CMO Agent** | `CMO_agent.js` | Sees all data → decides what to fix → queues next agents | ✅ Built — reads A16 memory + cross-client patterns |
+| **CMO Agent** | `CMO_agent.js` | Sees all data → decides what to fix → queues next agents. Reads A16 memory + cross-client global_patterns. Vetoes playbooks with <40% win rate (≥5 samples) | ✅ Built |
 | **A17 Reviewer** | `A17_reviewer.js` | Quality gate — confidence score 0–1 per agent output | ✅ Built |
 | **A19 Conversion** | `A19_conversion.js` | CRO: CTA gaps, form issues, landing page blockers | ✅ Built |
 | **A22 Predictive** | `A22_predictive.js` | 90-day traffic forecast (linear regression) + keyword opportunity scoring | ✅ Built |
 | **A23 Investigator** | `A23_investigator.js` | Alert → root cause diagnosis → proposed fix → approval queue + notification | ✅ Built |
+| **A24 Strategist** | `A24_strategist.js` | Monthly goal-revision: checks KPI progress (lead-gen / traffic / local), proposes strategy pivot if off-track, writes cmo_queue + notification | ✅ Built |
 
 ### DISCOVERY LAYER
 | Agent | File | Purpose | Status |
 |-------|------|---------|--------|
 | **A1** | `A1_onboarding.js` | Client brief, KPI selection, avg order value, social links | ✅ Built |
-| **A2** | `A2_audit.js` | Sitemap-first crawl (500+ pages), 34 issue types, JS rendering | ✅ Built — stores per-page data in shared_state (cap 80 in doc, full in subcollection needed) |
-| **A3** | `A3_keywords.js` | 4 clusters: intent, difficulty, priority, suggestedPage | ✅ Built |
+| **A2** | `A2_audit.js` | Sitemap-first crawl (500+ pages), 34 issue types, JS rendering | ✅ Built — per-page subcollection enables site-wide pattern detection (see `auditPatterns.js`) |
+| **A3** | `A3_keywords.js` | 4 clusters: intent, difficulty, priority, suggestedPage. Kill-signal deprioritizes keywords ranking 90+ days with 0 leads | ✅ Built |
 | **A4** | `A4_competitor.js` | SERP auto-discovery, homepage crawl, ranking matrix, LLM analysis | ✅ Built — LLM fallback to suggested competitors if SERP fails |
 | **A21** | `A21_preSales.js` | 60-second public audit for sales demos. No login. `/audit` route | ✅ Built |
 
@@ -72,7 +73,7 @@ git push origin main
 ### AUTOMATION LAYER
 | Agent | File | Purpose | Status |
 |-------|------|---------|--------|
-| **A13** | `A13_autopush.js` | Backup → Push → Log. Rollback. Triggers A18 on push. | ✅ Built |
+| **A13** | `A13_autopush.js` | Backup → Push → Log. Rollback. Triggers A18 on push. Self-heals by re-queueing failed items as retry tasks (max 3 retries) | ✅ Built |
 | **A10** | `A10_rankingTracker.js` | GSC → SerpAPI → DDG fallback. Rankings + drop alerts. | ✅ Built |
 | **A11** | `A11_linkBuilder.js` | 15 link prospects + outreach email drafts | ✅ Built |
 | **A15** | `A15_competitorMonitor.js` | Daily sitemap diff → new competitor pages → alert | ✅ Built |
@@ -82,8 +83,8 @@ git push origin main
 | Agent | File | Purpose | Status |
 |-------|------|---------|--------|
 | **A9** | `A9_monitoring.js` | 8-section synthesis, GSC data, forecast, triggers A18 | ✅ Built |
-| **A16** | `A16_memory.js` | Score history, fix log, what worked tracking | ✅ Built — data stored, not yet read by CMO |
-| **A12** | `A12_autoExec.js` | CMO decision → schedules next agent run | ✅ Built |
+| **A16** | `A16_memory.js` | Score history, fix log, what worked tracking. Writes `client_memory` + `global_patterns`. Read by CMO every decision | ✅ Built |
+| **A12** | `A12_autoExec.js` | CMO decision → schedules next agent run. Tiered auto-approve (LOW/MEDIUM/HIGH) based on historical win rates. Retries failed fixes with higher LLM temperature | ✅ Built |
 | **A20** | `A20_impactReport.js` | 6-month before/after report, work completed, ROI | ✅ Built |
 
 ### Pipeline Dependency Order (A0 Orchestrator)
@@ -128,10 +129,8 @@ GSC keyword → landing page → GA4 session → GA4 conversion (form_submit)
 ```
 Join query: `/api/attribution/:clientId` — GSC + GA4 API join. Currently not built.
 
-### GAP 4: Whole-Site Pattern Audit (not per-page)
-A2 crawls 500 pages but stores only 80 in the Firestore doc (1MB limit).
-Need: each page as its own subcollection doc → then detect patterns:
-`"47 service pages all missing H1"` not `"page /services missing H1"`.
+### GAP 4: Whole-Site Pattern Audit ✅ BUILT
+A2 now writes each page into a per-page subcollection. `server/utils/auditPatterns.js` reads across the subcollection and produces site-wide findings (`"47 service pages all missing H1"`). UI: `AuditPatternsPanel.jsx` — severity bars + affected URLs + fix suggestions.
 
 ### GAP 5: Content from Real SERP Analysis ✅ BUILT
 A5 now scrapes top 5 SERP results before generating briefs:
@@ -141,10 +140,8 @@ A5 now scrapes top 5 SERP results before generating briefs:
 - Schema types used
 Then brief = data-driven, not LLM-guessed.
 
-### GAP 6: Cross-Client Pattern Learning
-You manage N clients. What works for one should inform others.
-`client_memory` collection has the data. Need a cross-client read layer in CMO:
-`"Meta rewrites worked for 4/5 similar businesses — high confidence for this client too."`
+### GAP 6: Cross-Client Pattern Learning ✅ BUILT
+CMO now builds `patternStats` from `global_patterns` filtered by ownerId (own agency) and across agencies, then rolls up into playbook-level win rates (`content`, `on_page`, `technical`, `local`, `linking`, `schema`). `vetoFailingPlaybooks()` strips next-agents whose playbook has <40% win rate with ≥5 samples. `"Meta rewrites worked for 4/5 similar businesses — high confidence for this client too."` is the literal shape of the signal that feeds the decision.
 
 ### GAP 7: Alert → Investigate → Fix Chain ✅ BUILT (A23 Investigator)
 A23 runs after A9.checkAlerts → diagnoses root cause → proposes fix → approval queue + notification.
@@ -159,17 +156,54 @@ P1 alert detected (A9)
 
 ---
 
-## Build Priority Order (Next Sprints)
+## Build Priority Order — All 7 Shipped
 
-| Priority | What | Why |
+| Priority | What | Status |
 |---|---|---|
-| **1** | Verification loop (21-day fix checker) | Closes the loop. Nothing learns without this. |
-| **2** | Keyword → Lead attribution join | Agencies justify invoices with leads, not rankings |
-| **3** | CMO reads A16 memory | Decisions improve over time |
-| **4** | Per-page Firestore subcollection for A2 | Enables pattern detection across 500 pages |
-| **5** | Content brief from real SERP data | Content that actually ranks |
-| **6** | Cross-client pattern matching | Unique competitive moat |
-| **7** | Alert → investigate → fix chain | True autonomous operation |
+| **1** | Verification loop (21-day fix checker) | ✅ `fix_verification` collection + A16 win/fail tracking |
+| **2** | Keyword → Lead attribution join | ✅ GSC + GA4 API join at `/api/attribution/:clientId` |
+| **3** | CMO reads A16 memory | ✅ `client_memory` + `global_patterns` loaded every run |
+| **4** | Per-page Firestore subcollection for A2 | ✅ `auditPatterns.js` + `AuditPatternsPanel.jsx` |
+| **5** | Content brief from real SERP data | ✅ A5 scrapes top-5 SERP before generating briefs |
+| **6** | Cross-client pattern matching | ✅ Playbook veto removes next-agents whose playbook <40% win |
+| **7** | Alert → investigate → fix chain | ✅ A23 investigator → approval queue → notification |
+
+---
+
+## 100% Autonomous Capabilities (Shipped in `220138a` + `1af31c4`)
+
+These are the features that turn the pipeline from "runs agents on a cron" into an agent that decides, acts, and learns on its own.
+
+### Tiered Auto-Approve (`A12_autoExec.js`)
+Each fix type has a risk tier. Auto-approve only fires if the historical win rate meets the tier's threshold.
+| Tier | Examples | Win rate | Confidence | Samples |
+|---|---|---|---|---|
+| **LOW** | meta/title rewrite, internal link, alt text | ≥70% | ≥0.85 | ≥2 |
+| **MEDIUM** | schema inject, H1 fix, CWV script | ≥80% | ≥0.90 | ≥3 |
+| **HIGH** | content rewrite, redirect, robots.txt | never | — | — |
+
+### Self-Healing Retry (`A13_autopush.js`)
+After a push, failed items are re-queued as `isRetry: true` tasks with `retryCount` up to 3. The retry runs at higher LLM temperature (0.8 vs 0.3) so the model explores alternative wording/approach instead of reproducing the same failure.
+
+### Playbook Meta-Learning (`CMO_agent.js`)
+`vetoFailingPlaybooks(nextAgents, patternStats)` — strips agents from the plan whose mapped playbook has <40% win rate with ≥5 samples across the agency. Uses `FIX_TO_PLAYBOOK` + `AGENT_TO_PLAYBOOK` mappings. CMO decision gets `playbookAbandoned: [...]` when a veto fires.
+
+### Keyword Kill Signal (`A3_keywords.js`)
+Before `saveState`, cross-references `conversions` (last 90 days) with `A10_rankings`. Keywords that have ranked for 90+ days with 0 leads get `priority: "low"` — stops burning effort on traffic that doesn't convert.
+
+### LLM Cost Tracking (`server/utils/costTracker.js`)
+Every `callLLM()` records tokens + USD to `llm_usage/{clientId_YYYY-MM}`. Before each call, `checkBudget(clientId)` gates on `clients/{id}.llmBudgetUsd` (default $5/month). System-level calls can pass `skipBudgetCheck: true`.
+
+### Daily CMO Self-Wake-Up (`server/index.js` daily-monitor cron)
+After A16 writes memory each morning, the daily-monitor loop calls `runCMO(clientId, keys)` directly. If CMO produces `nextAgents`, they're queued for A12 to execute — no human trigger required.
+
+### Monthly Goal Revision (`A24_strategist.js`)
+Runs monthly (1-hour delayed after A9). Checks primary KPI from brief:
+- **Lead Generation**: <3 leads in 90 days → off-track → proposes CRO pivot (A19, A6, A14)
+- **Organic Traffic**: score dropped in 90 days → off-track → diagnostic reset (A2, A10, A23)
+- **Local Visibility**: <3 local keywords in top 10 → off-track → GBP/citation focus (A8, A11)
+
+Off-track verdicts write a `cmo_queue` item with `source: "A24_strategist"` + owner notification.
 
 ---
 
@@ -345,10 +379,13 @@ Issue severity: `p1` = blocks rankings · `p2` = hurts rankings · `p3` = minor
 | `content_drafts` | auto | A14 article drafts |
 | `wp_push_log` | auto | A13 push audit trail |
 | `client_memory` | clientId | A16 memory (fix history, what worked) |
-| `cmo_queue` | auto | CMO-scheduled next agent runs |
 | `notifications` | auto | In-app notifications |
 | `portal_snapshots` | auto | Monthly white-label snapshots |
-| `fix_verification` | auto | **NEEDED** — 21-day fix outcome tracker |
+| `fix_verification` | auto | 21-day fix outcome tracker — feeds A16 win/fail log |
+| `global_patterns` | auto | Cross-client pattern records (fix type + win/fail + confidence + ownerId) |
+| `llm_usage` | `{clientId}_{YYYY-MM}` | Per-client monthly LLM token + USD spend. Gated by `clients/{id}.llmBudgetUsd` |
+| `conversions` | auto | Form submits / phone clicks / WhatsApp clicks. Feeds attribution join + keyword kill signal |
+| `cmo_queue` | auto | CMO-scheduled next agent runs (also written by A23 + A24) |
 
 ---
 
@@ -383,9 +420,13 @@ Issue severity: `p1` = blocks rankings · `p2` = hurts rankings · `p3` = minor
 | `src/components/RankTrackerPanel.jsx` | Manual rank tracker, auto-imports A10 data on first load |
 | `server/index.js` | Entry point, all cron schedulers (daily/weekly/monthly/watchdog) |
 | `server/agents/A0_orchestrator.js` | Pipeline runner, 25-min timeout, dependency chain |
-| `server/agents/CMO_agent.js` | Strategy: signal extraction → LLM/rule decision → cmo_queue. Reads A16 memory + global_patterns |
+| `server/agents/CMO_agent.js` | Strategy: signals + A16 memory + cross-client global_patterns → decision → playbook veto → cmo_queue |
+| `server/agents/A12_autoExec.js` | Tiered auto-approve (LOW/MEDIUM/HIGH) from historical win rate; retries failed tasks at higher temperature |
+| `server/agents/A13_autopush.js` | Push → log → rollback. Re-queues failed items as retry tasks (max 3) |
 | `server/agents/A22_predictive.js` | 90-day traffic forecast (linear regression) + keyword opportunity scoring |
 | `server/agents/A23_investigator.js` | P1 alert → root cause diagnosis → approval queue + email notification |
+| `server/agents/A24_strategist.js` | Monthly KPI goal-revision. Off-track → cmo_queue pivot + owner notification |
+| `server/utils/costTracker.js` | Per-client monthly LLM spend. `recordUsage` / `checkBudget` / `getMonthlySpend` |
 | `server/routes/agents.js` | All agent run + data GET endpoints |
 | `server/routes/controlRoom.js` | Control Room data aggregation. Now includes CMO decision in response |
 | `server/routes/attribution.js` | Form tracking events + GA4 conversion join (real API) + tracking snippet |
@@ -395,6 +436,6 @@ Issue severity: `p1` = blocks rankings · `p2` = hurts rankings · `p3` = minor
 | `src/components/PredictiveForecastPanel.jsx` | 90-day traffic forecast + keyword opportunities + score projection |
 | `server/routes/agency.js` | Agency dashboard aggregation |
 | `server/crawler/serpScraper.js` | Free SERP: DDG → Bing → Yahoo |
-| `server/utils/llm.js` | LLM fallback chain + 429 retry |
+| `server/utils/llm.js` | LLM fallback chain + 429 retry. Calls `recordUsage` + `checkBudget` from costTracker |
 | `server/utils/scoreCalculator.js` | 4-dimension SEO score + forecast |
 | `server/middleware/rateLimiter.js` | UID-based rate limiting, skips GETs |

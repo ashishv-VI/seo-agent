@@ -104,11 +104,23 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
     }, 800);
   }
 
-  async function load(silent = false, retries = 1) {
+  async function load(silent = false, retries = 4) {
     if (!silent) setLoading(true);
     setError("");
     try {
       const token = await getToken();
+      // ── Wake backend before parallel flood — Render free tier sleeps after 15min idle ──
+      // On cold start, Render's proxy returns 502 with no CORS headers. Browser logs this as
+      // "No 'Access-Control-Allow-Origin' header". The only real fix is to wait for warm-up.
+      if (!silent) {
+        try {
+          const ping = await fetch(`${API}/health`, { signal: AbortSignal.timeout(8000) });
+          if (!ping.ok) throw new Error("health not ok");
+        } catch {
+          // first ping failed — probably cold start, give it a moment then continue
+          await new Promise(r => setTimeout(r, 2000));
+        }
+      }
       const [clientRes, pipelineRes, alertsRes, notifRes, keysRes] = await Promise.all([
         fetch(`${API}/api/clients/${clientId}`, { headers: { Authorization: `Bearer ${token}` } }),
         fetch(`${API}/api/agents/${clientId}/pipeline`, { headers: { Authorization: `Bearer ${token}` } }),
@@ -145,9 +157,14 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
         if (ps === "complete") setActiveTab("dashboard");
       }
     } catch (e) {
-      // Auto-retry once on network errors (Render cold-start can cause "Failed to fetch")
-      if (retries > 0 && (e.message === "Failed to fetch" || e.name === "TypeError")) {
-        await new Promise(r => setTimeout(r, 3000));
+      // Auto-retry with progressive backoff on network errors
+      // (Render free-tier cold-start can take 30+ seconds; 502 responses arrive with no CORS headers)
+      const isNetworkError = e.message === "Failed to fetch" || e.name === "TypeError" || e.message?.includes("NetworkError");
+      if (retries > 0 && isNetworkError) {
+        // backoff: 4 retries → 3s, 6s, 10s, 15s (≈34s total, covers cold-start window)
+        const delays = [3000, 6000, 10000, 15000];
+        const delay  = delays[4 - retries] || 5000;
+        await new Promise(r => setTimeout(r, delay));
         return load(silent, retries - 1);
       }
       setError(e.message || "Failed to load pipeline");
