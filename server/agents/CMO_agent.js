@@ -217,6 +217,14 @@ function extractSignals({ brief, audit, keywords, competitor, onpage, technical,
   signals.contentGaps = (keywords?.gaps || []).length + (competitor?.analysis?.contentGaps?.length || 0);
   signals.hasContentGaps = signals.contentGaps > 2;
 
+  // Kill-signal: keywords ranked 90+ days with 0 conversions
+  // A3 marks these as deprioritized with killReason. CMO should stop investing
+  // in content/links for these clusters and reallocate effort elsewhere.
+  const killedKeywords = (keywords?.keywordMap || []).filter(k => k.deprioritized && k.killReason);
+  signals.killedKeywordCount = killedKeywords.length;
+  signals.hasKilledKeywords  = killedKeywords.length >= 3;
+  signals.killedKeywords     = killedKeywords.slice(0, 10).map(k => k.keyword);
+
   // KPI selection
   signals.kpi = [].concat(brief?.kpiSelection || ["Organic Traffic Growth"]);
 
@@ -554,6 +562,7 @@ Goals: ${[].concat(brief.goals || []).join(", ")}
 - Ranking drops detected: ${signals.droppingKws}
 - CTR low vs expected: ${signals.ctrLow ? "YES" : "NO"} (CTR: ${((signals.avgCtr || 0)*100).toFixed(1)}% at pos ${(signals.avgPos||0).toFixed(1)})
 - Content gaps found: ${signals.contentGaps}
+${signals.hasKilledKeywords ? `- DEAD KEYWORD CLUSTERS (ranked 90+ days, 0 leads): ${signals.killedKeywordCount} keywords killed. Examples: ${signals.killedKeywords.slice(0, 5).join(", ")}. DO NOT propose content or link building for these keywords — reallocate effort to converting clusters.` : ""}
 
 ## Available Agents to Trigger (pick ONLY from this list)
 ${pickFrom.map(a => {
@@ -604,13 +613,22 @@ function ruleBasedDecision(signals, brief) {
       kpiImpact:  [{ kpi, expectedLift: "+40-60% impressions in 90 days", mechanism: "Page 2 → Page 1 ranking jump" }],
     };
   }
-  if (signals.hasContentGaps) {
+  if (signals.hasContentGaps && !signals.hasKilledKeywords) {
     return {
       decision:   "Create content to fill identified keyword and topic gaps",
       reasoning:  `${signals.contentGaps} content gaps found where competitors rank but this site has no content. Creating targeted content captures currently missed traffic.`,
       nextAgents: ["A14", "A5"],
       confidence: 0.78,
       kpiImpact:  [{ kpi, expectedLift: "+25-50% impressions in 90 days", mechanism: "New content targeting uncovered keywords" }],
+    };
+  }
+  if (signals.hasContentGaps && signals.hasKilledKeywords) {
+    return {
+      decision:   "Content gaps exist but many keywords are dead (0 leads). Focus on CRO and converting clusters instead",
+      reasoning:  `${signals.killedKeywordCount} keywords ranked 90+ days with 0 conversions — investing more content/links there wastes budget. Shifting to conversion optimization for clusters that do generate leads.`,
+      nextAgents: ["A19", "A6"],
+      confidence: 0.80,
+      kpiImpact:  [{ kpi, expectedLift: "+15-30% conversion rate", mechanism: "CRO on converting pages instead of dead keyword expansion" }],
     };
   }
 

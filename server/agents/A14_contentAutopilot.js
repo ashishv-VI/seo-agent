@@ -81,7 +81,33 @@ async function runA14(clientId, keys, maxArticles = 3) {
     })
     .slice(0, maxArticles);
 
-  if (gapKeywords.length === 0) {
+  // ── Also pull queued content_drafts from A15 counter-content ──
+  // A15 writes status="queued" items when it detects high-priority competitor content.
+  // These are pre-made briefs that don't need gap detection — just generation.
+  let queuedBriefs = [];
+  try {
+    const queuedSnap = await db.collection("content_drafts")
+      .where("clientId", "==", clientId)
+      .where("status", "==", "queued")
+      .limit(maxArticles)
+      .get();
+    queuedBriefs = queuedSnap.docs.map(d => ({
+      docId:   d.id,
+      keyword: d.data().keyword,
+      intent:  d.data().intent || "informational",
+      difficulty: "medium",
+      source:  d.data().sourceAgent || "A15",
+    }));
+  } catch { /* non-blocking */ }
+
+  // Merge: queued briefs first (they're time-sensitive competitive responses), then gap keywords
+  const remainingSlots = maxArticles - queuedBriefs.length;
+  const allKeywords = [
+    ...queuedBriefs,
+    ...(remainingSlots > 0 ? gapKeywords.slice(0, remainingSlots) : []),
+  ];
+
+  if (allKeywords.length === 0) {
     return {
       success: true,
       created: 0,
@@ -92,8 +118,13 @@ async function runA14(clientId, keys, maxArticles = 3) {
   const created  = [];
   const failed   = [];
 
-  for (const kwData of gapKeywords) {
+  for (const kwData of allKeywords) {
     const keyword = kwData.keyword;
+
+    // Mark queued drafts as in-progress so they don't get picked up twice
+    if (kwData.docId) {
+      await db.collection("content_drafts").doc(kwData.docId).update({ status: "generating" }).catch(() => {});
+    }
 
     try {
       // ── Step 1: Generate full article with AI ─────────────────────────────
@@ -160,8 +191,12 @@ Return ONLY valid JSON:
       });
 
       // ── Step 3: Save to content_drafts for tracking ──────────────────────
-      const draftRef = db.collection("content_drafts").doc();
-      await draftRef.set({
+      // If this came from a queued A15 counter-content brief, update the
+      // existing doc instead of creating a duplicate.
+      const draftRef = kwData.docId
+        ? db.collection("content_drafts").doc(kwData.docId)
+        : db.collection("content_drafts").doc();
+      const draftData = {
         id:              draftRef.id,
         clientId,
         keyword,
@@ -182,7 +217,8 @@ Return ONLY valid JSON:
         generatedBy:     "A14_contentAutopilot",
         createdAt:       FieldValue.serverTimestamp(),
         publishedAt:     null,
-      });
+      };
+      await (kwData.docId ? draftRef.update(draftData) : draftRef.set(draftData));
 
       created.push({
         keyword,

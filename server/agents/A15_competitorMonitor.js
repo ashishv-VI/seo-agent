@@ -217,6 +217,47 @@ Analyze these URLs and suggest counter-content. Return ONLY valid JSON:
     await batch.commit();
   }
 
+  // ── Auto-queue high-priority counter-content as pending content_drafts ──
+  // A14 checks content_drafts for status="queued" items and generates articles
+  // for them on its next run. Without this bridge, A15's counter-content
+  // suggestions were just stored in state — nobody acted on them.
+  if (counterContentSuggestions.length > 0) {
+    try {
+      const qBatch = db.batch();
+      let queued = 0;
+      for (const suggestion of counterContentSuggestions.filter(s => s.priority === "high").slice(0, 3)) {
+        // Check if we already queued this keyword to avoid duplicates
+        const existing = await db.collection("content_drafts")
+          .where("clientId", "==", clientId)
+          .where("keyword", "==", suggestion.targetKeyword)
+          .limit(1)
+          .get();
+        if (!existing.empty) continue;
+
+        const ref = db.collection("content_drafts").doc();
+        qBatch.set(ref, {
+          id:              ref.id,
+          clientId,
+          keyword:         suggestion.targetKeyword,
+          title:           suggestion.suggestedTitle,
+          intent:          "competitive_response",
+          sourceAgent:     "A15_competitorMonitor",
+          competitorUrl:   suggestion.competitorUrl,
+          ourAngle:        suggestion.ourAngle,
+          reason:          suggestion.reason,
+          status:          "queued",
+          generatedBy:     null,
+          createdAt:       FieldValue.serverTimestamp(),
+        });
+        queued++;
+      }
+      if (queued > 0) {
+        await qBatch.commit();
+        console.log(`[A15] Auto-queued ${queued} counter-content brief(s) for ${clientId}`);
+      }
+    } catch { /* non-blocking */ }
+  }
+
   // Build new snapshots map (current state)
   const newSnapshots = { ...prevUrlSets };
   results.forEach(r => {

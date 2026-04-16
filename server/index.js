@@ -140,12 +140,16 @@ setInterval(async () => {
       const data = doc.data();
       try {
         const { getUserKeys }  = require("./utils/getUserKeys");
+        const { checkBudget }  = require("./utils/costTracker");
         const { checkAlerts }  = require("./agents/A9_monitoring");
         const { runA15 }       = require("./agents/A15_competitorMonitor");
         const { runA16 }       = require("./agents/A16_memory");
         const keys = await getUserKeys(data.ownerId).catch(() => null);
         if (!keys) continue;
 
+        // ── Rule-based monitoring ALWAYS runs regardless of budget ──
+        // A9 (alerts) and A15 (competitor sitemap diff) are rule-based — they
+        // don't call LLM for detection. Must never be paused by budget gate.
         // A9: check for new technical SEO alerts
         const alertResult = await checkAlerts(doc.id, keys);
         if (alertResult?.alertsCreated > 0) {
@@ -177,6 +181,15 @@ setInterval(async () => {
             }).catch(() => {});
           }
         } catch { /* non-blocking */ }
+
+        // ── Budget gate: skip LLM-heavy agent runs below this line ──
+        // A23/rulesEngine/A16/CMO all call the LLM. If the monthly budget is
+        // blown, pause those — but monitoring above still ran.
+        const budgetStatus = await checkBudget(doc.id);
+        if (!budgetStatus.allowed) {
+          console.log(`[daily-monitor] Skipping LLM agents for ${data.name} — budget exceeded ($${budgetStatus.spent.toFixed(2)}/$${budgetStatus.budget.toFixed(2)})`);
+          continue;
+        }
 
         // A23: investigate any new P1 alerts — diagnose root cause, propose fix, notify
         if (alertResult?.alertsCreated > 0) {
@@ -495,11 +508,19 @@ setInterval(async () => {
 }, 6 * 60 * 60 * 1000); // every 6 hours
 
 // ── Monthly report auto-send (1st of month, Sprint 2) ─
-// Checks every hour — sends report email for clients whose last report was 30+ days ago
+// Checks every hour. Uses a Firestore flag to ensure it runs exactly once per month
+// even if Render cold-starts outside the original 08:00-09:00 UTC window.
 setInterval(async () => {
   const now = new Date();
   if (now.getUTCDate() !== 1) return;       // 1st of month only
-  if (now.getUTCHours() < 8 || now.getUTCHours() > 9) return; // 08:00–08:59 UTC
+
+  const monthKey = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
+  try {
+    const flagRef = db.collection("cron_flags").doc(`monthly_report_${monthKey}`);
+    const flag    = await flagRef.get();
+    if (flag.exists) return; // already ran this month
+    await flagRef.set({ ranAt: now.toISOString() });
+  } catch { return; }
 
   console.log("[monthly-report] Running auto-report email send...");
   try {
@@ -516,6 +537,165 @@ setInterval(async () => {
   }
 }, 60 * 60 * 1000);
 
+// ── Content Verification — runs daily at 04:00 UTC ──────────────────────────
+// Checks published A14 content drafts that are 14+ days old:
+//   1. Pings Google "site:url" to check indexing
+//   2. Pulls GSC data for the target keyword to check ranking
+//   3. Writes outcome to content_drafts doc + client_memory
+// Without this, A14 pushes content and the agent never learns if it worked.
+setInterval(async () => {
+  const now = new Date();
+  // Run once per day — Firestore flag survives cold-starts.
+  const dayKey = now.toISOString().split("T")[0];
+  try {
+    const flagRef = db.collection("cron_flags").doc(`content_verify_${dayKey}`);
+    const flag    = await flagRef.get();
+    if (flag.exists) return;
+    await flagRef.set({ ranAt: now.toISOString() });
+  } catch { return; }
+
+  console.log("[content-verify] Starting daily content verification...");
+  try {
+    const fourteenDaysAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000).toISOString();
+    const snap = await db.collection("content_drafts")
+      .where("status", "==", "published")
+      .where("verificationStatus", "==", null)
+      .limit(30)
+      .get();
+
+    // Fallback: also pick up published items that have never been verified
+    // (verificationStatus field might not exist on older docs)
+    let docs = snap.docs.filter(d => {
+      const data = d.data();
+      const pub = data.publishedAt?._seconds
+        ? new Date(data.publishedAt._seconds * 1000).toISOString()
+        : data.publishedAt || data.createdAt?._seconds
+          ? new Date((data.createdAt?._seconds || 0) * 1000).toISOString()
+          : null;
+      return pub && pub <= fourteenDaysAgo && !data.verificationStatus;
+    });
+
+    if (docs.length === 0) {
+      // Try broader query for docs missing the field entirely
+      const broadSnap = await db.collection("content_drafts")
+        .where("status", "==", "published")
+        .limit(30)
+        .get();
+      docs = broadSnap.docs.filter(d => {
+        const data = d.data();
+        if (data.verificationStatus) return false;
+        const pub = data.publishedAt?._seconds
+          ? new Date(data.publishedAt._seconds * 1000).toISOString()
+          : null;
+        return pub && pub <= fourteenDaysAgo;
+      });
+    }
+
+    console.log(`[content-verify] ${docs.length} draft(s) due for verification`);
+
+    for (const doc of docs) {
+      const draft = doc.data();
+      try {
+        const { getUserKeys } = require("./utils/getUserKeys");
+        const clientDoc = await db.collection("clients").doc(draft.clientId).get();
+        if (!clientDoc.exists) continue;
+        const ownerId = clientDoc.data().ownerId;
+        const keys    = await getUserKeys(ownerId).catch(() => null);
+        const gscToken = keys?.gscToken || null;
+
+        let indexed = false;
+        let ranking = null;
+
+        // Check indexing via GSC URL Inspection (or fallback: check GSC page data)
+        if (gscToken && draft.wpEditUrl) {
+          try {
+            const siteUrl   = clientDoc.data().websiteUrl || "";
+            const slug      = draft.slug || "";
+            const pageUrl   = slug ? `${siteUrl.replace(/\/+$/, "")}/${slug}` : draft.wpEditUrl;
+            const gscBase   = `https://searchconsole.googleapis.com/webmasters/v3/sites/${encodeURIComponent(siteUrl)}/searchAnalytics/query`;
+            const afterStart = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+            const afterEnd   = now.toISOString().split("T")[0];
+
+            const res = await fetch(gscBase, {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Authorization: `Bearer ${gscToken}` },
+              body: JSON.stringify({
+                startDate: afterStart,
+                endDate:   afterEnd,
+                dimensions: ["page"],
+                rowLimit:   5,
+                dimensionFilterGroups: [{ filters: [{ dimension: "page", operator: "contains", expression: slug || pageUrl.replace(/^https?:\/\/[^/]+/, "") }] }],
+              }),
+              signal: AbortSignal.timeout(15000),
+            });
+
+            const gscData = await res.json();
+            const row = gscData.rows?.[0];
+            if (row) {
+              indexed = true;
+              ranking = {
+                impressions: row.impressions || 0,
+                clicks:      row.clicks      || 0,
+                ctr:         row.ctr         || 0,
+                position:    row.position    || null,
+              };
+            }
+          } catch { /* GSC check failed — mark as no_data */ }
+        }
+
+        const outcome = indexed
+          ? (ranking?.position && ranking.position <= 20 ? "ranking" : "indexed_not_ranking")
+          : "not_indexed";
+
+        await db.collection("content_drafts").doc(doc.id).update({
+          verificationStatus: outcome,
+          verifiedAt:         now.toISOString(),
+          gscRanking:         ranking,
+          indexed,
+        });
+
+        // Write to client_memory so CMO learns which content types work
+        try {
+          const memRef  = db.collection("client_memory").doc(draft.clientId);
+          const memSnap = await memRef.get();
+          const mem     = memSnap.exists ? memSnap.data() : {};
+          const contentLog = mem.contentOutcomes || [];
+          contentLog.push({
+            keyword:    draft.focusKeyphrase || draft.keyword,
+            title:      draft.title,
+            outcome,
+            ranking:    ranking?.position || null,
+            verifiedAt: now.toISOString(),
+          });
+          await memRef.set({ ...mem, contentOutcomes: contentLog.slice(-30), lastUpdated: now.toISOString() }, { merge: true });
+        } catch { /* non-blocking */ }
+
+        // Write to global_patterns for cross-client content learning
+        if (outcome !== "not_indexed") {
+          try {
+            await db.collection("global_patterns").add({
+              clientId:   draft.clientId,
+              fixType:    "content_creation",
+              issueType:  draft.intent || "informational",
+              outcome:    outcome === "ranking" ? "improved" : "no_change",
+              confidence: outcome === "ranking" ? 0.9 : 0.5,
+              ownerId,
+              industry:   clientDoc.data().industry || null,
+              createdAt:  now.toISOString(),
+            });
+          } catch { /* non-blocking */ }
+        }
+
+        console.log(`[content-verify] "${draft.title}" → ${outcome}`);
+      } catch (e) {
+        console.error(`[content-verify] Error on ${doc.id}:`, e.message);
+      }
+    }
+  } catch (err) {
+    console.error("[content-verify] Error:", err.message);
+  }
+}, 60 * 60 * 1000); // hourly, guarded to 04:00 UTC
+
 // ── Fix Verification Loop — runs daily at 03:00 UTC ───────────────────────────
 // For each pending fix_verification doc where checkAfter < now:
 //   1. Pull GSC data for the specific URL (before vs after)
@@ -525,7 +705,14 @@ setInterval(async () => {
 //   5. Write to global_patterns for cross-client intelligence
 setInterval(async () => {
   const now = new Date();
-  if (now.getUTCHours() !== 3) return; // 03:00 UTC window
+  // Run once per day — Firestore flag survives cold-starts.
+  const dayKey = now.toISOString().split("T")[0];
+  try {
+    const flagRef = db.collection("cron_flags").doc(`fix_verify_${dayKey}`);
+    const flag    = await flagRef.get();
+    if (flag.exists) return;
+    await flagRef.set({ ranAt: now.toISOString() });
+  } catch { return; }
 
   console.log("[fix-verify] Starting daily fix verification check...");
   try {

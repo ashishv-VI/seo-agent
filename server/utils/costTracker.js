@@ -81,10 +81,50 @@ async function checkBudget(clientId) {
     const spent    = usageDoc.exists ? (usageDoc.data().totalCostUsd || 0) : 0;
 
     if (spent >= budget) {
+      // Notify owner once per month when budget is blown
+      try {
+        const monthKey = getMonthKey();
+        const notifId  = `budget_exceeded_${clientId}_${monthKey}`;
+        const existing = await db.collection("notifications").doc(notifId).get();
+        if (!existing.exists) {
+          const clientSnap = await db.collection("clients").doc(clientId).get();
+          const clientName = clientSnap.data()?.name || "Unnamed";
+          const ownerId    = clientSnap.data()?.ownerId || null;
+          await db.collection("notifications").doc(notifId).set({
+            clientId,
+            ownerId,
+            type:      "budget_exceeded",
+            title:     `LLM budget exceeded — ${clientName}`,
+            message:   `Monthly AI budget of $${budget.toFixed(2)} exceeded ($${spent.toFixed(2)} spent). Agent runs are paused until next month or budget is increased.`,
+            read:      false,
+            createdAt: new Date().toISOString(),
+          });
+        }
+      } catch { /* notification is best-effort */ }
       return { allowed: false, reason: `Monthly LLM budget exceeded ($${spent.toFixed(4)}/$${budget.toFixed(2)})`, spent, budget };
     }
     // Warn at 80%
     if (spent >= budget * 0.8) {
+      // Notify owner once at 80% threshold
+      try {
+        const monthKey  = getMonthKey();
+        const warnNotifId = `budget_warning_${clientId}_${monthKey}`;
+        const existing = await db.collection("notifications").doc(warnNotifId).get();
+        if (!existing.exists) {
+          const clientSnap = await db.collection("clients").doc(clientId).get();
+          const clientName = clientSnap.data()?.name || "Unnamed";
+          const ownerId    = clientSnap.data()?.ownerId || null;
+          await db.collection("notifications").doc(warnNotifId).set({
+            clientId,
+            ownerId,
+            type:      "budget_warning",
+            title:     `LLM budget warning — ${clientName}`,
+            message:   `AI spend is at ${Math.round((spent/budget)*100)}% of the $${budget.toFixed(2)} monthly budget ($${spent.toFixed(2)} used). Consider increasing the budget or the agent may pause soon.`,
+            read:      false,
+            createdAt: new Date().toISOString(),
+          });
+        }
+      } catch { /* notification is best-effort */ }
       return { allowed: true, warning: `LLM budget at ${Math.round((spent/budget)*100)}%`, spent, budget };
     }
     return { allowed: true, spent, budget };
