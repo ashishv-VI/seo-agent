@@ -174,10 +174,27 @@ async function runFullPipeline(clientId, keys, googleToken = null) {
 
   // Wrapper: mark running → call agent fn → mark complete/failed
   // Returns true on success, false on failure (pipeline continues for non-critical agents)
+  // Per-agent timeout (5 min default) prevents any single agent from blocking the pipeline.
+  // Before this, A10 (10 keywords × 3 SERP engines × 30s each = 15 min) or A11 could
+  // stall the entire pipeline past the 25-min hard timeout.
+  const AGENT_TIMEOUT_MS = {
+    A2: 8 * 60 * 1000,   // audit crawls 500+ pages — needs more time
+    A9: 3 * 60 * 1000,   // report = LLM + Firestore writes
+    A10: 4 * 60 * 1000,  // ranking = sequential SERP calls
+    A11: 4 * 60 * 1000,  // link building = SERP + LLM
+  };
+  const DEFAULT_TIMEOUT = 5 * 60 * 1000;
+
   const exec = async (agentId, fn) => {
+    const timeout = AGENT_TIMEOUT_MS[agentId] || DEFAULT_TIMEOUT;
     try {
       await mark(agentId, "running");
-      const result = await fn(clientId, keys);
+      const result = await Promise.race([
+        fn(clientId, keys),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error(`${agentId} timed out after ${timeout / 1000}s`)), timeout)
+        ),
+      ]);
       if (!result.success) {
         await handleFailure(clientId, agentId, result.error || "Agent returned failure");
         return false;

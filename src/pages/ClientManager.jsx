@@ -323,19 +323,30 @@ export default function ClientManager({ dark }) {
 
   async function getToken() { return user?.getIdToken?.() || ""; }
 
-  async function loadClients(retries = 2) {
+  async function loadClients(retries = 3) {
     setLoading(true);
+    setError("");
     try {
+      // Pre-warm: fire a quick /health ping first so the Render dyno wakes up
+      // while we prepare the auth token. This runs in parallel, not sequentially.
+      const warmPromise = fetch(`${API}/health`, { signal: AbortSignal.timeout(25000) }).catch(() => {});
       const token = await getToken();
-      const res   = await fetch(`${API}/api/clients`, { headers: { Authorization: `Bearer ${token}` } });
-      const data  = await res.json();
+      await warmPromise; // wait for dyno to be alive before hitting the real endpoint
+
+      const res = await fetch(`${API}/api/clients`, {
+        headers: { Authorization: `Bearer ${token}` },
+        signal: AbortSignal.timeout(20000),
+      });
+      if (!res.ok) throw new Error("Server returned " + res.status);
+      const data = await res.json();
       setClients(data.clients || []);
     } catch (e) {
       if (retries > 0) {
-        await new Promise(r => setTimeout(r, 3000));
+        setError("Connecting to server...");
+        await new Promise(r => setTimeout(r, 2000));
         return loadClients(retries - 1);
       }
-      setError("Server is starting up — please refresh in a few seconds");
+      setError("Could not reach the server — please refresh the page");
     }
     setLoading(false);
   }
@@ -645,7 +656,25 @@ export default function ClientManager({ dark }) {
 
       {/* Client List */}
       {loading ? (
-        <div style={{ textAlign:"center", padding:40, color:txt3 }}>Loading clients...</div>
+        <div>
+          {error && <div style={{ textAlign:"center", padding:"10px 0", color:txt2, fontSize:13 }}>{error}</div>}
+          {[1,2,3].map(i => (
+            <div key={i} style={{ ...s.card, cursor:"default", opacity: 0.5 }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
+                <div style={{ flex:1 }}>
+                  <div style={{ width:180, height:16, borderRadius:6, background:bg3, marginBottom:10 }} />
+                  <div style={{ width:220, height:12, borderRadius:6, background:bg3, marginBottom:12 }} />
+                  <div style={{ display:"flex", gap:6 }}>
+                    <div style={{ width:70, height:20, borderRadius:10, background:bg3 }} />
+                    <div style={{ width:70, height:20, borderRadius:10, background:bg3 }} />
+                    <div style={{ width:70, height:20, borderRadius:10, background:bg3 }} />
+                  </div>
+                </div>
+                <div style={{ width:52, height:52, borderRadius:"50%", background:bg3 }} />
+              </div>
+            </div>
+          ))}
+        </div>
       ) : clients.length === 0 ? (
         <div style={{ textAlign:"center", padding:60, color:txt3 }}>
           <div style={{ fontSize:36, marginBottom:12 }}>🏢</div>

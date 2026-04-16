@@ -93,7 +93,7 @@ async function runA10(clientId, keys, gscToken = null) {
 
       const topKws = (keywords?.keywordMap || [])
         .filter(k => k.priority === "high" || k.cluster === "generic")
-        .slice(0, 10)
+        .slice(0, 5)
         .map(k => k.keyword);
 
       if (topKws.length > 0) {
