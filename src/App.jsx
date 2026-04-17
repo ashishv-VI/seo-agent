@@ -108,6 +108,7 @@ function MainApp({ onLogout }) {
   const [brand, setBrand]     = useState({ agencyName:"", primaryColor:"#443DCB", logoUrl:"" });
   const [tmpBrand, setTmpBrand] = useState({ agencyName:"", primaryColor:"#443DCB", logoUrl:"" });
   const [copied, setCopied]   = useState(null);
+  const [keySaveStatus, setKeySaveStatus] = useState(null); // null | "saving" | "saved" | "error"
   const [bulkInput, setBulkInput]     = useState("");
   const [bulkResults, setBulkResults] = useState([]);
   const [bulkLoading, setBulkLoading] = useState(false);
@@ -208,7 +209,7 @@ function MainApp({ onLogout }) {
     localStorage.setItem("seo_keys", JSON.stringify(tmpKeys));
     setKeys(tmpKeys);
     setBrand(tmpBrand);
-    // Save ALL keys + branding to Firestore so backend agents can use them
+    setKeySaveStatus("saving");
     try {
       const token   = await user.getIdToken();
       const MASK    = "••••••••";
@@ -219,14 +220,18 @@ function MainApp({ onLogout }) {
         payload._brand = tmpBrand;
       }
       if (Object.keys(payload).length > 0) {
-        await fetch(`${API}/api/keys/save`, {
+        const res = await fetch(`${API}/api/keys/save`, {
           method:  "POST",
           headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
           body:    JSON.stringify(payload),
         });
+        if (!res.ok) { setKeySaveStatus("error"); return; }
       }
-    } catch { /* silent */ }
-    setShowSettings(false);
+      setKeySaveStatus("saved");
+      setTimeout(() => { setKeySaveStatus(null); setShowSettings(false); }, 800);
+    } catch {
+      setKeySaveStatus("error");
+    }
   }
 
   function copyText(text, id) {
@@ -809,7 +814,9 @@ function MainApp({ onLogout }) {
 
             {/* ── Sticky Footer ── */}
             <div style={{ padding:"14px 24px", borderTop:`1px solid ${bdr}`, flexShrink:0, display:"flex", gap:10, alignItems:"center" }}>
-              <button onClick={saveKeys} style={s.saveBtn}>💾 Save Keys</button>
+              <button onClick={saveKeys} disabled={keySaveStatus === "saving"} style={{ ...s.saveBtn, background: keySaveStatus === "error" ? "#DC2626" : keySaveStatus === "saved" ? "#059669" : undefined, opacity: keySaveStatus === "saving" ? 0.7 : 1 }}>
+                {keySaveStatus === "saving" ? "Saving…" : keySaveStatus === "saved" ? "✓ Saved!" : keySaveStatus === "error" ? "✗ Save failed — retry" : "💾 Save Keys"}
+              </button>
               <button onClick={()=>setShowSettings(false)}
                 style={{ padding:"10px 16px", borderRadius:8, border:`1px solid ${bdr}`, background:"transparent", color:txt2, fontSize:13, cursor:"pointer", whiteSpace:"nowrap" }}>
                 Cancel

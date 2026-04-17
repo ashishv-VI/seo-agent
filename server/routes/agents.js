@@ -124,8 +124,8 @@ router.post("/:clientId/reset-pipeline", verifyToken, async (req, res) => {
       pipelineHeartbeat:   null,
     });
 
-    // Delete shared state docs so stale data doesn't block fresh agents
-    const stateKeys = ["A1_brief", "A2_audit", "A3_keywords", "A4_competitor",
+    // Delete agent output states — keep A1_brief (onboarding data needed by A23/alerts)
+    const stateKeys = ["A2_audit", "A3_keywords", "A4_competitor",
                        "A5_content", "A6_onpage", "A7_technical", "A8_geo",
                        "A9_report", "A10_rankings"];
     const { deleteState } = require("../shared-state/stateManager");

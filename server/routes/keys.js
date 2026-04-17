@@ -20,7 +20,7 @@ router.post("/save", verifyToken, async (req, res) => {
       updatedAt: FieldValue.serverTimestamp(),
     };
     if (_brand) update.brand = _brand;
-    await db.collection("users").doc(req.uid).update(update);
+    await db.collection("users").doc(req.uid).set(update, { merge: true });
     return res.json({ message: "API keys saved securely" });
   } catch (err) {
     return res.status(500).json({ error: err.message });
