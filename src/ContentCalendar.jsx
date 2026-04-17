@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
+import { callAIBackend } from "./utils/callAI";
 
 const DAYS = ["Monday","Tuesday","Wednesday","Thursday","Friday"];
 const CONTENT_TYPES = ["Blog Post","Social Media","Video","Email","Infographic","Case Study","Podcast","Webinar"];
 const COLORS = { "Blog Post":"#443DCB","Social Media":"#0891B2","Video":"#DC2626","Email":"#D97706","Infographic":"#059669","Case Study":"#9333EA","Podcast":"#0F766E","Webinar":"#B45309" };
 const TYPE_ICONS = { "Blog Post":"✍️","Social Media":"📱","Video":"🎥","Email":"📧","Infographic":"📊","Case Study":"📋","Podcast":"🎙️","Webinar":"💻" };
 
-export default function ContentCalendar({ dark, keys, model }) {
+export default function ContentCalendar({ dark, keys, model, getToken }) {
   const [niche, setNiche]       = useState("");
   const [weeks, setWeeks]       = useState(4);
   const [loading, setLoading]   = useState(false);
@@ -38,23 +39,8 @@ export default function ContentCalendar({ dark, keys, model }) {
   }
 
   async function callAI(prompt) {
-    const key = model === "groq" ? keys.groq : keys.gemini;
-    if (!key) return null;
-    if (model === "groq") {
-      const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-        method:"POST", headers:{ "Content-Type":"application/json", "Authorization":`Bearer ${key}` },
-        body: JSON.stringify({ model:"llama-3.1-8b-instant", max_tokens:3000, messages:[{ role:"user", content:prompt }] })
-      });
-      const d = await res.json();
-      return d.choices?.[0]?.message?.content || null;
-    } else {
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${keys.gemini}`, {
-        method:"POST", headers:{ "Content-Type":"application/json" },
-        body: JSON.stringify({ contents:[{ parts:[{ text:prompt }] }] })
-      });
-      const d = await res.json();
-      return d.candidates?.[0]?.content?.parts?.[0]?.text || null;
-    }
+    if (!getToken) return null;
+    return callAIBackend(prompt, model, getToken);
   }
 
   async function generateCalendar() {

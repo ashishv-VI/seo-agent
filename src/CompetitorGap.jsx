@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { callAIBackend } from "./utils/callAI";
 
 const GAP_CATEGORIES = [
   { id:"keywords",  icon:"🔍", label:"Keyword Gaps" },
@@ -8,7 +9,7 @@ const GAP_CATEGORIES = [
   { id:"social",    icon:"📱", label:"Social Gaps" },
 ];
 
-export default function CompetitorGap({ dark, keys, model }) {
+export default function CompetitorGap({ dark, keys, model, getToken }) {
   const [mysite, setMysite]       = useState("");
   const [comp1, setComp1]         = useState("");
   const [comp2, setComp2]         = useState("");
@@ -29,36 +30,8 @@ export default function CompetitorGap({ dark, keys, model }) {
   const txt3 = dark ? "#444"    : "#bbb";
 
   async function callAI(prompt) {
-    if (model === "groq") {
-      if (!keys?.groq) return null;
-      const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${keys.groq}` },
-        body: JSON.stringify({ model: "llama-3.1-8b-instant", max_tokens: 3000, messages: [{ role: "user", content: prompt }] })
-      });
-      const d = await res.json();
-      return d.choices?.[0]?.message?.content || null;
-    } else if (model === "gemini") {
-      if (!keys?.gemini) return null;
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${keys.gemini}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-      });
-      const d = await res.json();
-      return d.candidates?.[0]?.content?.parts?.[0]?.text || null;
-    } else if (model === "deepseek" || model === "mistral") {
-      if (!keys?.openrouter) return null;
-      const mdl = model === "deepseek" ? "deepseek/deepseek-r1:free" : "mistralai/mistral-7b-instruct:free";
-      const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${keys.openrouter}` },
-        body: JSON.stringify({ model: mdl, max_tokens: 3000, messages: [{ role: "user", content: prompt }] })
-      });
-      const d = await res.json();
-      return d.choices?.[0]?.message?.content || null;
-    }
-    return null;
+    if (!getToken) return null;
+    return callAIBackend(prompt, model, getToken);
   }
 
   async function analyze() {

@@ -1,6 +1,7 @@
 import { useState } from "react";
+import { callAIBackend } from "./utils/callAI";
 
-export default function SiteAudit({ dark, googleKey, groqKey, geminiKey, model }) {
+export default function SiteAudit({ dark, googleKey, groqKey, geminiKey, model, getToken }) {
   const [url, setUrl]         = useState("");
   const [loading, setLoading] = useState(false);
   const [audit, setAudit]     = useState(null);
@@ -119,8 +120,7 @@ export default function SiteAudit({ dark, googleKey, groqKey, geminiKey, model }
 
   async function getAiInsights() {
     if (!audit) return;
-    const key = model==="groq" ? groqKey : geminiKey;
-    if (!key) return;
+    if (!getToken) return;
     setAiLoading(true);
     const prompt = `As an SEO expert, analyze these site audit scores for ${audit.url}:
 Mobile Performance: ${audit.mobile.perf}/100, SEO: ${audit.mobile.seo}/100, Accessibility: ${audit.mobile.acc}/100
@@ -129,22 +129,7 @@ Core Web Vitals: LCP=${audit.cwv.lcp}, TBT=${audit.cwv.tbt}, CLS=${audit.cwv.cls
 Issues found: ${audit.issues.map(i=>i.title).join(", ")}
 Provide: 1) Overall assessment 2) Top 3 priority fixes with exact steps 3) Expected impact 4) 30-day improvement plan. Be specific and actionable.`;
     try {
-      let text = "";
-      if (model==="groq") {
-        const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-          method:"POST", headers:{ "Content-Type":"application/json", "Authorization":`Bearer ${key}` },
-          body: JSON.stringify({ model:"llama-3.1-8b-instant", max_tokens:1500, messages:[{ role:"user", content:prompt }] })
-        });
-        const d = await res.json();
-        text = d.choices?.[0]?.message?.content || "";
-      } else {
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`, {
-          method:"POST", headers:{ "Content-Type":"application/json" },
-          body: JSON.stringify({ contents:[{ parts:[{ text:prompt }] }] })
-        });
-        const d = await res.json();
-        text = d.candidates?.[0]?.content?.parts?.[0]?.text || "";
-      }
+      const text = await callAIBackend(prompt, model, getToken) || "";
       setAiInsights(text);
     } catch(e) { setAiInsights("Error: "+e.message); }
     setAiLoading(false);

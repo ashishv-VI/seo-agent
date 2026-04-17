@@ -597,28 +597,28 @@ function MainApp({ onLogout }) {
         {page==="agency"        && <AgencyDashboard dark={dark} onClientSelect={id => { setPage("clients"); }} />}
         {page==="users"         && <UserPanel dark={dark} />}
         {page==="dashboard"     && <Dashboard onToolSelect={selectTool} count={count} keys={keys} dark={dark} onPageSelect={setPage} />}
-        {page==="promptcontent" && <PromptToContent dark={dark} keys={keys} model={model} />}
-        {page==="writer"        && <AiWriter dark={dark} keys={keys} model={model} />}
+        {page==="promptcontent" && <PromptToContent dark={dark} keys={keys} model={model} getToken={() => user.getIdToken()} />}
+        {page==="writer"        && <AiWriter dark={dark} keys={keys} model={model} getToken={() => user.getIdToken()} />}
         {page==="gsc"           && <GscDashboard dark={dark} gscToken={googleToken} />}
-        {page==="ga4"           && <GA4Dashboard dark={dark} googleKey={keys.google} keys={keys} model={model} />}
-        {page==="audit"         && <SiteAudit dark={dark} googleKey={keys.google} groqKey={keys.groq} geminiKey={keys.gemini} model={model} />}
+        {page==="ga4"           && <GA4Dashboard dark={dark} googleKey={keys.google} keys={keys} model={model} getToken={() => user.getIdToken()} />}
+        {page==="audit"         && <SiteAudit dark={dark} googleKey={keys.google} groqKey={keys.groq} geminiKey={keys.gemini} model={model} getToken={() => user.getIdToken()} />}
         {page==="compare"       && <Compare dark={dark} googleKey={keys.google} />}
-        {page==="ranktracker"   && <RankTracker dark={dark} keys={keys} model={model} />}
-        {page==="brandtracker"  && <BrandTracker dark={dark} keys={keys} model={model} />}
-        {page==="location"      && <LocationKeywords dark={dark} keys={keys} model={model} />}
-        {page==="aeo"           && <AEO dark={dark} keys={keys} model={model} />}
-        {page==="aimode"        && <AIMode dark={dark} keys={keys} model={model} />}
-        {page==="metapreview"   && <MetaPreview dark={dark} keys={keys} model={model} />}
-        {page==="serpsimulator" && <SerpSimulator dark={dark} keys={keys} model={model} />}
-        {page==="competitorgap" && <CompetitorGap dark={dark} keys={keys} model={model} />}
-        {page==="readability"   && <ReadabilityChecker dark={dark} keys={keys} model={model} />}
+        {page==="ranktracker"   && <RankTracker dark={dark} keys={keys} model={model} getToken={() => user.getIdToken()} />}
+        {page==="brandtracker"  && <BrandTracker dark={dark} keys={keys} model={model} getToken={() => user.getIdToken()} />}
+        {page==="location"      && <LocationKeywords dark={dark} keys={keys} model={model} getToken={() => user.getIdToken()} />}
+        {page==="aeo"           && <AEO dark={dark} keys={keys} model={model} getToken={() => user.getIdToken()} />}
+        {page==="aimode"        && <AIMode dark={dark} keys={keys} model={model} getToken={() => user.getIdToken()} />}
+        {page==="metapreview"   && <MetaPreview dark={dark} keys={keys} model={model} getToken={() => user.getIdToken()} />}
+        {page==="serpsimulator" && <SerpSimulator dark={dark} keys={keys} model={model} getToken={() => user.getIdToken()} />}
+        {page==="competitorgap" && <CompetitorGap dark={dark} keys={keys} model={model} getToken={() => user.getIdToken()} />}
+        {page==="readability"   && <ReadabilityChecker dark={dark} keys={keys} model={model} getToken={() => user.getIdToken()} />}
         {page==="backlink"        && <BacklinkAnalyzer  dark={dark} getToken={() => user.getIdToken()} />}
         {page==="domainoverview"  && <DomainOverview    dark={dark} getToken={() => user.getIdToken()} />}
         {page==="keywordresearch" && <KeywordResearch   dark={dark} getToken={() => user.getIdToken()} />}
-        {page==="sitemap"       && <SitemapGenerator dark={dark} keys={keys} model={model} />}
-        {page==="calendar"      && <ContentCalendar dark={dark} keys={keys} model={model} />}
+        {page==="sitemap"       && <SitemapGenerator dark={dark} keys={keys} model={model} getToken={() => user.getIdToken()} />}
+        {page==="calendar"      && <ContentCalendar dark={dark} keys={keys} model={model} getToken={() => user.getIdToken()} />}
         {page==="checklist"     && <SeoChecklist dark={dark} />}
-        {page==="report"        && <ReportGenerator dark={dark} keys={keys} model={model} msgs={msgs} />}
+        {page==="report"        && <ReportGenerator dark={dark} keys={keys} model={model} msgs={msgs} getToken={() => user.getIdToken()} />}
         {page==="history"       && <History msgs={msgs} onToolSelect={selectTool} dark={dark} />}
 
         {page==="bulk" && (

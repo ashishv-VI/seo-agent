@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { callAIBackend } from "./utils/callAI";
 
 const PREVIEW_TABS = [
   { id:"google",   icon:"🔵", label:"Google Search" },
@@ -15,7 +16,7 @@ const CHAR_LIMITS = {
   ogDesc:      { min:100, max:200, warn:250 },
 };
 
-export default function MetaPreview({ dark, keys, model }) {
+export default function MetaPreview({ dark, keys, model, getToken }) {
   const [activeTab, setActiveTab] = useState("google");
   const [aiLoading, setAiLoading] = useState(false);
   const [topic, setTopic]         = useState("");
@@ -75,8 +76,7 @@ export default function MetaPreview({ dark, keys, model }) {
   // AI Generate
   async function generateWithAI() {
     if (!topic.trim()) return;
-    const key = model === "groq" ? keys?.groq : keys?.gemini;
-    if (!key) return;
+    if (!getToken) return;
     setAiLoading(true);
 
     const prompt = `You are an expert SEO meta tag specialist. Generate optimized meta tags for:
@@ -96,24 +96,7 @@ Rules:
 - No quotes around values`;
 
     try {
-      let text = "";
-      if (model === "groq") {
-        const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
-          body: JSON.stringify({ model: "llama-3.1-8b-instant", max_tokens: 800, messages: [{ role: "user", content: prompt }] })
-        });
-        const d = await res.json();
-        text = d.choices?.[0]?.message?.content || "";
-      } else {
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-        });
-        const d = await res.json();
-        text = d.candidates?.[0]?.content?.parts?.[0]?.text || "";
-      }
+      const text = await callAIBackend(prompt, model, getToken) || "";
 
       const get = (k) => {
         const m = text.match(new RegExp(`${k}:\\s*(.+)`));

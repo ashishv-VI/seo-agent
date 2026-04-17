@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { callAIBackend } from "./utils/callAI";
 
 const AI_FEATURES = [
   { id:"overview",  icon:"🔵", name:"Google AI Overview",    color:"#4285F4", desc:"AI-generated summaries above search results" },
@@ -17,7 +18,7 @@ const QUERY_INTENTS = [
   { id:"local",         label:"Local",           icon:"📍", color:"#DC2626", desc:"Near me, location-based" },
 ];
 
-export default function AIMode({ dark, keys, model }) {
+export default function AIMode({ dark, keys, model, getToken }) {
   const [topic, setTopic]           = useState("");
   const [content, setContent]       = useState("");
   const [activeTab, setActiveTab]   = useState("optimizer");
@@ -41,25 +42,8 @@ export default function AIMode({ dark, keys, model }) {
   const txt3 = dark ? "#444"    : "#bbb";
 
   async function callAI(prompt) {
-    const key = model === "groq" ? keys?.groq : keys?.gemini;
-    if (!key) return null;
-    if (model === "groq") {
-      const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-        method:"POST",
-        headers:{ "Content-Type":"application/json", "Authorization":`Bearer ${key}` },
-        body: JSON.stringify({ model:"llama-3.1-8b-instant", max_tokens:2500, messages:[{ role:"user", content:prompt }] })
-      });
-      const d = await res.json();
-      return d.choices?.[0]?.message?.content || null;
-    } else {
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${keys?.gemini}`, {
-        method:"POST",
-        headers:{ "Content-Type":"application/json" },
-        body: JSON.stringify({ contents:[{ parts:[{ text:prompt }] }] })
-      });
-      const d = await res.json();
-      return d.candidates?.[0]?.content?.parts?.[0]?.text || null;
-    }
+    if (!getToken) return null;
+    return callAIBackend(prompt, model, getToken);
   }
 
   async function runOptimizer() {

@@ -2,16 +2,19 @@
 
 Date: 2026-04-17
 Tester: Codex QA audit pass
-Last updated: 2026-04-17 (all fixes applied)
-Codex recheck: 2026-04-17
+Last updated: 2026-04-17
 
 ## Summary
 
-React + Vite frontend with Express/Firebase backend. All P1 and P2 issues resolved. P3 issues fixed or tracked.
+React + Vite frontend with Express/Firebase backend. The main functional QA issues are fixed, and frontend AI provider calls now route through the backend proxy.
 
-Build: PASS (npm run build)
-Backend syntax: PASS (86 files, 0 errors; verified outside sandbox because the script spawns child node processes)
-Main bundle: 1,483 kB -> 418 kB after lazy-loading split
+Verification:
+- Frontend build: PASS with `npm run build`
+- Backend syntax: PASS with `npm run test:backend` outside the sandbox
+- Backend syntax result: 87 server files passed
+- Main bundle improvement: about 1,483 kB -> about 417 kB after lazy-loading split
+- AI provider URL scan: PASS, no direct Groq/Gemini/OpenRouter browser calls found in `src`
+- Remaining large chunk: ClientManager is about 575 kB
 
 ---
 
@@ -19,16 +22,17 @@ Main bundle: 1,483 kB -> 418 kB after lazy-loading split
 
 Status: FIXED
 
-- src/context/AuthContext.jsx: register() retries backend call once. On both failures, signs the Firebase Auth user out so they are never left with a missing Firestore doc.
-- server/routes/auth.js: catches auth/email-already-exists and upserts Firestore doc from verified token UID instead of failing.
+- `src/context/AuthContext.jsx`: `register()` retries backend registration once. If both attempts fail, it signs out the Firebase Auth user and surfaces the error.
+- `server/routes/auth.js`: catches `auth/email-already-exists`, verifies the bearer token, and upserts the Firestore user document from the verified UID.
 
 ---
 
 ## Error 2 - Standalone Backlink Analyzer Calls Nonexistent Routes
 
-Status: FIXED (previous pass)
+Status: FIXED
 
-- src/BacklinkAnalyzer.jsx: replaced three broken POST calls with single POST /api/backlinks/analyze. Response fields mapped to UI shape.
+- `src/BacklinkAnalyzer.jsx`: replaced broken POST calls with `POST /api/backlinks/analyze`.
+- `server/routes/backlinks.js`: has the matching `POST /analyze` route.
 
 ---
 
@@ -36,7 +40,8 @@ Status: FIXED (previous pass)
 
 Status: FIXED
 
-- tests/live-browser-test.cjs: removed GET /api/crawler/domain-overview/example.com (route does not exist; real route is POST and requires auth). Replaced with WARN/Skipped log.
+- `tests/live-browser-test.cjs`: removed/skipped the bad `GET /api/crawler/domain-overview/example.com` check.
+- The real crawler route is auth-protected and should be covered by authenticated E2E tests.
 
 ---
 
@@ -44,19 +49,19 @@ Status: FIXED
 
 Status: FIXED / FOLLOW-UP REMAINS
 
-- src/App.jsx: 28 large page/tool components converted to React.lazy() + Suspense.
-- Main chunk: 1,483 kB -> 418 kB (72% reduction). 30 lazy chunks loaded on demand.
-- ClientManager chunk (575 kB) still large due to inline AgentPipeline. Further split is a follow-up task.
+- `src/App.jsx`: large page/tool components now use `React.lazy()` and `Suspense`.
+- Main JS chunk reduced from about 1,483 kB to about 417 kB.
+- Follow-up: `ClientManager` chunk is still about 575 kB and should be split further later.
 
 ---
 
 ## Error 5 - E2E Tests Are Hardcoded To Production Render
 
-Status: FIXED / DEFAULTS STILL POINT TO RENDER
+Status: FIXED / SAFER DEFAULTS RECOMMENDED
 
-- tests/live-browser-test.cjs: FRONTEND_URL, BACKEND_URL, HEADLESS env vars added. Defaults to Render URLs.
-- tests/e2e-full-journey.cjs: same env-var pattern. headless: false replaced with headless: HEADLESS.
-- Codex note: this is now configurable, but safer local/CI defaults would be localhost or requiring explicit production opt-in.
+- `tests/live-browser-test.cjs`: now supports `FRONTEND_URL`, `BACKEND_URL`, and `HEADLESS`.
+- `tests/e2e-full-journey.cjs`: now supports `FRONTEND_URL`, `BACKEND_URL`, and `HEADLESS`.
+- Remaining recommendation: defaults still point to Render. Local/CI defaults should ideally be localhost or require explicit production opt-in.
 
 ---
 
@@ -64,10 +69,16 @@ Status: FIXED / DEFAULTS STILL POINT TO RENDER
 
 Status: FIXED
 
-- server/routes/aiChat.js: new route POST /api/ai/chat — protected by verifyToken, loads user keys via getUserKeys(req.uid), proxies to Groq/Gemini/OpenRouter server-side. Supports model: groq | gemini | deepseek | mistral.
-- server/index.js: registered app.use("/api/ai", apiLimiter, aiChatRoutes).
-- src/App.jsx: callAI() now calls POST /api/ai/chat with Firebase token. All direct browser calls to api.groq.com, generativelanguage.googleapis.com, and openrouter.ai/api removed. Verified by grep — zero matches.
-- Build: PASS. Backend syntax: PASS (87 files).
+- `server/routes/aiChat.js`: added protected `POST /api/ai/chat`.
+- `server/index.js`: registered `app.use("/api/ai", apiLimiter, aiChatRoutes)`.
+- `src/App.jsx`: main `callAI()` now calls `POST /api/ai/chat` with Firebase bearer token.
+- `src/utils/callAI.js`: shared frontend helper calls the backend AI proxy.
+- Lazy-loaded frontend tools now use `callAIBackend()` instead of direct provider fetches.
+- Verification search returns no frontend matches:
+
+```bash
+rg "https://api\.groq\.com|generativelanguage\.googleapis\.com|https://openrouter\.ai/api" src
+```
 
 ---
 
@@ -75,19 +86,19 @@ Status: FIXED
 
 Status: FIXED
 
-- package.json: added test, test:build, test:backend, test:e2e, test:live scripts.
-- scripts/check-server-syntax.cjs: new file; recursively syntax-checks server/**/*.js, skips node_modules, exits 1 on failure.
+- `package.json`: added `test`, `test:build`, `test:backend`, `test:e2e`, and `test:live`.
+- `scripts/check-server-syntax.cjs`: recursively syntax-checks `server/**/*.js`, skips `node_modules`, and exits nonzero on failure.
 
 ---
 
 ## Error 8 - Mojibake / Encoding Issues
 
-Status: NOT APPLICABLE TO PRODUCTION
+Status: LOW PRIORITY / STILL PRESENT IN SOME COMMENTS AND DOCS
 
-Corrupted characters appear in documentation/comments only, not in rendered UI. No source files edited in this pass contained mojibake. Fix on-touch if any doc file re-introduces it.
+Corrupted characters still appear in some comments/docs. This does not currently block production behavior, but it should be cleaned when touching those files.
 
 ---
 
-## Overall Risk: Low
+## Overall Risk: Low-Medium
 
-All P1 and P2 issues resolved. All security issues resolved (Error 6 backend proxy complete). Remaining: ClientManager bundle split (follow-up), safer CI test defaults (cosmetic).
+The core functional issues are fixed, build/backend syntax checks pass, and frontend AI provider calls no longer expose user keys. Remaining follow-ups are performance/polish: split the large ClientManager chunk and clean mojibake in comments/docs.

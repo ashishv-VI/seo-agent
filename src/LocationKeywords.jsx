@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { callAIBackend } from "./utils/callAI";
 
 const COUNTRIES = [
   { code:"IN", name:"India",          flag:"🇮🇳", lang:"Hindi/English",  currency:"INR", tld:".in"  },
@@ -31,7 +32,7 @@ const ANALYSIS_MODES = [
   { id:"cultural",   icon:"🎭", label:"Cultural Insights",    desc:"Cultural context for content" },
 ];
 
-export default function LocationKeywords({ dark, keys, model }) {
+export default function LocationKeywords({ dark, keys, model, getToken }) {
   const [keyword, setKeyword]         = useState("");
   const [selectedCountries, setSelectedCountries] = useState(["IN","US","UK"]);
   const [mode, setMode]               = useState("keywords");
@@ -59,25 +60,8 @@ export default function LocationKeywords({ dark, keys, model }) {
   }
 
   async function callAI(prompt) {
-    const key = model === "groq" ? keys?.groq : keys?.gemini;
-    if (!key) return null;
-    if (model === "groq") {
-      const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-        method:"POST",
-        headers:{ "Content-Type":"application/json", "Authorization":`Bearer ${key}` },
-        body: JSON.stringify({ model:"llama-3.1-8b-instant", max_tokens:2500, messages:[{ role:"user", content:prompt }] })
-      });
-      const d = await res.json();
-      return d.choices?.[0]?.message?.content || null;
-    } else {
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${keys?.gemini}`, {
-        method:"POST",
-        headers:{ "Content-Type":"application/json" },
-        body: JSON.stringify({ contents:[{ parts:[{ text:prompt }] }] })
-      });
-      const d = await res.json();
-      return d.candidates?.[0]?.content?.parts?.[0]?.text || null;
-    }
+    if (!getToken) return null;
+    return callAIBackend(prompt, model, getToken);
   }
 
   function buildPrompt(kw, country, m) {

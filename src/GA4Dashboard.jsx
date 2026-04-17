@@ -1,4 +1,5 @@
 import { useState, useRef } from "react";
+import { callAIBackend } from "./utils/callAI";
 
 const COUNTRY_EMOJIS = {
   "India":"🇮🇳","United States":"🇺🇸","United Kingdom":"🇬🇧","Canada":"🇨🇦",
@@ -8,7 +9,7 @@ const COUNTRY_EMOJIS = {
   "South Korea":"🇰🇷","Russia":"🇷🇺","Turkey":"🇹🇷","Philippines":"🇵🇭","Thailand":"🇹🇭",
 };
 
-export default function GA4Dashboard({ dark, googleKey, keys, model }) {
+export default function GA4Dashboard({ dark, googleKey, keys, model, getToken }) {
   const [activeTab, setActiveTab]   = useState("import");
   const [datasets, setDatasets]     = useState({});
   const [activeDs, setActiveDs]     = useState(null);
@@ -142,8 +143,7 @@ export default function GA4Dashboard({ dark, googleKey, keys, model }) {
 
   async function runAiAnalysis() {
     if (!ds) return;
-    const key = model === "groq" ? keys?.groq : keys?.gemini;
-    if (!key) return;
+    if (!getToken) return;
     setAiLoading(true);
 
     const sample = ds.rows.slice(0,25).map(r => ds.headers.map(h=>r[h]).join(" | ")).join("\n");
@@ -248,24 +248,7 @@ Provide comparison analysis:
     const prompt = prompts[analysisType] || prompts.general;
 
     try {
-      let text = "";
-      if (model === "groq") {
-        const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-          method:"POST",
-          headers:{ "Content-Type":"application/json", "Authorization":`Bearer ${key}` },
-          body: JSON.stringify({ model:"llama-3.1-8b-instant", max_tokens:2500, messages:[{ role:"user", content:prompt }] })
-        });
-        const d = await res.json();
-        text = d.choices?.[0]?.message?.content || "";
-      } else {
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${keys.gemini}`, {
-          method:"POST",
-          headers:{ "Content-Type":"application/json" },
-          body: JSON.stringify({ contents:[{ parts:[{ text:prompt }] }] })
-        });
-        const d = await res.json();
-        text = d.candidates?.[0]?.content?.parts?.[0]?.text || "";
-      }
+      const text = await callAIBackend(prompt, model, getToken) || "";
       setAiAnalysis(text);
       setActiveTab("ai");
     } catch(e) { console.error(e); }

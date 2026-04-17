@@ -1,6 +1,7 @@
 import { useState } from "react";
+import { callAIBackend } from "./utils/callAI";
 
-export default function ReadabilityChecker({ dark, keys, model }) {
+export default function ReadabilityChecker({ dark, keys, model, getToken }) {
   const [content, setContent]     = useState("");
   const [keyword, setKeyword]     = useState("");
   const [loading, setLoading]     = useState(false);
@@ -109,8 +110,7 @@ export default function ReadabilityChecker({ dark, keys, model }) {
 
   async function getAISuggestions() {
     if (!content.trim()) return;
-    const key = model === "groq" ? keys?.groq : keys?.gemini;
-    if (!key) return;
+    if (!getToken) return;
     setAiLoading(true);
 
     const stats = results || analyzeLocally(content);
@@ -135,27 +135,10 @@ Provide:
 5. KEYWORD OPTIMIZATION — keyword density analysis and suggestions
 6. GRADE LEVEL TARGET — what grade level this content should be and why
 
-Be very specific. Reference actual sentences from the content.`;
+    Be very specific. Reference actual sentences from the content.`;
 
     try {
-      let text = "";
-      if (model === "groq") {
-        const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
-          body: JSON.stringify({ model: "llama-3.1-8b-instant", max_tokens: 1500, messages: [{ role: "user", content: prompt }] })
-        });
-        const d = await res.json();
-        text = d.choices?.[0]?.message?.content || "";
-      } else {
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-        });
-        const d = await res.json();
-        text = d.candidates?.[0]?.content?.parts?.[0]?.text || "";
-      }
+      const text = await callAIBackend(prompt, model, getToken) || "";
       setAiSuggestions(text);
     } catch(e) { console.error(e); }
     setAiLoading(false);
