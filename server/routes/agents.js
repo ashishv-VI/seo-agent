@@ -95,6 +95,48 @@ router.post("/:clientId/run-pipeline", verifyToken, async (req, res) => {
   }
 });
 
+// ── POST Hard Reset Pipeline ───────────────────────
+// Clears all agent statuses + shared state so the pipeline can start fresh.
+// Only available to the client owner. Safe to call at any time.
+router.post("/:clientId/reset-pipeline", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const clientId = req.params.clientId;
+
+    // Reset all agent statuses to pending in the client doc
+    await db.collection("clients").doc(clientId).update({
+      "agents.A1": "pending",
+      "agents.A2": "pending",
+      "agents.A3": "pending",
+      "agents.A4": "pending",
+      "agents.A5": "pending",
+      "agents.A6": "pending",
+      "agents.A7": "pending",
+      "agents.A8": "pending",
+      "agents.A9": "pending",
+      "agents.A10": "pending",
+      "agents.A11": "pending",
+      "agents.A12": "pending",
+      pipelineStatus:      "idle",
+      pipelineError:       null,
+      pipelineStartedAt:   null,
+      pipelineCompletedAt: null,
+      pipelineHeartbeat:   null,
+    });
+
+    // Delete shared state docs so stale data doesn't block fresh agents
+    const stateKeys = ["A1_brief", "A2_audit", "A3_keywords", "A4_competitor",
+                       "A5_content", "A6_onpage", "A7_technical", "A8_geo",
+                       "A9_report", "A10_rankings"];
+    const { deleteState } = require("../shared-state/stateManager");
+    await Promise.allSettled(stateKeys.map(k => deleteState(clientId, k)));
+
+    return res.json({ success: true, message: "Pipeline reset — all agents cleared to pending" });
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
 // ── GET Pipeline Status (A0) ───────────────────────
 router.get("/:clientId/pipeline", verifyToken, async (req, res) => {
   try {

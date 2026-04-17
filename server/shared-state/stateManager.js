@@ -25,6 +25,11 @@ async function deleteClientState(clientId) {
   await db.collection(COLLECTION).doc(clientId).delete();
 }
 
+async function deleteState(clientId, agentId) {
+  const ref = db.collection(COLLECTION).doc(clientId);
+  await ref.update({ [agentId]: FieldValue.delete() }).catch(() => {});
+}
+
 async function updateState(clientId, agentId, partialData) {
   const ref     = db.collection(COLLECTION).doc(clientId);
   const doc     = await ref.get();
@@ -40,4 +45,4 @@ async function updateState(clientId, agentId, partialData) {
   }
 }
 
-module.exports = { saveState, updateState, getState, getClientState, deleteClientState };
+module.exports = { saveState, updateState, getState, getClientState, deleteClientState, deleteState };

@@ -92,6 +92,7 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
   const [portalUrl,     setPortalUrl]     = useState(null);
   const [showPortal,    setShowPortal]    = useState(false);
   const [portalLoading, setPortalLoading] = useState(false);
+  const [resetting,     setResetting]     = useState(false);
   const [agencyBrand,   setAgencyBrand]   = useState({ agencyName:"", primaryColor:"#443DCB", logoUrl:"" });
   const [crawlProgress, setCrawlProgress] = useState(null); // { crawled, total, pct }
   const crawlPollRef = useRef(null);
@@ -288,6 +289,25 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
     }
   }
 
+  async function hardReset() {
+    if (!window.confirm("Hard reset will clear all agent results and let you start fresh. Continue?")) return;
+    setResetting(true); setError("");
+    try {
+      const token = await getToken();
+      const res   = await fetch(`${API}/api/agents/${clientId}/reset-pipeline`, {
+        method: "POST", headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error || "Reset failed"); return; }
+      setPipelineStatus("idle");
+      if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+      if (crawlPollRef.current) { clearInterval(crawlPollRef.current); crawlPollRef.current = null; }
+      setCrawlProgress(null);
+      await load();
+    } catch (e) { setError(e.message || "Reset failed"); }
+    finally { setResetting(false); }
+  }
+
   async function generatePortal() {
     setPortalLoading(true);
     try {
@@ -427,22 +447,44 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
         </div>
 
         {pipelineStatus === "running" ? (
-          <div style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 16px", borderRadius:20, background:"#D9770611", border:"1px solid #D9770644" }}>
-            <span style={{ fontSize:12, color:"#D97706" }}>⏳</span>
-            <span style={{ fontSize:12, color:"#D97706", fontWeight:600 }}>
-              {crawlProgress && crawlProgress.crawled > 0
-                ? `Crawling ${crawlProgress.crawled}/${crawlProgress.total || "?"} pages (${crawlProgress.pct || 0}%)`
-                : "Analysing..."}
-            </span>
+          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 16px", borderRadius:20, background:"#D9770611", border:"1px solid #D9770644" }}>
+              <span style={{ fontSize:12, color:"#D97706" }}>⏳</span>
+              <span style={{ fontSize:12, color:"#D97706", fontWeight:600 }}>
+                {crawlProgress && crawlProgress.crawled > 0
+                  ? `Crawling ${crawlProgress.crawled}/${crawlProgress.total || "?"} pages (${crawlProgress.pct || 0}%)`
+                  : "Analysing..."}
+              </span>
+            </div>
+            <button
+              onClick={hardReset}
+              disabled={resetting}
+              title="Pipeline stuck? Clear all agent results and start fresh."
+              style={{ padding:"8px 14px", borderRadius:20, border:"1px solid #DC2626", background:"transparent", color:"#DC2626", fontWeight:700, fontSize:12, cursor:"pointer" }}
+            >
+              {resetting ? "Resetting…" : "⚠️ Hard Reset"}
+            </button>
           </div>
         ) : (
-          <button
-            onClick={runFullAnalysis}
-            disabled={!!running}
-            style={{ padding:"10px 20px", borderRadius:20, border:"none", background:"linear-gradient(135deg,#443DCB,#059669)", color:"#fff", fontWeight:700, fontSize:13, cursor:"pointer", boxShadow:"0 2px 12px #443DCB44" }}
-          >
-            {pipelineStatus === "complete" ? "🔄 Re-run Analysis" : "🚀 Run Full SEO Analysis"}
-          </button>
+          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+            <button
+              onClick={runFullAnalysis}
+              disabled={!!running}
+              style={{ padding:"10px 20px", borderRadius:20, border:"none", background:"linear-gradient(135deg,#443DCB,#059669)", color:"#fff", fontWeight:700, fontSize:13, cursor:"pointer", boxShadow:"0 2px 12px #443DCB44" }}
+            >
+              {pipelineStatus === "complete" ? "🔄 Re-run Analysis" : "🚀 Run Full SEO Analysis"}
+            </button>
+            {(pipelineStatus === "failed" || Object.values(client?.agents || {}).some(s => s === "failed")) && (
+              <button
+                onClick={hardReset}
+                disabled={resetting}
+                title="Clear all stuck/failed agents and start fresh."
+                style={{ padding:"10px 16px", borderRadius:20, border:"1px solid #DC2626", background:"#DC262611", color:"#DC2626", fontWeight:700, fontSize:13, cursor:"pointer" }}
+              >
+                {resetting ? "Resetting…" : "⚠️ Hard Reset"}
+              </button>
+            )}
+          </div>
         )}
       </div>
 
