@@ -12,6 +12,8 @@ Verification (latest pass):
 - Frontend build: PASS
 - Backend syntax: PASS (87 server files)
 - AI provider URL scan: PASS (zero matches in src)
+- Live browser test: PASS (8 pass, 2 warn, 0 fail, no JS errors)
+- Full E2E journey: PASS (19 pass, 2 warn, 0 fail)
 - Bundle: 1,483 kB (original) -> 418 kB main chunk + 30 lazy chunks
 - ClientManager chunk: 575 kB -> 27 kB (AgentPipeline split to its own 548 kB lazy chunk)
 - E2E tests: default to localhost, production requires ALLOW_PRODUCTION_TESTS=true
@@ -104,6 +106,51 @@ No corrupted characters found in production UI files touched in this pass. Corru
 
 ---
 
+## Error 9 - Local Frontend Falls Back To Production Backend
+
+Status: FIXED
+
+During live browser testing, `/audit` from local Vite was calling `https://seo-agent-backend-8m1z.onrender.com`, causing CORS failures and making local QA unreliable.
+
+- `src/utils/apiBase.js`: added a shared API base helper.
+- Local dev now defaults to `http://localhost:5000`.
+- Production builds still default to `https://seo-agent-backend-8m1z.onrender.com` when `VITE_API_URL` is not set.
+- Updated frontend API constants in `App`, auth context, AI helper, backlink, keyword, domain overview, and client portal modules.
+
+---
+
+## Error 10 - Backend CORS Blocks 127.0.0.1 Local Dev
+
+Status: FIXED
+
+The browser test used `http://127.0.0.1:5173`, while the backend only allowed `http://localhost`, causing local API calls to fail as CORS errors.
+
+- `server/index.js`: added `isAllowedOrigin()` helper.
+- Backend now allows both `http://localhost:*` and `http://127.0.0.1:*`.
+- The same helper is used by normal CORS, 404 responses, and the error handler.
+
+---
+
+## Error 11 - All Firestore Routes Return 500 In Production
+
+Status: FIXED
+
+Production `GET /api/clients/:id` and `GET /api/admin/users` both returned 500 with error:
+`"request to https://firestore.googleapis.com/... failed, reason:"`
+
+Root cause: `server/config/firebase.js` was importing `Firestore` and `FieldValue` from
+`@google-cloud/firestore` — a package that is **not listed in `server/package.json`**.
+On Render, `require("@google-cloud/firestore")` threw `Cannot find module`, so the backend
+crashed on any route that touched Firestore.
+
+- `server/config/firebase.js`: removed `require("@google-cloud/firestore")`.
+- Now uses `admin.firestore()` (bundled inside `firebase-admin`) for the `db` client.
+- `FieldValue` sourced from `admin.firestore.FieldValue` — no external package needed.
+
+---
+
 ## Overall Risk: Low
 
-All 8 QA errors resolved. No direct provider calls in browser, no broken routes, no broken registration, bundle is split, tests default to localhost with production opt-in guard.
+All 11 QA errors resolved. No direct provider calls in browser, no broken routes, no broken
+registration, bundle is split, tests default to localhost with production opt-in guard,
+Firestore connectivity restored, and local browser/E2E tests now pass.

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, lazy, Suspense } from "react";
 import { TOOLS, CATS, MODELS } from "./tools";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { AuthProvider, useAuth } from "./context/AuthContext";
+import { API_BASE } from "./utils/apiBase";
 import Login from "./pages/Login";
 // Small/critical components — eager loaded
 import Dashboard from "./Dashboard";
@@ -37,7 +38,7 @@ const ClientPortal     = lazy(() => import("./pages/ClientPortal"));
 const PreSalesAudit    = lazy(() => import("./pages/PreSalesAudit"));
 const AgencyDashboard  = lazy(() => import("./pages/AgencyDashboard"));
 
-const API = import.meta.env.VITE_API_URL || "https://seo-agent-backend-8m1z.onrender.com";
+const API = API_BASE;
 
 // ── URL param detection — no auth needed ──────────
 const _params      = new URLSearchParams(window.location.search);

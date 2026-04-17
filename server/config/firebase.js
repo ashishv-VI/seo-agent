@@ -1,5 +1,4 @@
 const admin = require("firebase-admin");
-const { Firestore, FieldValue } = require("@google-cloud/firestore");
 
 if (!process.env.FIREBASE_SERVICE_ACCOUNT) {
   console.error("❌ FIREBASE_SERVICE_ACCOUNT env var is missing — set it in Render Dashboard → Environment");
@@ -41,14 +40,11 @@ if (!admin.apps.length) {
   }
 }
 
-const db = new Firestore({
-  projectId:   sa.project_id,
-  credentials: { client_email: sa.client_email, private_key: sa.private_key },
-  preferRest:  true,
-});
+const db = admin.firestore();
 
-console.log("✅ Firestore client initialized (REST mode)");
+console.log("✅ Firestore client initialized");
 
 const auth = admin.auth();
+const { FieldValue } = admin.firestore;
 
 module.exports = { admin, db, auth, FieldValue };

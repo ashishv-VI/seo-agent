@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, GoogleAuthProvider, signInWithPopup } from "firebase/auth";
 import { auth } from "../config/firebase";
+import { API_BASE } from "../utils/apiBase";
 
 const AuthContext = createContext(null);
 const provider   = new GoogleAuthProvider();
@@ -8,7 +9,7 @@ provider.addScope("https://www.googleapis.com/auth/webmasters.readonly");
 provider.addScope("https://www.googleapis.com/auth/business.manage");
 provider.addScope("https://www.googleapis.com/auth/analytics.readonly");
 provider.addScope("https://www.googleapis.com/auth/analytics.manage.users.readonly");
-const API        = import.meta.env.VITE_API_URL || "https://seo-agent-backend-8m1z.onrender.com";
+const API        = API_BASE;
 
 const GSC_TOKEN_KEY    = "seo_gsc_token";
 const GSC_TOKEN_EXPIRY = "seo_gsc_token_expiry";

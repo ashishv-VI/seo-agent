@@ -1,6 +1,7 @@
 import { useState } from "react";
+import { API_BASE } from "./utils/apiBase";
 
-const API = import.meta.env.VITE_API_URL || "https://seo-agent-backend-8m1z.onrender.com";
+const API = API_BASE;
 
 export default function DomainOverview({ dark, getToken }) {
   const [domain,   setDomain]   = useState("");

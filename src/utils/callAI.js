@@ -8,7 +8,9 @@
  * @param {string} API    - backend base URL
  * @returns {Promise<string|null>}
  */
-const DEFAULT_API = import.meta.env.VITE_API_URL || "https://seo-agent-backend-8m1z.onrender.com";
+import { API_BASE } from "./apiBase";
+
+const DEFAULT_API = API_BASE;
 
 export async function callAIBackend(prompt, model, getToken, API = DEFAULT_API) {
   const token = await getToken();

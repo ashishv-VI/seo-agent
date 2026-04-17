@@ -3,8 +3,9 @@
  * Loaded when URL has ?portal=<token>. No login required.
  */
 import { useState, useEffect } from "react";
+import { API_BASE } from "../utils/apiBase";
 
-const API = import.meta.env.VITE_API_URL || "https://seo-agent-backend-8m1z.onrender.com";
+const API = API_BASE;
 const B   = "#443DCB";
 
 function ScoreRing({ score, size = 100 }) {

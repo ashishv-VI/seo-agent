@@ -49,17 +49,21 @@ const aiChatRoutes       = require("./routes/aiChat");
 const app  = express();
 const PORT = process.env.PORT || 5000;
 
+function isAllowedOrigin(origin) {
+  return (
+    !origin ||
+    origin.endsWith(".onrender.com") ||
+    origin === process.env.FRONTEND_URL ||
+    origin.startsWith("http://localhost") ||
+    origin.startsWith("http://127.0.0.1")
+  );
+}
+
 // ── CORS ────────────────────────────────────────────
 const corsOptions = {
   origin: function(origin, callback) {
     // Allow requests with no origin (mobile apps, curl, server-to-server)
-    if (!origin) return callback(null, true);
-    // Allow all onrender.com subdomains + localhost
-    if (
-      origin.endsWith(".onrender.com") ||
-      origin === process.env.FRONTEND_URL ||
-      origin.startsWith("http://localhost")
-    ) {
+    if (isAllowedOrigin(origin)) {
       return callback(null, true);
     }
     callback(new Error("Not allowed by CORS"));
@@ -958,7 +962,7 @@ setInterval(async () => {
 // ── 404 Handler ────────────────────────────────────
 app.use((req, res) => {
   const origin = req.headers.origin || "";
-  if (!origin || origin.endsWith(".onrender.com") || origin === process.env.FRONTEND_URL || origin.startsWith("http://localhost")) {
+  if (isAllowedOrigin(origin)) {
     res.header("Access-Control-Allow-Origin", origin || "*");
     res.header("Access-Control-Allow-Credentials", "true");
   }
@@ -969,12 +973,7 @@ app.use((req, res) => {
 // Must set CORS headers here too — otherwise 500 errors look like CORS errors in the browser
 app.use((err, req, res, next) => {
   const origin = req.headers.origin || "";
-  if (
-    !origin ||
-    origin.endsWith(".onrender.com") ||
-    origin === process.env.FRONTEND_URL ||
-    origin.startsWith("http://localhost")
-  ) {
+  if (isAllowedOrigin(origin)) {
     res.header("Access-Control-Allow-Origin",  origin || "*");
     res.header("Access-Control-Allow-Credentials", "true");
   }
