@@ -44,6 +44,7 @@ const controlRoomRoutes  = require("./routes/controlRoom");
 const agencyRoutes       = require("./routes/agency");
 const attributionRoutes  = require("./routes/attribution");
 const rulesEngineRoutes  = require("./routes/rulesEngine");
+const aiChatRoutes       = require("./routes/aiChat");
 
 const app  = express();
 const PORT = process.env.PORT || 5000;
@@ -129,6 +130,7 @@ app.use("/api/control-room", apiLimiter,   controlRoomRoutes);
 app.use("/api/agency",       apiLimiter,   agencyRoutes);
 app.use("/api/attribution",  apiLimiter,   attributionRoutes);
 app.use("/api/rules-engine", agentLimiter, rulesEngineRoutes);
+app.use("/api/ai",          apiLimiter,   aiChatRoutes);
 
 // ── Daily alert monitoring ─────────────────────────
 // Runs A9.checkAlerts for every active client — detects new technical issues,

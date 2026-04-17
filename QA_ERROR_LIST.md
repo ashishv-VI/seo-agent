@@ -3,13 +3,14 @@
 Date: 2026-04-17
 Tester: Codex QA audit pass
 Last updated: 2026-04-17 (all fixes applied)
+Codex recheck: 2026-04-17
 
 ## Summary
 
 React + Vite frontend with Express/Firebase backend. All P1 and P2 issues resolved. P3 issues fixed or tracked.
 
 Build: PASS (npm run build)
-Backend syntax: PASS (86 files, 0 errors)
+Backend syntax: PASS (86 files, 0 errors; verified outside sandbox because the script spawns child node processes)
 Main bundle: 1,483 kB -> 418 kB after lazy-loading split
 
 ---
@@ -41,7 +42,7 @@ Status: FIXED
 
 ## Error 4 - Frontend Bundle Is Too Large
 
-Status: FIXED
+Status: FIXED / FOLLOW-UP REMAINS
 
 - src/App.jsx: 28 large page/tool components converted to React.lazy() + Suspense.
 - Main chunk: 1,483 kB -> 418 kB (72% reduction). 30 lazy chunks loaded on demand.
@@ -51,20 +52,22 @@ Status: FIXED
 
 ## Error 5 - E2E Tests Are Hardcoded To Production Render
 
-Status: FIXED
+Status: FIXED / DEFAULTS STILL POINT TO RENDER
 
 - tests/live-browser-test.cjs: FRONTEND_URL, BACKEND_URL, HEADLESS env vars added. Defaults to Render URLs.
 - tests/e2e-full-journey.cjs: same env-var pattern. headless: false replaced with headless: HEADLESS.
+- Codex note: this is now configurable, but safer local/CI defaults would be localhost or requiring explicit production opt-in.
 
 ---
 
 ## Error 6 - Provider API Keys Are Used Directly In Browser
 
-Status: TODO LOGGED
+Status: FIXED
 
-- src/App.jsx: TODO(security) comment added on callAI() explaining the issue and the correct fix path (backend POST /api/ai/chat proxy).
-- Keys are already synced to Firestore via /api/keys/save. No new localStorage key storage added.
-- Full backend proxy is a larger refactor tracked as a follow-up. Agent pipeline already uses keys server-side only.
+- server/routes/aiChat.js: new route POST /api/ai/chat — protected by verifyToken, loads user keys via getUserKeys(req.uid), proxies to Groq/Gemini/OpenRouter server-side. Supports model: groq | gemini | deepseek | mistral.
+- server/index.js: registered app.use("/api/ai", apiLimiter, aiChatRoutes).
+- src/App.jsx: callAI() now calls POST /api/ai/chat with Firebase token. All direct browser calls to api.groq.com, generativelanguage.googleapis.com, and openrouter.ai/api removed. Verified by grep — zero matches.
+- Build: PASS. Backend syntax: PASS (87 files).
 
 ---
 
@@ -87,4 +90,4 @@ Corrupted characters appear in documentation/comments only, not in rendered UI. 
 
 ## Overall Risk: Low
 
-All P1 and P2 issues resolved. Error 6 (full backend AI proxy) is tracked as a hardening follow-up, not a blocker.
+All P1 and P2 issues resolved. All security issues resolved (Error 6 backend proxy complete). Remaining: ClientManager bundle split (follow-up), safer CI test defaults (cosmetic).

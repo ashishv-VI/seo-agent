@@ -250,49 +250,17 @@ function MainApp({ onLogout }) {
     URL.revokeObjectURL(url);
   }
 
-  // TODO(security): move these provider calls behind POST /api/ai/chat so keys
-  // never leave the backend. Keys are currently stored in Firestore (server-side)
-  // and loaded into component state — avoid adding any new localStorage storage
-  // for API keys; use the /api/keys/save + /api/keys/get backend path instead.
   async function callAI(prompt) {
-    if (model === "groq") {
-      if (!keys.groq) return null;
-      const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${keys.groq}` },
-        body: JSON.stringify({ model: "llama-3.1-8b-instant", max_tokens: 4000, messages: [{ role: "user", content: prompt }] })
-      });
-      const d = await res.json();
-      return d.choices?.[0]?.message?.content || null;
-    } else if (model === "gemini") {
-      if (!keys.gemini) return null;
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${keys.gemini}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-      });
-      const d = await res.json();
-      return d.candidates?.[0]?.content?.parts?.[0]?.text || null;
-    } else if (model === "deepseek") {
-      if (!keys.openrouter) return null;
-      const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${keys.openrouter}` },
-        body: JSON.stringify({ model: "deepseek/deepseek-r1:free", max_tokens: 4000, messages: [{ role: "user", content: prompt }] })
-      });
-      const d = await res.json();
-      return d.choices?.[0]?.message?.content || null;
-    } else if (model === "mistral") {
-      if (!keys.openrouter) return null;
-      const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${keys.openrouter}` },
-        body: JSON.stringify({ model: "mistralai/mistral-7b-instruct:free", max_tokens: 4000, messages: [{ role: "user", content: prompt }] })
-      });
-      const d = await res.json();
-      return d.choices?.[0]?.message?.content || null;
-    }
-    return null;
+    const token = await user.getIdToken();
+    const res = await fetch(`${API}/api/ai/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ model, prompt }),
+      signal: AbortSignal.timeout(50000),
+    });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || `AI request failed (${res.status})`);
+    return d.text || null;
   }
 
   async function runBulkKeywords() {
