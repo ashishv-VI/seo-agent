@@ -15,7 +15,7 @@ const GA4_ADMIN_API    = "https://analyticsadmin.googleapis.com/v1beta";
 
 function getClientId()     { return process.env.GOOGLE_CLIENT_ID     || ""; }
 function getClientSecret() { return process.env.GOOGLE_CLIENT_SECRET  || ""; }
-function getBackendUrl()   { return (process.env.BACKEND_URL || "https://seo-agent-backend-8m1z.onrender.com").replace(/\/+$/, ""); }
+function getBackendUrl()   { return (process.env.BACKEND_URL || "https://seo-agent-backend-8mfz.onrender.com").replace(/\/+$/, ""); }
 
 const CALLBACK_PATH = "/api/ga4/oauth/callback";
 

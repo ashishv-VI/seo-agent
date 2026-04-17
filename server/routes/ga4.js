@@ -21,7 +21,7 @@
  *   GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, BACKEND_URL, FRONTEND_URL
  *
  * Add redirect URI in Google Cloud Console:
- *   https://seo-agent-backend-8m1z.onrender.com/api/ga4/oauth/callback
+ *   https://seo-agent-backend-8mfz.onrender.com/api/ga4/oauth/callback
  */
 
 const express         = require("express");

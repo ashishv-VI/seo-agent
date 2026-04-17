@@ -14,11 +14,11 @@
  * Env vars required (add to Render environment):
  *   GOOGLE_CLIENT_ID      — OAuth client ID from Google Cloud Console
  *   GOOGLE_CLIENT_SECRET  — OAuth client secret
- *   BACKEND_URL           — https://seo-agent-backend-8m1z.onrender.com
+ *   BACKEND_URL           — https://seo-agent-backend-8mfz.onrender.com
  *   FRONTEND_URL          — https://seo-agent-6jrv.onrender.com
  *
  * You also need to add this redirect URI to your Google OAuth client:
- *   https://seo-agent-backend-8m1z.onrender.com/api/gsc/oauth/callback
+ *   https://seo-agent-backend-8mfz.onrender.com/api/gsc/oauth/callback
  */
 
 const express        = require("express");

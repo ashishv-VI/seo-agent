@@ -1,4 +1,4 @@
-const PROD_API = "https://seo-agent-backend-8m1z.onrender.com";
+const PROD_API = "https://seo-agent-backend-8mfz.onrender.com";
 const LOCAL_API = "http://localhost:5000";
 
 export function getApiBase() {
