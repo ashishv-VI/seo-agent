@@ -8,9 +8,16 @@
 
 const { chromium } = require("playwright");
 
-const FRONTEND = process.env.FRONTEND_URL || "https://seo-agent-6jrv.onrender.com";
-const BACKEND  = process.env.BACKEND_URL  || "https://seo-agent-backend-8m1z.onrender.com";
+const FRONTEND = process.env.FRONTEND_URL || "http://localhost:5173";
+const BACKEND  = process.env.BACKEND_URL  || "http://localhost:5000";
 const HEADLESS = process.env.HEADLESS !== "false";
+
+const IS_PROD = FRONTEND.includes("onrender.com") || BACKEND.includes("onrender.com");
+if (IS_PROD && process.env.ALLOW_PRODUCTION_TESTS !== "true") {
+  console.error("ERROR: Refusing to run browser test against production without ALLOW_PRODUCTION_TESTS=true");
+  console.error("  Set ALLOW_PRODUCTION_TESTS=true to explicitly opt in.");
+  process.exit(1);
+}
 
 const results = [];
 const jsErrors = [];

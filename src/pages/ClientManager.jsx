@@ -1,6 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import { useAuth } from "../context/AuthContext";
-import AgentPipeline from "./AgentPipeline";
+
+const AgentPipeline = lazy(() => import("./AgentPipeline"));
 
 // ── Tag selector (multi-select with presets + custom input) ─────────────────
 function TagSelect({ label, options, selected, onChange, placeholder, dark }) {
@@ -444,7 +445,11 @@ export default function ClientManager({ dark }) {
   };
 
   if (selected) {
-    return <AgentPipeline dark={dark} clientId={selected} onBack={() => { setSelected(null); loadClients(); }} />;
+    return (
+      <Suspense fallback={<div style={{ minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center", background: dark ? "#0a0a0a" : "#f5f5f0", color:"#666", fontSize:13 }}>Loading pipeline…</div>}>
+        <AgentPipeline dark={dark} clientId={selected} onBack={() => { setSelected(null); loadClients(); }} />
+      </Suspense>
+    );
   }
 
   return (
