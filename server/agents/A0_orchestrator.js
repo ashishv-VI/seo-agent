@@ -203,7 +203,7 @@ async function runFullPipeline(clientId, keys, googleToken = null) {
   // Before this, A10 (10 keywords × 3 SERP engines × 30s each = 15 min) or A11 could
   // stall the entire pipeline past the 25-min hard timeout.
   const AGENT_TIMEOUT_MS = {
-    A2: 8 * 60 * 1000,   // audit crawls 500+ pages — needs more time
+    A2: 12 * 60 * 1000,  // audit crawl — extra time for slow sites on Render free tier
     A9: 3 * 60 * 1000,   // report = LLM + Firestore writes
     A10: 4 * 60 * 1000,  // ranking = sequential SERP calls
     A11: 4 * 60 * 1000,  // link building = SERP + LLM

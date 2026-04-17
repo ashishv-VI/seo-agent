@@ -209,10 +209,10 @@ async function runA2(clientId) {
       // ── Use new concurrent crawlDomain ────────────────────────────────────
       const { crawlDomain } = require("../crawler/webCrawler");
       const crawlResult = await crawlDomain(siteUrl, {
-        maxPages:    150,  // 150 is plenty for real SEO; 500 timed out on Render free tier
-        maxDepth:    3,
-        concurrency: 5,    // lower concurrency = fewer dropped connections on Render
-        delayMs:     200,  // polite delay
+        maxPages:    50,   // 50 pages is enough for SEO audit; keeps A2 within 12-min timeout
+        maxDepth:    2,
+        concurrency: 3,    // gentle on Render free tier CPU
+        delayMs:     300,  // polite delay
         onProgress:  (done, total) => {
           if (done % 25 === 0) {
             console.log(`[A2] Crawled ${done}/${total} pages...`);
@@ -402,10 +402,9 @@ async function runA2(clientId) {
   await saveState(clientId, "A2_audit", auditResult);
 
   // ── Write per-page docs to subcollection (non-blocking) ──────────────────
-  // Each URL gets its own Firestore doc: audits/{clientId}/pages/{urlHash}
-  // This enables site-wide pattern detection without hitting the 1MB doc limit.
-  // Chunked into batches of 490 so 500+ page crawls fully persist.
-  if (pageAudits.length > 5) {
+  // Skip if >20 pages to avoid burning Firestore write quota on Blaze plan.
+  // Site Patterns panel uses this data but is non-critical for the main pipeline.
+  if (pageAudits.length > 5 && pageAudits.length <= 20) {
     const { db: fdb } = require("../config/firebase");
     const crawledAt = new Date().toISOString();
     const BATCH_SIZE = 490; // Firestore batch limit is 500
