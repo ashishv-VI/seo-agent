@@ -171,7 +171,7 @@ Generate 5-8 keywords per cluster. Make them realistic and specific to the busin
       keywordData.currentRankings = domainKws.slice(0, 30);
       // Find keywords we rank for that are in our keyword map
       keywordData.rankingKeywords = domainKws.filter(dk =>
-        allKws.some(k => k.toLowerCase().includes(dk.keyword.toLowerCase()))
+        allKws.some(k => (k || "").toLowerCase().includes((dk.keyword || "").toLowerCase()))
       );
     }
   }
@@ -335,11 +335,11 @@ Generate 5-8 keywords per cluster. Make them realistic and specific to the busin
 
 // ── Rule-based keyword seed builder (no LLM required) ────────────────────────
 function buildSeedClusters(brief) {
-  const name       = brief?.businessName || "";
-  const services   = brief?.services || [];
-  const locations  = brief?.targetLocations || brief?.targetLocation ? [brief.targetLocation] : [];
-  const desc       = brief?.businessDescription || "";
-  const keywords   = brief?.primaryKeywords || [];
+  const name       = (brief?.businessName || "").toString();
+  const services   = [].concat(brief?.services || []).filter(s => s && typeof s === "string");
+  const locations  = [].concat(brief?.targetLocations || (brief?.targetLocation ? [brief.targetLocation] : [])).filter(Boolean);
+  const desc       = (brief?.businessDescription || "").toString();
+  const keywords   = [].concat(brief?.primaryKeywords || []).filter(k => k && typeof k === "string");
 
   // Brand cluster
   const brand = [
