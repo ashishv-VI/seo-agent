@@ -2,8 +2,16 @@
  * LLM Utility — Groq → Gemini → OpenRouter (3-provider fallback)
  * Each provider retries once on timeout before falling to the next.
  * Records usage via costTracker when options.clientId is provided.
+ *
+ * Server-level OpenRouter key: process.env.OPENROUTER_API_KEY is used as
+ * a guaranteed last-resort so agents work out-of-the-box without users
+ * needing to configure their own LLM key. User key (keys.openrouter) takes
+ * priority over the server key when both are present.
  */
 const { recordUsage, checkBudget } = require("./costTracker");
+
+// Server-level OpenRouter key — set OPENROUTER_API_KEY in Render env vars.
+const SERVER_OPENROUTER_KEY = process.env.OPENROUTER_API_KEY || null;
 
 const RETRY_DELAY_MS     = 1500;
 const RATE_LIMIT_WAIT_MS = 60000; // 60s — standard rate-limit window
@@ -112,24 +120,26 @@ async function callLLM(prompt, keys, options = {}) {
     }
   }
 
-  // ── 3. OpenRouter (3rd fallback) ──────────────────────────────────────────
-  if (keys.openrouter) {
+  // ── 3. OpenRouter — user key first, then server-level env key ────────────
+  const openrouterKey = keys.openrouter || SERVER_OPENROUTER_KEY;
+  if (openrouterKey) {
     const result = await callWithRetry(async () => {
       const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method:  "POST",
         headers: {
-          Authorization:  `Bearer ${keys.openrouter}`,
+          Authorization:  `Bearer ${openrouterKey}`,
           "Content-Type": "application/json",
           "HTTP-Referer":  process.env.APP_URL || "https://seo-agent.onrender.com",
           "X-Title":       "SEO Agent",
         },
         body: JSON.stringify({
-          model:       "meta-llama/llama-3.1-8b-instruct:free",
+          // Use a capable free model; falls back gracefully on OpenRouter if unavailable
+          model:       "meta-llama/llama-3.3-70b-instruct:free",
           messages,
           max_tokens:  maxTokens,
           temperature,
         }),
-        signal: AbortSignal.timeout(35000),
+        signal: AbortSignal.timeout(45000),
       });
       if (res.status === 429) throw Object.assign(new Error("429 rate limit"), { name: "RateLimitError" });
       if (res.status === 529) throw Object.assign(new Error("529 overloaded"), { name: "OverloadedError" });
@@ -143,7 +153,7 @@ async function callLLM(prompt, keys, options = {}) {
     }
   }
 
-  throw new Error("All LLM providers failed — add Groq, Gemini, or OpenRouter key in Settings");
+  throw new Error("All LLM providers failed — add Groq, Gemini, or OpenRouter key in Settings, or set OPENROUTER_API_KEY env var on the server");
 }
 
 /**
