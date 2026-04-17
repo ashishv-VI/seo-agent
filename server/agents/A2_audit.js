@@ -209,10 +209,10 @@ async function runA2(clientId) {
       // ── Use new concurrent crawlDomain ────────────────────────────────────
       const { crawlDomain } = require("../crawler/webCrawler");
       const crawlResult = await crawlDomain(siteUrl, {
-        maxPages:    500,
-        maxDepth:    4,
-        concurrency: 10,   // 10 pages in parallel — 10x faster
-        delayMs:     150,  // polite 150ms between batches
+        maxPages:    150,  // 150 is plenty for real SEO; 500 timed out on Render free tier
+        maxDepth:    3,
+        concurrency: 5,    // lower concurrency = fewer dropped connections on Render
+        delayMs:     200,  // polite delay
         onProgress:  (done, total) => {
           if (done % 25 === 0) {
             console.log(`[A2] Crawled ${done}/${total} pages...`);

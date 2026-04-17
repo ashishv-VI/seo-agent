@@ -216,7 +216,29 @@ Generate optimised content recommendations. Return ONLY valid JSON:
     const response = await callLLM(prompt, keys, { maxTokens: 4000, temperature: 0.4 });
     contentData = parseJSON(response);
   } catch (e) {
-    return { success: false, error: `Content generation failed: ${e.message}` };
+    console.warn(`[A5] LLM failed — using rule-based content fallback: ${e.message}`);
+    // Rule-based fallback so the pipeline continues without LLM
+    contentData = {
+      homepageOptimisation: {
+        suggestedTitle:       `${brief.businessName} — ${(brief.services || [])[0] || "Professional Services"}`,
+        suggestedDescription: `${brief.businessName} provides ${(brief.services || []).slice(0,2).join(" and ")} in ${(brief.targetLocations || []).join(", ") || "your area"}. Contact us today.`,
+        suggestedH1:          brief.businessName,
+        keywordTargets:       topKeywords.slice(0, 3).map(k => k.keyword),
+      },
+      newPageBriefs: topKeywords.slice(0, 3).map(kw => ({
+        title:          kw.keyword,
+        targetKeyword:  kw.keyword,
+        suggestedUrl:   kw.suggestedPage || "/services",
+        wordCount:      800,
+        intent:         kw.intent || "informational",
+        headingStructure: [`H1: ${kw.keyword}`, "H2: Overview", "H2: Benefits", "H2: FAQ"],
+        contentOutline: ["Introduction", "Key benefits", "How it works", "FAQ"],
+        urgency:        kw.priority || "medium",
+      })),
+      faqContent: [],
+      contentRefreshFlags: [],
+      generatedBy: "rule-engine",
+    };
   }
 
   // ── Save to approval queue ─────────────────────────

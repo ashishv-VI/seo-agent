@@ -95,7 +95,26 @@ Write an 8-step SEO report. Return ONLY valid JSON:
     const response = await callLLM(prompt, keys, { maxTokens: 4000, temperature: 0.5 });
     reportData = parseJSON(response);
   } catch (e) {
-    return { success: false, error: `Report generation failed: ${e.message}` };
+    console.warn(`[A9] LLM failed — using rule-based report fallback: ${e.message}`);
+    const p1Count = (audit?.issues?.p1 || []).length;
+    const p2Count = (audit?.issues?.p2 || []).length;
+    const topKws  = (keywords?.keywordMap || []).slice(0, 3).map(k => k.keyword).join(", ");
+    reportData = {
+      executiveSummary: `${brief.businessName} has ${p1Count} critical and ${p2Count} high-priority SEO issues. Top keyword targets: ${topKws || "not yet identified"}.`,
+      healthScore:      audit?.score || 50,
+      wins:             [],
+      opportunities:    (audit?.issues?.p1 || []).slice(0, 3).map(i => ({ item: i.detail || i.type, impact: "high" })),
+      whatWorked:       [],
+      whatDidnt:        [],
+      technicalHealthSummary: `Site has ${p1Count} critical issues and ${p2Count} warnings. Full technical audit complete.`,
+      next3Actions:     [
+        { action: "Fix critical SEO issues", why: "Blocks rankings", expectedOutcome: "Improved crawlability", priority: 1 },
+        { action: "Optimise top keyword pages", why: "Increase organic traffic", expectedOutcome: "Higher rankings", priority: 2 },
+        { action: "Build internal links", why: "Spread page authority", expectedOutcome: "Better indexation", priority: 3 },
+      ],
+      offPageSummary: "Backlink analysis pending — run A11 link builder for details.",
+      generatedBy: "rule-engine",
+    };
   }
 
   // ── Save to approval queue (human gate) ───────────

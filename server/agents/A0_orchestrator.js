@@ -148,6 +148,14 @@ async function runFullPipeline(clientId, keys, googleToken = null) {
     }).catch(() => {});
   }, 25 * 60 * 1000);
 
+  // Keep-alive: write a heartbeat to Firestore every 4 minutes so Render
+  // doesn't sleep the process mid-pipeline (free tier sleeps after 15 min idle)
+  const keepAlive = setInterval(async () => {
+    await db.collection("clients").doc(clientId).update({
+      pipelineHeartbeat: new Date().toISOString(),
+    }).catch(() => {});
+  }, 4 * 60 * 1000);
+
   // Clear previous task queue so we start fresh
   try {
     const { clearTasks } = require("../utils/taskQueue");
@@ -382,6 +390,7 @@ async function runFullPipeline(clientId, keys, googleToken = null) {
     });
   } finally {
     clearTimeout(pipelineTimeout);
+    clearInterval(keepAlive);
   }
 }
 
