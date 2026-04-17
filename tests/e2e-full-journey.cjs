@@ -23,8 +23,9 @@
 
 const { chromium } = require("playwright");
 
-const FRONTEND = "https://seo-agent-6jrv.onrender.com";
-const BACKEND  = "https://seo-agent-backend-8m1z.onrender.com";
+const FRONTEND = process.env.FRONTEND_URL || "https://seo-agent-6jrv.onrender.com";
+const BACKEND  = process.env.BACKEND_URL  || "https://seo-agent-backend-8m1z.onrender.com";
+const HEADLESS = process.env.HEADLESS !== "false";
 
 // Unique test credentials
 const TS = Date.now();
@@ -71,7 +72,7 @@ async function snap(page, name) {
   }
 
   /* ─── Launch browser ─────────────────────────────────── */
-  const browser = await chromium.launch({ headless: false, slowMo: 400 });
+  const browser = await chromium.launch({ headless: HEADLESS, slowMo: HEADLESS ? 0 : 400 });
   const ctx     = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const page    = await ctx.newPage();
 

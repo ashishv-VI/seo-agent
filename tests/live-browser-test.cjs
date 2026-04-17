@@ -8,8 +8,9 @@
 
 const { chromium } = require("playwright");
 
-const FRONTEND = "https://seo-agent-6jrv.onrender.com";
-const BACKEND  = "https://seo-agent-backend-8m1z.onrender.com";
+const FRONTEND = process.env.FRONTEND_URL || "https://seo-agent-6jrv.onrender.com";
+const BACKEND  = process.env.BACKEND_URL  || "https://seo-agent-backend-8m1z.onrender.com";
+const HEADLESS = process.env.HEADLESS !== "false";
 
 const results = [];
 const jsErrors = [];
@@ -52,22 +53,14 @@ async function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
     log("GET /api/presales/audit", "FAIL", e.message);
   }
 
-  // Domain overview (no auth)
-  try {
-    const res = await fetch(`${BACKEND}/api/crawler/domain-overview/example.com`, {
-      signal: AbortSignal.timeout(15000),
-    });
-    const data = await res.json();
-    if (res.ok) log("GET /api/crawler/domain-overview", "PASS", `Keys: ${Object.keys(data).join(",")}`);
-    else log("GET /api/crawler/domain-overview", "WARN", `${res.status}`);
-  } catch (e) {
-    log("GET /api/crawler/domain-overview", "FAIL", e.message);
-  }
+  // Domain overview route requires auth (POST) — skip unauthenticated check,
+  // note it as skipped so the test doesn't report a false failure.
+  log("POST /api/crawler/domain-overview", "WARN", "Skipped — requires auth token (tested in e2e-full-journey)");
 
   // ── 2. Browser tests ───────────────────────────────────
   console.log("\n── BROWSER UI TESTS ──\n");
 
-  const browser = await chromium.launch({ headless: false, slowMo: 500 });
+  const browser = await chromium.launch({ headless: HEADLESS, slowMo: HEADLESS ? 0 : 500 });
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const page = await context.newPage();
 

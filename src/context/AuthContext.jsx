@@ -97,14 +97,29 @@ export function AuthProvider({ children }) {
 
   const register = async (e, p, n) => {
     const r = await createUserWithEmailAndPassword(auth, e, p);
-    try {
-      const t = await r.user.getIdToken();
-      await fetch(API + "/api/auth/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + t },
-        body: JSON.stringify({ email: e, password: p, name: n }),
-      });
-    } catch(_) {}
+    // Upsert Firestore user doc — must not silently fail or the account is broken.
+    // Retry once; if still failing, sign the user out and surface the error.
+    let lastErr = null;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const t = await r.user.getIdToken(/* forceRefresh */ attempt > 0);
+        const res = await fetch(API + "/api/auth/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": "Bearer " + t },
+          body: JSON.stringify({ email: e, password: p, name: n }),
+        });
+        if (res.ok) { lastErr = null; break; }
+        const body = await res.json().catch(() => ({}));
+        lastErr = new Error(body.error || `Registration failed (${res.status})`);
+      } catch (err) {
+        lastErr = err;
+      }
+    }
+    if (lastErr) {
+      // Firestore doc creation failed — sign out so the user is not stuck in a broken state
+      await signOut(auth).catch(() => {});
+      throw lastErr;
+    }
     recordLoginEvent(r.user, "email", "register");
     return r;
   };

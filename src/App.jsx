@@ -1,39 +1,41 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, lazy, Suspense } from "react";
 import { TOOLS, CATS, MODELS } from "./tools";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import Login from "./pages/Login";
+// Small/critical components — eager loaded
 import Dashboard from "./Dashboard";
-import History from "./History";
 import Markdown from "./Markdown";
-import GscDashboard from "./GscDashboard";
-import ClientManager from "./pages/ClientManager";
-import GA4Dashboard from "./GA4Dashboard";
-import SiteAudit from "./SiteAudit";
-import Compare from "./Compare";
-import ReportGenerator from "./ReportGenerator";
-import RankTracker from "./RankTracker";
-import ContentCalendar from "./ContentCalendar";
-import SeoChecklist from "./SeoChecklist";
-import AiWriter from "./AiWriter";
-import BrandTracker from "./BrandTracker";
-import LocationKeywords from "./LocationKeywords";
-import AEO from "./AEO";
-import AIMode from "./AIMode";
-import MetaPreview from "./MetaPreview";
-import SerpSimulator from "./SerpSimulator";
-import PromptToContent from "./PromptToContent";
-import CompetitorGap from "./CompetitorGap";
-import ReadabilityChecker from "./ReadabilityChecker";
-import BacklinkAnalyzer from "./BacklinkAnalyzer";
-import KeywordResearch from "./KeywordResearch";
-import DomainOverview from "./DomainOverview";
-import SitemapGenerator from "./SitemapGenerator";
-import UserPanel from "./pages/UserPanel";
-import GlobalChat from "./GlobalChat";
-import ClientPortal from "./pages/ClientPortal";
-import PreSalesAudit from "./pages/PreSalesAudit";
-import AgencyDashboard from "./pages/AgencyDashboard";
+// Large pages — lazy loaded to split the bundle
+const History          = lazy(() => import("./History"));
+const GscDashboard     = lazy(() => import("./GscDashboard"));
+const ClientManager    = lazy(() => import("./pages/ClientManager"));
+const GA4Dashboard     = lazy(() => import("./GA4Dashboard"));
+const SiteAudit        = lazy(() => import("./SiteAudit"));
+const Compare          = lazy(() => import("./Compare"));
+const ReportGenerator  = lazy(() => import("./ReportGenerator"));
+const RankTracker      = lazy(() => import("./RankTracker"));
+const ContentCalendar  = lazy(() => import("./ContentCalendar"));
+const SeoChecklist     = lazy(() => import("./SeoChecklist"));
+const AiWriter         = lazy(() => import("./AiWriter"));
+const BrandTracker     = lazy(() => import("./BrandTracker"));
+const LocationKeywords = lazy(() => import("./LocationKeywords"));
+const AEO              = lazy(() => import("./AEO"));
+const AIMode           = lazy(() => import("./AIMode"));
+const MetaPreview      = lazy(() => import("./MetaPreview"));
+const SerpSimulator    = lazy(() => import("./SerpSimulator"));
+const PromptToContent  = lazy(() => import("./PromptToContent"));
+const CompetitorGap    = lazy(() => import("./CompetitorGap"));
+const ReadabilityChecker = lazy(() => import("./ReadabilityChecker"));
+const BacklinkAnalyzer = lazy(() => import("./BacklinkAnalyzer"));
+const KeywordResearch  = lazy(() => import("./KeywordResearch"));
+const DomainOverview   = lazy(() => import("./DomainOverview"));
+const SitemapGenerator = lazy(() => import("./SitemapGenerator"));
+const UserPanel        = lazy(() => import("./pages/UserPanel"));
+const GlobalChat       = lazy(() => import("./GlobalChat"));
+const ClientPortal     = lazy(() => import("./pages/ClientPortal"));
+const PreSalesAudit    = lazy(() => import("./pages/PreSalesAudit"));
+const AgencyDashboard  = lazy(() => import("./pages/AgencyDashboard"));
 
 const API = import.meta.env.VITE_API_URL || "https://seo-agent-backend-8m1z.onrender.com";
 
@@ -48,17 +50,21 @@ const isPreSales   = window.location.pathname === "/audit" || _params.get("presa
 
 // ── Main App wrapped with Auth ─────────────────────
 export default function App() {
+  const fallback = <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#0a0a0a", color: "#666", fontSize: 13 }}>Loading…</div>;
+
   // White-label portal: bypass login entirely
-  if (portalToken) return <ClientPortal token={portalToken} />;
+  if (portalToken) return <Suspense fallback={fallback}><ClientPortal token={portalToken} /></Suspense>;
 
   // A21 Pre-Sales Audit: public page, no login
   if (isPreSales) {
-    return <PreSalesAudit API={API} />;
+    return <Suspense fallback={fallback}><PreSalesAudit API={API} /></Suspense>;
   }
 
   return (
     <AuthProvider>
-      <AppInner />
+      <Suspense fallback={fallback}>
+        <AppInner />
+      </Suspense>
     </AuthProvider>
   );
 }
@@ -244,6 +250,10 @@ function MainApp({ onLogout }) {
     URL.revokeObjectURL(url);
   }
 
+  // TODO(security): move these provider calls behind POST /api/ai/chat so keys
+  // never leave the backend. Keys are currently stored in Firestore (server-side)
+  // and loaded into component state — avoid adding any new localStorage storage
+  // for API keys; use the /api/keys/save + /api/keys/get backend path instead.
   async function callAI(prompt) {
     if (model === "groq") {
       if (!keys.groq) return null;

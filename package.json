@@ -6,7 +6,12 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "npm run build",
+    "test:build": "vite build",
+    "test:backend": "node scripts/check-server-syntax.cjs",
+    "test:e2e": "node tests/e2e-full-journey.cjs",
+    "test:live": "node tests/live-browser-test.cjs"
   },
   "dependencies": {
     "axios": "^1.13.6",
