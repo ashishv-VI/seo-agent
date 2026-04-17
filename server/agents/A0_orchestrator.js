@@ -61,30 +61,47 @@ function getStateSuffix(agentId) {
 }
 
 // ── Get full pipeline status for a client ────────────────────────────────────
+// Reads client + shared_state exactly once — avoids N×2 reads from canRunAgent loop
 async function getPipelineStatus(clientId) {
-  const client = await db.collection("clients").doc(clientId).get();
-  if (!client.exists) return null;
+  const [clientSnap, state] = await Promise.all([
+    db.collection("clients").doc(clientId).get(),
+    getClientState(clientId),
+  ]);
+  if (!clientSnap.exists) return null;
 
-  const agents  = client.data().agents || {};
-  const state   = await getClientState(clientId);
+  const data   = clientSnap.data();
+  const agents = data.agents || {};
 
   const pipeline = {};
   for (const [agentId, deps] of Object.entries(DEPENDENCY_CHAIN)) {
     const agentStatus = agents[agentId] || "pending";
-    const { canRun, reason } = await canRunAgent(clientId, agentId);
     const stateKey    = `${agentId}_${getStateSuffix(agentId)}`;
+
+    // Evaluate dependency satisfaction using already-fetched data
+    let canRun = true, reason = null;
+    for (const dep of deps) {
+      const depKey  = `${dep}_${getStateSuffix(dep)}`;
+      const depData = state[depKey];
+      if (dep === "A1" && !depData?.signedOff) {
+        canRun = false; reason = "A1 brief must be signed off first"; break;
+      }
+      if (["A2","A3","A4","A5","A6","A7","A8"].includes(dep) && depData?.status !== "complete") {
+        const labels = { A2:"Technical Audit", A3:"Keyword Research", A4:"Competitor Analysis", A5:"Content Optimisation", A6:"On-Page", A7:"Technical/CWV", A8:"GEO" };
+        canRun = false; reason = `${labels[dep] || dep} must complete before this agent can run`; break;
+      }
+    }
+
     pipeline[agentId] = {
-      status:    agentStatus,
+      status:  agentStatus,
       canRun,
-      reason:    reason || null,
-      tier:      TIER[agentId] || 2,
+      reason,
+      tier:    TIER[agentId] || 2,
       deps,
-      hasData:   !!state[stateKey],
-      lastRun:   state[stateKey]?.generatedAt || state[stateKey]?.auditedAt || null,
+      hasData: !!state[stateKey],
+      lastRun: state[stateKey]?.generatedAt || state[stateKey]?.auditedAt || null,
     };
   }
 
-  const data = client.data();
   return {
     pipeline,
     clientName:          data.name,

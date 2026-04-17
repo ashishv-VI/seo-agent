@@ -165,33 +165,39 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
     }
     try {
       const token = await getToken();
-      const [clientRes, pipelineRes, alertsRes, notifRes, keysRes] = await Promise.all([
+      // During polling (silent=true) only fetch the two lightweight status endpoints.
+      // Keys, alerts, and notifications only change rarely — fetch once on full load.
+      // This cuts Firestore reads from ~15/tick to ~4/tick (client doc + shared_state).
+      const coreFetches = [
         fetch(`${API}/api/clients/${clientId}`, { headers: { Authorization: `Bearer ${token}` } }),
         fetch(`${API}/api/agents/${clientId}/pipeline`, { headers: { Authorization: `Bearer ${token}` } }),
-        fetch(`${API}/api/agents/${clientId}/alerts`, { headers: { Authorization: `Bearer ${token}` } }),
+      ];
+      const extraFetches = silent ? [null, null, null] : [
+        fetch(`${API}/api/agents/${clientId}/alerts`, { headers: { Authorization: `Bearer ${token}` } }).catch(() => null),
         fetch(`${API}/api/agents/notifications`, { headers: { Authorization: `Bearer ${token}` } }).catch(() => null),
         fetch(`${API}/api/keys/get`, { headers: { Authorization: `Bearer ${token}` } }).catch(() => null),
-      ]);
+      ];
+      const [clientRes, pipelineRes, alertsRes, notifRes, keysRes] = await Promise.all([...coreFetches, ...extraFetches]);
       const clientData   = await clientRes.json();
       const pipelineData = await pipelineRes.json();
-      const alertsData   = await alertsRes.json();
-      const notifData    = notifRes ? await notifRes.json().catch(() => ({})) : {};
-      const keysData     = keysRes  ? await keysRes.json().catch(() => ({})) : {};
+      const alertsData   = alertsRes  ? await alertsRes.json().catch(() => ({}))  : {};
+      const notifData    = notifRes   ? await notifRes.json().catch(() => ({}))   : {};
+      const keysData     = keysRes    ? await keysRes.json().catch(() => ({}))    : {};
       if (keysData.brand) setAgencyBrand(b => ({ ...b, ...keysData.brand }));
       if (!clientRes.ok) throw new Error(clientData.error || "Failed to load client");
       setClient(clientData.client);
       setState(clientData.state || {});
       setPipeline(pipelineData.pipeline || {});
       setAutomationMode(clientData.client?.automationMode || "manual");
-      setAlertCount((alertsData.alerts || []).filter(a => !a.resolved).length);
-      setNotifCount(notifData.unread || 0);
+      if (!silent) setAlertCount((alertsData.alerts || []).filter(a => !a.resolved).length);
+      if (!silent) setNotifCount(notifData.unread || 0);
 
       const ps = pipelineData.pipelineStatus || clientData.client?.pipelineStatus || "idle";
       setPipelineStatus(ps);
 
       // Auto-resume polling if page is refreshed while pipeline is still running
       if (ps === "running" && !pollRef.current) {
-        pollRef.current = setInterval(() => loadLatest.current(true), 4000);
+        pollRef.current = setInterval(() => loadLatest.current(true), 12000);
       }
       // Stop polling when done, auto-navigate to results
       if (ps === "complete" || ps === "failed") {
@@ -255,11 +261,11 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
       setActiveTab("pipeline");
       setCrawlProgress(null);
 
-      // Poll every 4 seconds for live progress (always calls latest load via ref)
+      // Poll every 12 seconds — balance responsiveness vs Firestore quota
       if (pollRef.current) clearInterval(pollRef.current);
-      pollRef.current = setInterval(() => loadLatest.current(true), 4000);
+      pollRef.current = setInterval(() => loadLatest.current(true), 12000);
 
-      // Also poll A2 crawl status every 3s while pipeline is running
+      // Also poll A2 crawl status every 10s while pipeline is running
       if (crawlPollRef.current) clearInterval(crawlPollRef.current);
       crawlPollRef.current = setInterval(async () => {
         // Skip tick if backend is cold — avoid piling requests on a dead service
@@ -283,7 +289,7 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
           _healthGate.cold = true;
           _healthGate.nextProbe = Date.now() + 3000;
         }
-      }, 3000);
+      }, 10000);
     } catch (e) {
       setError(e.message || "Failed to start pipeline");
     }
@@ -337,7 +343,7 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
 
   async function runAudit() {
     setRunning("A2"); setError(""); setCrawlProgress(null);
-    // Poll crawl progress every 3s while audit runs
+    // Poll crawl progress every 10s while audit runs
     if (crawlPollRef.current) clearInterval(crawlPollRef.current);
     crawlPollRef.current = setInterval(async () => {
       if (_healthGate.cold) return; // backend warming up, skip
@@ -349,7 +355,7 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
         _healthGate.cold = true;
         _healthGate.nextProbe = Date.now() + 3000;
       }
-    }, 3000);
+    }, 10000);
     const token = await getToken();
     const res   = await fetch(`${API}/api/clients/${clientId}/audit`, {
       method: "POST", headers: { Authorization: `Bearer ${token}` },
