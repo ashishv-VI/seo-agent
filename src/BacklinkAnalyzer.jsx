@@ -26,43 +26,49 @@ export default function BacklinkAnalyzer({ dark, getToken }) {
       const headers = { "Content-Type": "application/json" };
       if (token) headers["Authorization"] = `Bearer ${token}`;
 
-      const clean = domain.trim().replace(/^https?:\/\//i, "").replace(/\/$/, "");
+      const clean    = domain.trim().replace(/^https?:\/\//i, "").replace(/\/$/, "");
+      const compClean = competitor.trim().replace(/^https?:\/\//i, "").replace(/\/$/, "");
 
-      // Fetch summary, referring domains, and anchors in parallel
-      const [sumRes, domsRes, ancRes, compRes] = await Promise.all([
-        fetch(`${API}/api/backlinks/summary`,           { method:"POST", headers, body: JSON.stringify({ domain: clean }) }),
-        fetch(`${API}/api/backlinks/referring-domains`, { method:"POST", headers, body: JSON.stringify({ domain: clean, limit: 10 }) }),
-        fetch(`${API}/api/backlinks/anchors`,           { method:"POST", headers, body: JSON.stringify({ domain: clean, limit: 10 }) }),
-        competitor.trim()
-          ? fetch(`${API}/api/backlinks/summary`, { method:"POST", headers, body: JSON.stringify({ domain: competitor.trim().replace(/^https?:\/\//i,"").replace(/\/$/,"") }) })
+      // Single /analyze endpoint handles summary + referring domains + anchors in one call
+      const [mainRes, compRes] = await Promise.all([
+        fetch(`${API}/api/backlinks/analyze`, { method: "POST", headers, body: JSON.stringify({ domain: clean }) }),
+        compClean
+          ? fetch(`${API}/api/backlinks/analyze`, { method: "POST", headers, body: JSON.stringify({ domain: compClean }) })
           : Promise.resolve(null),
       ]);
 
-      const sum  = await sumRes.json();
-      const doms = domsRes.ok ? await domsRes.json() : { domains: [] };
-      const anc  = ancRes.ok  ? await ancRes.json()  : { anchors: [] };
+      const data = await mainRes.json();
+      if (data.error) { setError(data.error); setLoading(false); return; }
+
       const comp = compRes ? (compRes.ok ? await compRes.json() : null) : null;
 
-      if (sum.error) { setError(sum.error); setLoading(false); return; }
-
-      const s = sum.summary || sum;
       setResults({
         domain: clean,
         competitor: competitor.trim(),
-        // Real data from DataForSEO
-        domainRank:   s.domainRank   || 0,
-        backlinks:    s.backlinks    || 0,
-        refDomains:   s.referringDomains || 0,
-        followLinks:  s.followLinks  || 0,
-        nofollowLinks:s.nofollowLinks|| 0,
-        dofollowPct:  s.backlinks ? Math.round((s.followLinks / s.backlinks) * 100) : 0,
-        spamScore:    s.spamScore    || 0,
-        // Referring domains table
-        topDomains: doms.domains || [],
-        // Anchor text
-        anchors: anc.anchors || [],
-        // Competitor
-        comp: comp ? (comp.summary || comp) : null,
+        domainRank:   data.drScore          || 0,
+        backlinks:    data.backlinks         || 0,
+        refDomains:   data.referringDomains  || 0,
+        followLinks:  data.followLinks       || 0,
+        nofollowLinks:data.nofollowLinks     || 0,
+        dofollowPct:  data.backlinks ? Math.round((data.followLinks / data.backlinks) * 100) : 0,
+        spamScore:    data.spamScore         || 0,
+        topDomains:   (data.referringDomainsData || []).map(d => ({
+          domain:       d.domain,
+          domainRank:   d.rank,
+          backlinksCount: d.backlinks,
+          dofollow:     d.dofollow,
+          country:      null,
+        })),
+        anchors: (data.topAnchors || []).map(a => ({
+          anchor:        a.text,
+          backlinksCount: a.count,
+        })),
+        comp: comp && !comp.error ? {
+          domainRank:      comp.drScore         || 0,
+          backlinks:       comp.backlinks        || 0,
+          referringDomains:comp.referringDomains || 0,
+          spamScore:       comp.spamScore        || 0,
+        } : null,
       });
       setActiveTab("overview");
     } catch (e) {

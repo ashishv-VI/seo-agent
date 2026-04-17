@@ -12,8 +12,23 @@ router.post("/register", async (req, res) => {
     let uid;
     // Try to create new Firebase Auth user (email/password registration)
     if (password && !password.startsWith("google-oauth-")) {
-      const userRecord = await auth.createUser({ email, password, displayName: name });
-      uid = userRecord.uid;
+      try {
+        const userRecord = await auth.createUser({ email, password, displayName: name });
+        uid = userRecord.uid;
+      } catch (createErr) {
+        if (createErr.code === "auth/email-already-exists") {
+          // User already exists in Firebase Auth — get uid from token so we can upsert Firestore doc
+          const header = req.headers.authorization;
+          if (header?.startsWith("Bearer ")) {
+            const decoded = await auth.verifyIdToken(header.split("Bearer ")[1]);
+            uid = decoded.uid;
+          } else {
+            return res.status(400).json({ error: "Email already registered. Please sign in." });
+          }
+        } else {
+          throw createErr;
+        }
+      }
     } else {
       // Google OAuth — get uid from token
       const header = req.headers.authorization;
