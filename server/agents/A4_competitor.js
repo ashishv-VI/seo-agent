@@ -128,7 +128,7 @@ async function runA4(clientId, keys) {
   const keywords = await getState(clientId, "A3_keywords");
 
   if (!brief?.signedOff)  return { success: false, error: "A1 brief not signed off" };
-  if (!keywords?.status)  return { success: false, error: "A3 keyword research must complete first" };
+  if (!keywords?.keywordMap && !keywords?.clusters)  return { success: false, error: "A3 keyword research must complete first" };
 
   const manualCompetitors = brief.competitors || [];
   const targetDomain      = new URL(brief.websiteUrl).hostname.replace("www.", "");

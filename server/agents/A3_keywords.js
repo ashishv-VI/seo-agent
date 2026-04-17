@@ -60,6 +60,25 @@ Generate 5-8 keywords per cluster. Make them realistic and specific to the busin
   // Build rule-based seed clusters from brief data — works even with no LLM
   const seedClusters = buildSeedClusters(brief);
 
+  // Save minimal seed state immediately so downstream agents (A4) always
+  // find an A3_keywords doc even if LLM/SerpAPI timeout kills this agent mid-run
+  await saveState(clientId, "A3_keywords", {
+    status:        "complete",
+    totalKeywords: (seedClusters.brand?.length || 0) + (seedClusters.generic?.length || 0) + (seedClusters.longtail?.length || 0),
+    clusters:      seedClusters,
+    keywordMap:    [
+      ...(seedClusters.brand         || []).map(k => ({ ...k, cluster: "brand" })),
+      ...(seedClusters.generic       || []).map(k => ({ ...k, cluster: "generic" })),
+      ...(seedClusters.longtail      || []).map(k => ({ ...k, cluster: "longtail" })),
+      ...(seedClusters.informational || []).map(k => ({ ...k, cluster: "informational" })),
+    ],
+    gaps:          [],
+    serpData:      {},
+    hasSerpData:   false,
+    generatedAt:   new Date().toISOString(),
+    seedOnly:      true,
+  });
+
   let keywordData = seedClusters; // always have something
   try {
     const response = await callLLM(prompt, keys, { maxTokens: 4000, temperature: 0.4 });

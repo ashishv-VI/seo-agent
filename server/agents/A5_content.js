@@ -124,7 +124,7 @@ async function runA5(clientId, keys) {
   const competitor = await getState(clientId, "A4_competitor");
 
   if (!brief?.signedOff) return { success: false, error: "A1 brief not signed off" };
-  if (!keywords?.status) return { success: false, error: "A3 keywords must complete first" };
+  if (!keywords?.keywordMap && !keywords?.clusters) return { success: false, error: "A3 keywords must complete first" };
 
   const topKeywords = (keywords.keywordMap || [])
     .filter(k => k.priority === "high")
