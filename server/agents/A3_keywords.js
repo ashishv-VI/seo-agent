@@ -58,7 +58,6 @@ Generate a keyword map with exactly these 4 clusters. Return ONLY valid JSON, no
 Generate 5-8 keywords per cluster. Make them realistic and specific to the business.`;
 
   // Build rule-based seed clusters from brief data — works even with no LLM
-  const { a3KeywordClusters } = require("../utils/ruleBasedFallbacks");
   const seedClusters = buildSeedClusters(brief);
 
   let keywordData = seedClusters; // always have something

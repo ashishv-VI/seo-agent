@@ -55,9 +55,11 @@ router.post("/:clientId/run-pipeline", verifyToken, async (req, res) => {
     // ── Gate: require at least one LLM key before starting ────────────────
     // A3, A4, A5, A6, A8 all call callLLM() — without a key they silently
     // fail but the pipeline still shows "complete" with empty data.
-    if (!keys.groq && !keys.gemini) {
+    // Server-level OPENROUTER_API_KEY counts as a valid fallback.
+    const hasLLM = keys.groq || keys.gemini || keys.openrouter || process.env.OPENROUTER_API_KEY;
+    if (!hasLLM) {
       return res.status(400).json({
-        error: "No LLM key configured. Add a Groq or Gemini API key in Settings before running the pipeline.",
+        error: "No LLM key configured. Add a Groq, Gemini, or OpenRouter API key in Settings before running the pipeline.",
         missingKey: "llm",
       });
     }
