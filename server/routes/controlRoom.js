@@ -19,7 +19,7 @@ async function getClientDoc(clientId, uid) {
  */
 router.get("/:clientId/control-room", verifyToken, async (req, res) => {
   try {
-    await getClientDoc(req.params.clientId, req.uid);
+    const clientDocResult = await getClientDoc(req.params.clientId, req.uid);
     const clientId = req.params.clientId;
 
     // Fetch all data in parallel — one failure should not crash the room
@@ -44,8 +44,7 @@ router.get("/:clientId/control-room", verifyToken, async (req, res) => {
       getState(clientId, "CMO_decision").catch(() => null),
     ]);
 
-    const clientDoc = await db.collection("clients").doc(clientId).get();
-    const client    = clientDoc.data();
+    const client = clientDocResult.data();
 
     // ── This Week (GSC signals + week-over-week delta) ─────────────────────
     const gsc        = report?.gscSummary || null;
@@ -61,7 +60,7 @@ router.get("/:clientId/control-room", verifyToken, async (req, res) => {
     const thisWeek = (gsc || thisSnapW) ? {
       totalClicks:      gsc?.totalClicks      || thisSnapW?.totalClicks      || 0,
       totalImpressions: gsc?.totalImpress     || thisSnapW?.totalImpressions || 0,
-      avgCtr:           gsc?.avgCtr           ? (gsc.avgCtr * 100).toFixed(1) + "%" : (thisSnapW?.avgCtr ? (thisSnapW.avgCtr * 100).toFixed(1) + "%" : "N/A"),
+      avgCtr:           gsc?.avgCTR != null   ? gsc.avgCTR + "%" : (thisSnapW?.avgCtr ? (thisSnapW.avgCtr * 100).toFixed(1) + "%" : "N/A"),
       avgPosition:      gsc?.avgPos           ? gsc.avgPos.toFixed(1) : (thisSnapW?.avgPosition?.toFixed(1) || "N/A"),
       topPage:          gsc?.topPages?.[0]    || thisSnapW?.topPages?.[0] || null,
       topKeyword:       gsc?.topKeywords?.[0] || thisSnapW?.topKeywords?.[0] || null,
@@ -188,13 +187,15 @@ router.get("/:clientId/control-room", verifyToken, async (req, res) => {
 
     // ── CMO Decision ─────────────────────────────────
     const cmo = cmoDecision ? {
-      decision:   cmoDecision.decision,
-      reasoning:  cmoDecision.reasoning,
-      nextAgents: cmoDecision.nextAgents || [],
-      confidence: cmoDecision.confidence,
-      kpiImpact:  cmoDecision.kpiImpact  || [],
-      signals:    cmoDecision.signals    || {},
-      decidedAt:  cmoDecision.decidedAt  || null,
+      decision:            cmoDecision.decision,
+      reasoning:           cmoDecision.reasoning,
+      nextAgents:          cmoDecision.nextAgents || [],
+      confidence:          cmoDecision.confidence,
+      confidenceReasoning: cmoDecision.confidenceReasoning || null,
+      kpiImpact:           cmoDecision.kpiImpact  || [],
+      signals:             cmoDecision.signals    || {},
+      patternStats:        cmoDecision.patternStats || null,
+      decidedAt:           cmoDecision.decidedAt  || null,
     } : null;
 
     return res.json({

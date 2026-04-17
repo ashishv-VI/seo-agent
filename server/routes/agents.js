@@ -1483,10 +1483,12 @@ router.get("/:clientId/cmo/queue", verifyToken, async (req, res) => {
     await getClientDoc(req.params.clientId, req.uid);
     const snap = await db.collection("cmo_queue")
       .where("clientId", "==", req.params.clientId)
-      .where("status", "==", "pending")
-      .limit(5)
+      .limit(10)
       .get();
-    const queue = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const queue = snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter(d => d.status === "pending")
+      .slice(0, 5);
     return res.json({ queue });
   } catch (e) {
     return res.status(e.code || 500).json({ error: e.message });

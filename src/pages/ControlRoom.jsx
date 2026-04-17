@@ -76,6 +76,7 @@ export default function ControlRoom({ dark, clientId, clientName }) {
   if (!data.thisWeek)    data.thisWeek    = {};
   if (!data.suggestions) data.suggestions = [];
   if (!data.beforeAfter) data.beforeAfter = {};
+  if (!data.leads)       data.leads       = { hasData: false, total30d: 0, totalAllTime: 0, keywordLeadBreakdown: [], recentConversions: [] };
 
   const cmo = data.cmo;
   const hasCMO = !!cmo?.decision;
