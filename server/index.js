@@ -965,6 +965,104 @@ setInterval(async () => {
   }
 }, 30 * 60 * 1000); // every 30 min
 
+// ── Monday Morning Briefing — fires every Monday 08:00 UTC ───────────────────
+// Sends one proactive notification per client: 3 opportunities + 1 threat + one action.
+// The goal: agency opens Monday and already knows exactly what to do this week.
+setInterval(async () => {
+  const now = new Date();
+  // Only Monday (day 1) between 08:00–09:00 UTC
+  if (now.getUTCDay() !== 1 || now.getUTCHours() !== 8) return;
+
+  const dayKey = now.toISOString().split("T")[0];
+  try {
+    const flagRef = db.collection("cron_flags").doc(`monday_briefing_${dayKey}`);
+    const flag    = await flagRef.get();
+    if (flag.exists) return;
+    await flagRef.set({ ranAt: now.toISOString() });
+  } catch { return; }
+
+  console.log("[monday-briefing] Sending weekly briefings...");
+  try {
+    const snap = await db.collection("clients")
+      .where("pipelineStatus", "==", "complete")
+      .get();
+
+    const { getUserKeys }  = require("./utils/getUserKeys");
+    const { getState }     = require("./shared-state/stateManager");
+
+    for (const doc of snap.docs) {
+      const data = doc.data();
+      try {
+        const clientId = doc.id;
+        const keys     = await getUserKeys(data.ownerId).catch(() => null);
+        if (!keys) continue;
+
+        const [cmoDecision, alertsSnap, competitors, brief] = await Promise.all([
+          getState(clientId, "CMO_decision").catch(() => null),
+          db.collection("alerts").where("clientId","==",clientId).where("resolved","==",false).limit(10).get().catch(() => null),
+          getState(clientId, "A4_competitor").catch(() => null),
+          getState(clientId, "A1_brief").catch(() => null),
+        ]);
+
+        const p1Alerts   = alertsSnap ? alertsSnap.docs.map(d=>d.data()).filter(a=>a.severity==="p1") : [];
+        const cmo        = cmoDecision;
+        const aov        = Number(brief?.avgOrderValue) || 0;
+        const cur        = brief?.currency === "GBP" ? "£" : brief?.currency === "USD" ? "$" : "₹";
+
+        // Build briefing lines
+        const lines = [];
+
+        // Opportunity 1 — CMO decision
+        if (cmo?.decision) {
+          lines.push(`Opportunity: ${cmo.decision}`);
+        }
+        // Opportunity 2 — CMO KPI impact
+        if (cmo?.kpiImpact?.[0]) {
+          const k = cmo.kpiImpact[0];
+          const rev = k.revenueEstimate ? ` (${k.revenueEstimate})` : "";
+          lines.push(`Expected: ${k.expectedLift}${rev} — ${k.mechanism}`);
+        }
+        // Threat — P1 alert or competitor
+        if (p1Alerts.length > 0) {
+          lines.push(`Threat: ${p1Alerts[0].title || p1Alerts[0].type} — ${p1Alerts[0].detail || "needs attention"}`);
+        } else if (competitors?.newPages?.length > 0) {
+          lines.push(`Competitor alert: ${competitors.newPages[0].domain || "competitor"} published new content on your keywords`);
+        }
+        // Action
+        if (cmo?.nextAgents?.length > 0) {
+          lines.push(`Action ready: ${cmo.nextAgents.join(" + ")} queued — approve in Control Room`);
+        }
+
+        if (lines.length === 0) continue;
+
+        const message = lines.join(" · ");
+        const confText = cmo?.confidence ? ` (${Math.round(cmo.confidence * 100)}% confidence)` : "";
+
+        await db.collection("notifications").add({
+          clientId,
+          ownerId:   data.ownerId,
+          type:      "monday_briefing",
+          title:     `Monday Briefing — ${data.name || brief?.businessName}${confText}`,
+          message,
+          meta: {
+            cmoDecision: cmo?.decision || null,
+            nextAgents:  cmo?.nextAgents || [],
+            p1Count:     p1Alerts.length,
+            aov,
+          },
+          read:      false,
+          createdAt: now.toISOString(),
+        });
+        console.log(`[monday-briefing] Sent briefing for ${data.name || clientId}`);
+      } catch (e) {
+        console.error(`[monday-briefing] Error for ${doc.id}:`, e.message);
+      }
+    }
+  } catch (err) {
+    console.error("[monday-briefing] Error:", err.message);
+  }
+}, 60 * 60 * 1000); // check every hour, fires only on Monday 08:00 UTC
+
 // ── 404 Handler ────────────────────────────────────
 app.use((req, res) => {
   const origin = req.headers.origin || "";

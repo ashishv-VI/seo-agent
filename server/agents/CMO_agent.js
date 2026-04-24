@@ -254,9 +254,12 @@ function extractSignals({ brief, audit, keywords, competitor, onpage, technical,
     const avgCtr = gsc.avgCtr || 0;
     // Expected CTR at pos 5 is ~5%, at pos 1 is ~25%
     const expectedCtr = avgPos <= 3 ? 0.15 : avgPos <= 5 ? 0.07 : avgPos <= 10 ? 0.025 : 0.01;
-    signals.ctrLow    = avgCtr < expectedCtr * 0.7; // CTR is < 70% of expected
-    signals.avgCtr    = avgCtr;
-    signals.avgPos    = avgPos;
+    signals.ctrLow       = avgCtr < expectedCtr * 0.7;
+    signals.avgCtr       = avgCtr;
+    signals.avgPos       = avgPos;
+    signals.monthlyClicks = gsc.totalClicks || 0;
+    signals.clicksDelta   = gsc.clicksDelta  || null;
+    signals.impressions   = gsc.totalImpress || 0;
   }
 
   // Content gaps
@@ -598,93 +601,118 @@ function buildCMOPrompt(brief, signals, patternSummary = null, vetoContext = {})
     ? `\n## LOW QUALITY DATA WARNING\nA17 Reviewer flagged these agent outputs as low quality (score <0.5). Treat signals from them as directional hints only — do NOT make high-confidence decisions based solely on: ${lowQualityAgents.join(", ")}.\n`
     : "";
 
-  return `You are the CMO Agent for an SEO AI platform. Your job is to analyse the signals below and decide the single most impactful next action for this client.
+  const aov = Number(brief?.avgOrderValue) || 0;
+  const currency = brief?.currency === "GBP" ? "£" : brief?.currency === "USD" ? "$" : "₹";
+  const revenueContext = aov > 0
+    ? `Average order value: ${currency}${aov.toLocaleString()}. ALWAYS translate improvements into leads and ${currency} revenue in your reasoning and kpiImpact — e.g. "+2 leads/month × ${currency}${aov.toLocaleString()} = ${currency}${(2*aov).toLocaleString()} added monthly revenue".`
+    : "No AOV configured — express impact as leads and traffic, not revenue.";
+
+  return `You are the CMO Agent for an SEO AI platform. You make revenue-first decisions.
+
+RULE: Never speak in SEO jargon to the user. Every insight must answer "what does this mean for revenue or leads?"
+- "CTR improved 2%" → "est. +${aov > 0 ? Math.round(signals.monthlyClicks * 0.02 * 0.03) + " extra leads/month" : "more clicks → more leads"}"
+- "Position 14→9 on primary keyword" → "moving from page 2 to page 1 — this keyword starts generating leads"
+- "3 P1 issues" → "3 issues blocking the site from ranking — fixing them unblocks organic revenue"
 
 Client: ${brief.businessName} (${brief.websiteUrl})
-Primary KPIs: ${[].concat(brief.kpiSelection || ["Organic Traffic Growth"]).join(", ")}
-Goals: ${[].concat(brief.goals || []).join(", ")}
+Primary goal: ${[].concat(brief.kpiSelection || ["Organic Traffic Growth"]).join(", ")}
+${revenueContext}
 
-## Current SEO Signals
-- Technical health score: ${signals.healthPoor ? "POOR (<50)" : "OK"}
-- P1 critical issues: ${signals.p1IssuesCount}
-- Mobile PageSpeed: ${signals.technicalPoor ? "POOR (<60)" : "OK"}
-- Keywords on page 2 (positions 11-30): ${signals.page2Count}
-- Ranking drops detected: ${signals.droppingKws}
-- CTR low vs expected: ${signals.ctrLow ? "YES" : "NO"} (CTR: ${((signals.avgCtr || 0)*100).toFixed(1)}% at pos ${(signals.avgPos||0).toFixed(1)})
-- Content gaps found: ${signals.contentGaps}
-${signals.hasKilledKeywords ? `- DEAD KEYWORD CLUSTERS (ranked 90+ days, 0 leads): ${signals.killedKeywordCount} keywords killed. Examples: ${signals.killedKeywords.slice(0, 5).join(", ")}. DO NOT propose content or link building for these keywords — reallocate effort to converting clusters.` : ""}
+## Current Situation
+- Technical health: ${signals.healthPoor ? "POOR — site has ranking blockers" : "OK"}
+- Critical issues blocking rankings: ${signals.p1IssuesCount}
+- Mobile PageSpeed: ${signals.technicalPoor ? "POOR — losing mobile traffic" : "OK"}
+- Keywords on page 2 (positions 11-30): ${signals.page2Count} ${signals.page2Count > 0 ? "— one good backlink away from page 1 traffic" : ""}
+- Ranking drops: ${signals.droppingKws} ${signals.droppingKws > 0 ? "— investigate before traffic disappears" : ""}
+- CTR below expected: ${signals.ctrLow ? `YES — getting ${((signals.avgCtr || 0)*100).toFixed(1)}% clicks at position ${(signals.avgPos||0).toFixed(1)} (should be higher)` : "NO"}
+- Content gaps: ${signals.contentGaps} ${signals.contentGaps > 0 ? "keywords with no page targeting them — missing traffic" : ""}
+${signals.hasKilledKeywords ? `- WASTED EFFORT WARNING: ${signals.killedKeywordCount} keywords have ranked 90+ days with ZERO leads. Stop targeting these. Reallocate budget to converting keywords.` : ""}
 
-## Available Agents to Trigger (pick ONLY from this list)
+## Available Actions (pick ONLY from this list)
 ${pickFrom.map(a => {
-  const labels = { A2: "Re-audit (if critical issues or drops)", A5: "Title/meta rewrite (if CTR is low)", A6: "On-page optimisation (if on-page issues)", A7: "Technical/speed fix (if PageSpeed poor)", A11: "Link building (if keywords stuck on page 2)", A14: "Content creation (if content gaps found)" };
+  const labels = {
+    A2:  "Re-audit — find what's blocking rankings",
+    A5:  "Rewrite titles/metas — more clicks from same rankings",
+    A6:  "On-page fixes — improve content relevance signals",
+    A7:  "Fix Core Web Vitals — stop losing mobile traffic",
+    A11: "Build backlinks — push page-2 keywords to page 1",
+    A14: "Create content — capture unaddressed keyword demand",
+  };
   return `- ${a}: ${labels[a] || a}`;
 }).join("\n")}
-${vetoBlock}${qualityWarning}${patternSummary ? `\n## Learning — What Has Worked (use this to improve confidence)\n${patternSummary}\n` : ""}
-Return ONLY valid JSON:
+${vetoBlock}${qualityWarning}${patternSummary ? `\n## What Has Worked Previously\n${patternSummary}\n` : ""}
+Return ONLY valid JSON. Use plain language a business owner understands — no SEO jargon:
 {
-  "decision": "one sentence describing the strategic focus",
-  "reasoning": "2-3 sentences explaining why based on the signals",
-  "nextAgents": ["A5", "A11"],
+  "decision": "one sentence: what we're doing and why it matters for revenue/leads",
+  "reasoning": "2-3 sentences in plain English: what the data shows → what we do → what revenue impact to expect",
+  "nextAgents": ["A5"],
   "confidence": 0.85,
   "kpiImpact": [
-    { "kpi": "Organic Traffic Growth", "expectedLift": "+15-25% in 60 days", "mechanism": "title rewrites → CTR improvement" }
+    { "kpi": "Lead Generation", "expectedLift": "+3-5 leads/month", "mechanism": "higher CTR → more site visits → more conversions", "revenueEstimate": "${aov > 0 ? `+${currency}${(4*aov).toLocaleString()}/month` : "depends on conversion rate"}" }
   ]
 }`;
 }
 
 // ── Rule-based fallback ───────────────────────────
 function ruleBasedDecision(signals, brief) {
-  const kpi = [].concat(brief?.kpiSelection || ["Organic Traffic Growth"])[0];
+  const kpi  = [].concat(brief?.kpiSelection || ["Organic Traffic Growth"])[0];
+  const aov  = Number(brief?.avgOrderValue) || 0;
+  const cur  = brief?.currency === "GBP" ? "£" : brief?.currency === "USD" ? "$" : "₹";
+  const rev  = (leads) => aov > 0 ? ` = ${cur}${(leads * aov).toLocaleString()}/month added revenue` : "";
 
   if (signals.hasCriticalIssues || signals.healthPoor) {
     return {
-      decision:   "Fix critical technical issues before any other work",
-      reasoning:  `${signals.p1IssuesCount} critical P1 issues are actively blocking rankings. These must be resolved first — no other SEO work has meaningful impact while the site has technical blockers.`,
+      decision:   `Fix ${signals.p1IssuesCount} critical issues that are blocking organic rankings`,
+      reasoning:  `The site has ${signals.p1IssuesCount} critical technical issues preventing Google from indexing pages correctly. Until these are fixed, no other SEO work generates revenue — these blockers suppress all organic traffic.`,
       nextAgents: ["A2", "A6"],
       confidence: 0.95,
-      kpiImpact:  [{ kpi, expectedLift: "Unlocks indexing", mechanism: "Remove technical blockers" }],
+      kpiImpact:  [{ kpi, expectedLift: "Unblocks organic indexing", mechanism: "Remove technical barriers", revenueEstimate: "Unlocks existing ranking potential" }],
     };
   }
   if (signals.ctrLow) {
+    const extraClicks = Math.round((signals.monthlyClicks || 200) * 0.25);
+    const extraLeads  = Math.round(extraClicks * 0.03);
     return {
-      decision:   "Rewrite title tags and meta descriptions to improve click-through rate",
-      reasoning:  `CTR is below expected for the current ranking positions. The site is visible in search results but users aren't clicking. Title and meta rewrites are the highest-leverage action.`,
+      decision:   `Rewrite title tags and meta descriptions — the site ranks but users aren't clicking`,
+      reasoning:  `CTR is ${((signals.avgCtr || 0)*100).toFixed(1)}% at position ${(signals.avgPos||0).toFixed(1)} — well below industry average. Getting to average CTR would add ~${extraClicks} extra clicks/month → ~${extraLeads} extra leads${rev(extraLeads)}. Title rewrites are the fastest way to get there.`,
       nextAgents: ["A5", "A6"],
       confidence: 0.88,
-      kpiImpact:  [{ kpi, expectedLift: "+20-35% clicks in 30 days", mechanism: "CTR improvement from compelling titles" }],
+      kpiImpact:  [{ kpi, expectedLift: `+${extraLeads} leads/month`, mechanism: "Higher CTR → more visits from existing rankings", revenueEstimate: aov > 0 ? `+${cur}${(extraLeads * aov).toLocaleString()}/month` : null }],
     };
   }
   if (signals.hasPage2Kws) {
+    const extraLeads = Math.round(signals.page2Count * 0.5);
     return {
-      decision:   "Build backlinks to push page-2 keywords into top 10",
-      reasoning:  `${signals.page2Count} keywords are on page 2 — just a few positions from generating significant organic traffic. Targeted link building is the most efficient way to close this gap.`,
+      decision:   `Push ${signals.page2Count} page-2 keywords to page 1 with targeted backlinks`,
+      reasoning:  `${signals.page2Count} keywords are ranking positions 11-30 — page 2, generating almost zero traffic. Moving even half of them to page 1 adds ~${extraLeads} extra leads/month${rev(extraLeads)}. One targeted backlink per keyword is typically enough to cross the page-1 threshold.`,
       nextAgents: ["A11"],
       confidence: 0.82,
-      kpiImpact:  [{ kpi, expectedLift: "+40-60% impressions in 90 days", mechanism: "Page 2 → Page 1 ranking jump" }],
+      kpiImpact:  [{ kpi, expectedLift: `+${extraLeads} leads/month`, mechanism: "Page 2 → Page 1 ranking jump", revenueEstimate: aov > 0 ? `+${cur}${(extraLeads * aov).toLocaleString()}/month` : null }],
     };
   }
   if (signals.hasContentGaps && !signals.hasKilledKeywords) {
+    const gapLeads = Math.round(signals.contentGaps * 0.8);
     return {
-      decision:   "Create content to fill identified keyword and topic gaps",
-      reasoning:  `${signals.contentGaps} content gaps found where competitors rank but this site has no content. Creating targeted content captures currently missed traffic.`,
+      decision:   `Create content for ${signals.contentGaps} keyword gaps competitors already rank for`,
+      reasoning:  `Competitors are getting traffic from ${signals.contentGaps} topics this site has no content on. Each piece of content captures a new audience segment — estimated +${gapLeads} leads/month when pages rank${rev(gapLeads)}.`,
       nextAgents: ["A14", "A5"],
       confidence: 0.78,
-      kpiImpact:  [{ kpi, expectedLift: "+25-50% impressions in 90 days", mechanism: "New content targeting uncovered keywords" }],
+      kpiImpact:  [{ kpi, expectedLift: `+${gapLeads} leads/month`, mechanism: "New content → captures currently missed search demand", revenueEstimate: aov > 0 ? `+${cur}${(gapLeads * aov).toLocaleString()}/month` : null }],
     };
   }
   if (signals.hasContentGaps && signals.hasKilledKeywords) {
     return {
-      decision:   "Content gaps exist but many keywords are dead (0 leads). Focus on CRO and converting clusters instead",
-      reasoning:  `${signals.killedKeywordCount} keywords ranked 90+ days with 0 conversions — investing more content/links there wastes budget. Shifting to conversion optimization for clusters that do generate leads.`,
+      decision:   `Stop investing in ${signals.killedKeywordCount} dead keywords — shift budget to converting pages`,
+      reasoning:  `${signals.killedKeywordCount} keywords have ranked for 90+ days but generated zero leads. These are not converting regardless of ranking. Moving the same effort to CRO on pages that do get leads will produce faster revenue results.`,
       nextAgents: ["A19", "A6"],
       confidence: 0.80,
-      kpiImpact:  [{ kpi, expectedLift: "+15-30% conversion rate", mechanism: "CRO on converting pages instead of dead keyword expansion" }],
+      kpiImpact:  [{ kpi, expectedLift: "+15-30% conversion rate on existing traffic", mechanism: "CRO on converting pages instead of dead keyword expansion", revenueEstimate: aov > 0 ? `Reallocate ${cur}${(signals.killedKeywordCount * aov * 0.1).toLocaleString()}/month wasted effort` : null }],
     };
   }
 
   return {
-    decision:   "Maintain current strategy — focus on monitoring and content freshness",
-    reasoning:  "No critical signals detected. Site is in a healthy state. Continue monitoring rankings and refresh existing content.",
+    decision:   "Site is healthy — focus on maintaining rankings and monitoring for drops",
+    reasoning:  "No urgent signals detected. The site is in a stable state. The agent will continue monitoring for ranking drops, competitor moves, and new opportunities.",
     nextAgents: [],
     confidence: 0.6,
     kpiImpact:  [],

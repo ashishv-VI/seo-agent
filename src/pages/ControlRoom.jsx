@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
+import WarRoomPanel from "../components/WarRoomPanel";
 
 export default function ControlRoom({ dark, clientId, clientName }) {
   const { user, API } = useAuth();
@@ -70,6 +71,13 @@ export default function ControlRoom({ dark, clientId, clientName }) {
     <div style={{ padding:24, color:"#DC2626", background:"#DC262611", borderRadius:10, fontSize:13 }}>{error}</div>
   );
   if (!data) return null;
+  if (data.setupRequired) return (
+    <div style={{ padding:40, textAlign:"center" }}>
+      <div style={{ fontSize:32, marginBottom:12 }}>🚀</div>
+      <div style={{ fontSize:16, fontWeight:800, color:txt, marginBottom:8 }}>Complete Onboarding First</div>
+      <div style={{ fontSize:13, color:txt2 }}>{data.message || "Run the A1 Onboarding agent to set up this client before accessing the Control Room."}</div>
+    </div>
+  );
 
   // Safe defaults — prevent crash if API returns partial data
   if (!data.siteHealth)  data.siteHealth  = {};
@@ -83,6 +91,7 @@ export default function ControlRoom({ dark, clientId, clientName }) {
 
   const TABS = [
     { id:"overview",    label:"Overview"        },
+    { id:"warroom",     label:"War Room"        },
     { id:"decision",    label:"Agent Decision"  },
     { id:"health",      label:"Site Health"     },
     { id:"suggestions", label:"AI Suggestions"  },
@@ -171,16 +180,20 @@ export default function ControlRoom({ dark, clientId, clientName }) {
                 </div>
               )}
 
-              {/* EXPECTED IMPACT — what changes if we do this */}
+              {/* EXPECTED IMPACT — revenue-first: leads + money */}
               {cmo.kpiImpact?.length > 0 && (
                 <div style={{ marginBottom:12 }}>
                   <div style={{ fontSize:10, color:txt2, fontWeight:700, textTransform:"uppercase", letterSpacing:0.8, marginBottom:6 }}>Expected Impact</div>
                   <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
                     {cmo.kpiImpact.map((k, i) => (
-                      <div key={i} style={{ fontSize:11, padding:"5px 11px", borderRadius:8, background:"#05966918", border:"1px solid #05966933" }}>
-                        <span style={{ color:"#059669", fontWeight:800 }}>{k.kpi}</span>
-                        <span style={{ color:txt2 }}> → </span>
-                        <span style={{ color:txt, fontWeight:700 }}>{k.expectedLift}</span>
+                      <div key={i} style={{ fontSize:11, padding:"8px 12px", borderRadius:8, background:"#05966918", border:"1px solid #05966933" }}>
+                        <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
+                          <span style={{ color:"#059669", fontWeight:800 }}>{k.expectedLift}</span>
+                          {k.revenueEstimate && (
+                            <span style={{ color:"#D97706", fontWeight:800, fontSize:12 }}>{k.revenueEstimate}</span>
+                          )}
+                        </div>
+                        <div style={{ color:txt2, fontSize:10, marginTop:2 }}>{k.mechanism}</div>
                       </div>
                     ))}
                   </div>
@@ -248,16 +261,19 @@ export default function ControlRoom({ dark, clientId, clientName }) {
           <button key={t.id} onClick={() => setTab(t.id)}
             style={{ padding:"8px 16px", borderRadius:"8px 8px 0 0", border:"none", cursor:"pointer", fontSize:13, fontWeight:600,
               background: tab===t.id ? bg2 : "transparent",
-              color:      tab===t.id ? (t.id === "decision" ? B : B) : txt2,
+              color:      tab===t.id ? B : txt2,
               borderBottom: tab===t.id ? `2px solid ${B}` : "2px solid transparent",
             }}>
-            {t.id === "decision" && hasCMO ? "🧠 " : ""}{t.label}
+            {t.id === "decision" && hasCMO ? "🧠 " : ""}
+            {t.id === "warroom" ? "📊 " : ""}
+            {t.label}
           </button>
         ))}
       </div>
 
       {/* Tab content */}
       {tab === "overview"    && <OverviewTab    data={data} dark={dark} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2} B={B} />}
+      {tab === "warroom"     && <WarRoomPanel   dark={dark} clientId={clientId} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2} B={B} />}
       {tab === "decision"    && <DecisionTab    data={data} dark={dark} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2} B={B}
                                   approving={approving} approved={approved} onApprove={approveCMO} />}
       {tab === "health"      && <HealthTab      data={data} dark={dark} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2} B={B} />}

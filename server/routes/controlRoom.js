@@ -228,4 +228,156 @@ router.get("/:clientId/control-room", verifyToken, async (req, res) => {
   }
 });
 
+/**
+ * GET /:clientId/war-room
+ * Powers the War Room: weekly / monthly / compare views.
+ * Returns timeline data, fix history with outcomes, GSC trend, leads, revenue.
+ */
+router.get("/:clientId/war-room", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const clientId = req.params.clientId;
+
+    const [brief, scoreHistory, pushLog, convSnap, cmoDecision] = await Promise.all([
+      getState(clientId, "A1_brief").catch(() => null),
+      getScoreHistory(clientId, 26).catch(() => []),   // 26 weeks = ~6 months
+      db.collection("wp_push_log").where("clientId","==",clientId).orderBy("pushedAt","desc").limit(100).get().catch(() => null),
+      db.collection("conversions").where("clientId","==",clientId).limit(200).get().catch(() => null),
+      getState(clientId, "CMO_decision").catch(() => null),
+    ]);
+
+    const aov = Number(brief?.avgOrderValue) || 0;
+    const now  = Date.now();
+
+    // ── Build fix timeline from wp_push_log ──────────
+    const fixes = pushLog ? pushLog.docs.map(d => {
+      const f = d.data();
+      return {
+        id:        d.id,
+        type:      f.issueType || f.field || "fix",
+        page:      f.wpPostUrl || f.pageUrl || null,
+        pushedAt:  f.pushedAt  || null,
+        outcome:   f.outcome   || f.rankingAfter || null,  // set by fix_verification
+        isRetry:   !!f.isRetry,
+      };
+    }) : [];
+
+    // ── Weekly buckets (last 12 weeks) ───────────────
+    const weeks = [];
+    for (let w = 11; w >= 0; w--) {
+      const weekStart = new Date(now - (w + 1) * 7 * 24 * 60 * 60 * 1000);
+      const weekEnd   = new Date(now - w * 7 * 24 * 60 * 60 * 1000);
+      const wLabel    = weekStart.toISOString().split("T")[0];
+
+      const weekFixes = fixes.filter(f => f.pushedAt >= weekStart.toISOString() && f.pushedAt < weekEnd.toISOString());
+      const weekLeads = convSnap ? convSnap.docs
+        .map(d => d.data())
+        .filter(c => (c.submittedAt || "") >= weekStart.toISOString() && (c.submittedAt || "") < weekEnd.toISOString())
+        .length : 0;
+
+      // Score for this week from score_history
+      const weekScore = scoreHistory.find(s => s.date >= wLabel && s.date < weekEnd.toISOString().split("T")[0]);
+
+      weeks.push({
+        week:       wLabel,
+        weekLabel:  `W${12 - w}`,
+        fixes:      weekFixes.length,
+        confirmedWins: weekFixes.filter(f => f.outcome === "improved").length,
+        leads:      weekLeads,
+        revenue:    aov > 0 ? weekLeads * aov : null,
+        score:      weekScore?.overall || null,
+      });
+    }
+
+    // ── Monthly buckets (last 6 months) ──────────────
+    const months = [];
+    for (let m = 5; m >= 0; m--) {
+      const d = new Date();
+      d.setMonth(d.getMonth() - m);
+      const mLabel = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+
+      const mFixes = fixes.filter(f => (f.pushedAt || "").startsWith(mLabel));
+      const mLeads = convSnap ? convSnap.docs
+        .map(d2 => d2.data())
+        .filter(c => (c.submittedAt || "").startsWith(mLabel))
+        .length : 0;
+
+      const mScores = scoreHistory.filter(s => (s.date || "").startsWith(mLabel));
+      const avgScore = mScores.length
+        ? Math.round(mScores.reduce((a, s) => a + (s.overall || 0), 0) / mScores.length)
+        : null;
+
+      months.push({
+        month:      mLabel,
+        monthLabel: d.toLocaleString("default", { month:"short", year:"2-digit" }),
+        fixes:      mFixes.length,
+        confirmedWins: mFixes.filter(f => f.outcome === "improved").length,
+        leads:      mLeads,
+        revenue:    aov > 0 ? mLeads * aov : null,
+        score:      avgScore,
+      });
+    }
+
+    // ── Compare: current month vs last month ─────────
+    const current = months[months.length - 1] || {};
+    const prior   = months[months.length - 2] || {};
+    function pct(a, b) { return b > 0 ? Math.round(((a - b) / b) * 100) : null; }
+
+    const compare = {
+      fixes:        { current: current.fixes,         prior: prior.fixes,         delta: pct(current.fixes, prior.fixes) },
+      confirmedWins:{ current: current.confirmedWins, prior: prior.confirmedWins, delta: pct(current.confirmedWins, prior.confirmedWins) },
+      leads:        { current: current.leads,         prior: prior.leads,         delta: pct(current.leads, prior.leads) },
+      revenue:      { current: current.revenue,       prior: prior.revenue,       delta: pct(current.revenue, prior.revenue) },
+      score:        { current: current.score,         prior: prior.score,         delta: current.score != null && prior.score != null ? current.score - prior.score : null },
+    };
+
+    // ── Proof Engine: fixes with confirmed outcomes ──
+    const provenFixes = fixes.filter(f => f.outcome === "improved").slice(0, 10);
+    const totalWins   = fixes.filter(f => f.outcome === "improved").length;
+    const totalFixes  = fixes.length;
+    const winRate     = totalFixes > 0 ? Math.round((totalWins / totalFixes) * 100) : null;
+    const allLeads    = convSnap ? convSnap.docs.length : 0;
+    const totalRevenue = aov > 0 ? allLeads * aov : null;
+
+    // ── CMO summary for War Room header ─────────────
+    const cmoSummary = cmoDecision ? {
+      decision:   cmoDecision.decision,
+      confidence: cmoDecision.confidence,
+      nextAgents: cmoDecision.nextAgents || [],
+    } : null;
+
+    // ── Revenue projection: if win rate continues ────
+    const last30Wins = fixes.filter(f => {
+      const d = new Date(now - 30 * 24 * 60 * 60 * 1000).toISOString();
+      return f.pushedAt >= d && f.outcome === "improved";
+    }).length;
+    const projectedLeadsNext30 = winRate && last30Wins > 0 && aov > 0
+      ? Math.round(last30Wins * 0.3)   // each win generates ~0.3 leads on average
+      : null;
+
+    return res.json({
+      weeks,
+      months,
+      compare,
+      proofEngine: {
+        totalFixes,
+        totalWins,
+        winRate,
+        totalLeads: allLeads,
+        totalRevenue,
+        provenFixes,
+        projectedLeadsNext30,
+        projectedRevenueNext30: projectedLeadsNext30 && aov > 0 ? projectedLeadsNext30 * aov : null,
+        aov,
+      },
+      cmo: cmoSummary,
+      aov,
+      currency: brief?.currency || "INR",
+    });
+
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
 module.exports = router;
