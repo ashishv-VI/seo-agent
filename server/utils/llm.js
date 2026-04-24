@@ -17,6 +17,24 @@ const RETRY_DELAY_MS     = 1500;
 const RATE_LIMIT_WAIT_MS = 60000; // 60s — standard rate-limit window
 const OVERLOAD_WAIT_MS   = 8000;  // 8s — overloaded (529) is usually transient
 
+// ── Global rate limit cooldown tracker ────────────────────────────────────────
+// Prevents parallel agents all hammering the same provider at once.
+// When one agent hits 429, all other agents respect the same cooldown.
+const providerCooldown = { groq: 0, gemini: 0, openrouter: 0 };
+
+function markRateLimited(provider) {
+  providerCooldown[provider] = Date.now() + RATE_LIMIT_WAIT_MS;
+}
+
+async function waitIfCoolingDown(provider) {
+  const coolUntil = providerCooldown[provider] || 0;
+  const remaining = coolUntil - Date.now();
+  if (remaining > 0) {
+    console.log(`[llm] ${provider} cooling down — waiting ${Math.round(remaining/1000)}s`);
+    await sleep(remaining);
+  }
+}
+
 async function sleep(ms) {
   return new Promise(r => setTimeout(r, ms));
 }
@@ -48,18 +66,42 @@ async function callWithRetry(fn, providerName) {
   return null;
 }
 
-async function callLLM(prompt, keys, options = {}) {
+async function callLLM(clientIdOrPrompt, keysOrOptions, promptOrOptions = {}, options = {}) {
+  // Support both calling conventions:
+  // Old: callLLM(prompt, keys, options)
+  // New: callLLM(clientId, keys, prompt, { system, maxTokens })
+  let clientId, keys, prompt, opts;
+
+  if (typeof keysOrOptions === "object" && keysOrOptions !== null && 
+      (keysOrOptions.groq !== undefined || keysOrOptions.gemini !== undefined || 
+       keysOrOptions.openrouter !== undefined || keysOrOptions.serpApi !== undefined ||
+       Object.keys(keysOrOptions).length === 0)) {
+    // New convention: callLLM(clientId, keys, prompt, options)
+    clientId = clientIdOrPrompt;
+    keys     = keysOrOptions;
+    prompt   = promptOrOptions;
+    opts     = options;
+  } else {
+    // Old convention: callLLM(prompt, keys, options)
+    prompt   = clientIdOrPrompt;
+    keys     = keysOrOptions;
+    opts     = promptOrOptions;
+    clientId = opts.clientId || null;
+  }
+
+  // Normalise options — support both {system} and {systemPrompt}
+  const systemPrompt = opts.system || opts.systemPrompt || null;
+  const maxTokens    = opts.maxTokens  || 3000;
+  const temperature  = opts.temperature || 0.3;
+
   const messages = [
-    ...(options.systemPrompt ? [{ role: "system", content: options.systemPrompt }] : []),
-    { role: "user", content: prompt },
+    ...(systemPrompt ? [{ role: "system", content: systemPrompt }] : []),
+    { role: "user", content: String(prompt || "") },
   ];
-  const maxTokens  = options.maxTokens  || 3000;
-  const temperature = options.temperature || 0.3;
-  const clientId   = options.clientId || null;
 
   // ── Budget gate: block expensive calls if monthly budget exceeded ──
   // Callers can pass skipBudgetCheck=true for critical system calls.
-  if (clientId && !options.skipBudgetCheck) {
+  if (clientId && !opts.skipBudgetCheck) {
     const budget = await checkBudget(clientId);
     if (!budget.allowed) {
       throw new Error(`LLM call blocked: ${budget.reason}`);
@@ -68,6 +110,7 @@ async function callLLM(prompt, keys, options = {}) {
 
   // ── 1. Groq ───────────────────────────────────────────────────────────────
   if (keys.groq) {
+    await waitIfCoolingDown("groq");
     const result = await callWithRetry(async () => {
       const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method:  "POST",
@@ -80,7 +123,7 @@ async function callLLM(prompt, keys, options = {}) {
         }),
         signal: AbortSignal.timeout(30000),
       });
-      if (res.status === 429) throw Object.assign(new Error("429 rate limit"), { name: "RateLimitError" });
+      if (res.status === 429) { markRateLimited("groq"); throw Object.assign(new Error("429 rate limit"), { name: "RateLimitError" }); }
       if (res.status === 529) throw Object.assign(new Error("529 overloaded"), { name: "OverloadedError" });
       if (!res.ok) throw new Error(`Groq HTTP ${res.status}`);
       const data = await res.json();
@@ -94,6 +137,7 @@ async function callLLM(prompt, keys, options = {}) {
 
   // ── 2. Gemini ─────────────────────────────────────────────────────────────
   if (keys.gemini) {
+    await waitIfCoolingDown("gemini");
     const result = await callWithRetry(async () => {
       const res = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${keys.gemini}`,
@@ -108,7 +152,7 @@ async function callLLM(prompt, keys, options = {}) {
           signal: AbortSignal.timeout(30000),
         }
       );
-      if (res.status === 429) throw Object.assign(new Error("429 rate limit"), { name: "RateLimitError" });
+      if (res.status === 429) { markRateLimited("gemini"); throw Object.assign(new Error("429 rate limit"), { name: "RateLimitError" }); }
       if (res.status === 529) throw Object.assign(new Error("529 overloaded"), { name: "OverloadedError" });
       if (!res.ok) throw new Error(`Gemini HTTP ${res.status}`);
       const data = await res.json();
@@ -123,6 +167,7 @@ async function callLLM(prompt, keys, options = {}) {
   // ── 3. OpenRouter — user key first, then server-level env key ────────────
   const openrouterKey = keys.openrouter || SERVER_OPENROUTER_KEY;
   if (openrouterKey) {
+    await waitIfCoolingDown("openrouter");
     const result = await callWithRetry(async () => {
       const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method:  "POST",
@@ -141,7 +186,7 @@ async function callLLM(prompt, keys, options = {}) {
         }),
         signal: AbortSignal.timeout(45000),
       });
-      if (res.status === 429) throw Object.assign(new Error("429 rate limit"), { name: "RateLimitError" });
+      if (res.status === 429) { markRateLimited("openrouter"); throw Object.assign(new Error("429 rate limit"), { name: "RateLimitError" }); }
       if (res.status === 529) throw Object.assign(new Error("529 overloaded"), { name: "OverloadedError" });
       if (!res.ok) throw new Error(`OpenRouter HTTP ${res.status}`);
       const data = await res.json();

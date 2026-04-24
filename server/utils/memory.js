@@ -96,7 +96,10 @@ async function updateMemorySection(clientId, section, updates) {
   const ref     = db.collection(COLLECTION).doc(clientId);
   const doc     = await ref.get();
   const current = doc.exists ? (doc.data()[section] || {}) : {};
-  const merged  = { ...current, ...updates };
+
+  // Strip undefined values — Firestore rejects them
+  const safeUpdates = JSON.parse(JSON.stringify(updates, (k, v) => v === undefined ? null : v));
+  const merged  = { ...current, ...safeUpdates };
 
   await ref.set({
     [section]:  merged,
