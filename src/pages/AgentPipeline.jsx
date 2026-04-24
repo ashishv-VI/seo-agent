@@ -2185,10 +2185,10 @@ function FullKeywordsView({ kw, bg2, bg3, bdr, txt, txt2 }) {
   // Flatten all cluster keywords with their cluster name
   const allKws = Object.entries(clusters)
     .filter(([k]) => k !== "gaps")
-    .flatMap(([cluster, items]) => (items||[]).map(k => ({ ...k, cluster })));
+    .flatMap(([cluster, items]) => (Array.isArray(items) ? items : []).map(k => ({ ...k, cluster })));
 
   const clusterNames = ["all", ...Object.keys(clusters).filter(k => k !== "gaps")];
-  const displayed    = activeCluster === "all" ? allKws : (clusters[activeCluster]||[]).map(k => ({ ...k, cluster:activeCluster }));
+  const displayed    = activeCluster === "all" ? allKws : (Array.isArray(clusters[activeCluster]) ? clusters[activeCluster] : []).map(k => ({ ...k, cluster:activeCluster }));
 
   // Stats bar
   const totalKws   = allKws.length;
@@ -2322,7 +2322,7 @@ function FullKeywordsView({ kw, bg2, bg3, bdr, txt, txt2 }) {
             🚨 Content Gaps — pages you should create ({kw.gaps.length})
           </div>
           <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))", gap:8 }}>
-            {kw.gaps.map((g,i)=>(
+            {(kw.gaps||[]).map((g,i)=>(
               <div key={i} style={{ background:bg2, border:"1px solid #DC262633", borderRadius:10, padding:"12px 14px", borderLeft:"3px solid #DC2626" }}>
                 <div style={{ fontSize:12, color:txt, fontWeight:700, marginBottom:4 }}>{g.keyword}</div>
                 <div style={{ fontSize:11, color:txt2, marginBottom:6 }}>{g.reason}</div>
@@ -2339,7 +2339,7 @@ function FullKeywordsView({ kw, bg2, bg3, bdr, txt, txt2 }) {
           <div style={{ fontSize:11, fontWeight:700, color:"#0891B2", textTransform:"uppercase", marginBottom:10 }}>
             ⭐ Featured Snippet Opportunities ({kw.snippetOpportunities.length})
           </div>
-          {kw.snippetOpportunities.map((s,i)=>(
+          {(kw.snippetOpportunities||[]).map((s,i)=>(
             <div key={i} style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:10, padding:"12px 14px", marginBottom:8 }}>
               <div style={{ display:"flex", justifyContent:"space-between", marginBottom:6 }}>
                 <span style={{ fontSize:13, color:txt, fontWeight:700 }}>{s.keyword}</span>
