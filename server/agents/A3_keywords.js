@@ -271,15 +271,19 @@ Generate 5-8 keywords per cluster. Make them realistic and specific to the busin
   // Only applies to keywords that have existed for 90+ days AND have attribution data.
   try {
     const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+    // Simple single-field query to avoid composite index requirement
     const convSnap = await db.collection("conversions")
       .where("clientId", "==", clientId)
-      .where("submittedAt", ">=", ninetyDaysAgo)
       .get();
 
     const leadsByKeyword = {};
     convSnap.docs.forEach(d => {
-      const kw = (d.data().gscKeyword || "").toLowerCase();
-      if (kw) leadsByKeyword[kw] = (leadsByKeyword[kw] || 0) + 1;
+      const data = d.data();
+      // Filter by date in memory — avoids composite index requirement
+      if (data.submittedAt && data.submittedAt >= ninetyDaysAgo) {
+        const kw = (data.gscKeyword || "").toLowerCase();
+        if (kw) leadsByKeyword[kw] = (leadsByKeyword[kw] || 0) + 1;
+      }
     });
 
     // Check historical rankings — if keyword has had rankings for 90+ days with 0 leads, deprioritize
