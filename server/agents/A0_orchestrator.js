@@ -21,6 +21,14 @@
 
 "use strict";
 
+// ══════════════════════════════════════════════════════════════════════════════
+// LAYER 2 — LIVE KNOWLEDGE ENGINE CONSTANTS
+// Knowledge auto-refreshes every 7 days from latest SEO news/updates
+// ══════════════════════════════════════════════════════════════════════════════
+const KNOWLEDGE_CACHE_KEY  = "seo_head_knowledge_v4";
+const KNOWLEDGE_TTL_MS     = 7 * 24 * 60 * 60 * 1000; // 7 days
+const KNOWLEDGE_CACHE_COLL = "system_knowledge";
+
 const { getClientState, saveState, updateState, getState } = require("../shared-state/stateManager");
 const { db }                                               = require("../config/firebase");
 const { callLLM }                                          = require("../utils/llm");
@@ -663,8 +671,14 @@ async function runFullPipeline(clientId, keys, googleToken = null) {
   };
 
   try {
+    // ── STEP 0: Load live SEO knowledge (L2 — auto-refreshes every 7 days) ──
+    console.log(`[A0-L2] Loading live SEO knowledge...`);
+    const liveKnowledge = await loadLiveKnowledge(keys);
+    const masterPrompt  = buildMasterSystemPrompt(liveKnowledge);
+    console.log(`[A0-L2] Knowledge ready (${liveKnowledge.length} chars)`);
+
     // ── PRE-PIPELINE: SEO Head strategic brief ────────────────────────────
-    console.log(`[A0-SEOHead] 🧠 Building strategic brief...`);
+    console.log(`[A0-SEOHead] Building strategic brief...`);
     const strategy = await buildStrategicBrief(clientId, keys);
 
     if (strategy?.criticalWarnings?.length > 0) {
@@ -888,4 +902,9 @@ module.exports = {
   buildStrategicBrief,
   reviewAgentOutput,
   detectIndustry,
+  loadLiveKnowledge,
+  refreshLiveKnowledge,
+  checkKnowledgeFreshness,
+  buildMasterSystemPrompt,
+  getEmbeddedKnowledge2025,
 };
