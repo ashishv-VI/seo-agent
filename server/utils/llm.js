@@ -10,16 +10,52 @@
  */
 const { recordUsage, checkBudget } = require("./costTracker");
 
-// Server-level OpenRouter key — set OPENROUTER_API_KEY in Render env vars.
+// ── Multi-key pools — rotates across all available keys ───────────────────────
+// Keys come from: user Settings (keys object) + Render environment variables
+// This means free tier limits multiply by number of keys available
+const keyRotation = { groq: 0, gemini: 0, openrouter: 0 };
+
+function getGroqKeys(userKey) {
+  return [
+    userKey,
+    process.env.GROQ_API_KEY_2,
+    process.env.GROQ_API_KEY_3,
+    process.env.GROQ_API_KEY_4,
+  ].filter(Boolean);
+}
+
+function getGeminiKeys(userKey) {
+  return [
+    userKey,
+    process.env.GEMINI_API_KEY_2,
+    process.env.GEMINI_API_KEY_3,
+  ].filter(Boolean);
+}
+
+function getOpenRouterKeys(userKey) {
+  return [
+    userKey,
+    process.env.OPENROUTER_API_KEY,
+    process.env.OPENROUTER_API_KEY_2,
+    process.env.OPENROUTER_API_KEY_3,
+  ].filter(Boolean);
+}
+
+function nextKey(provider, allKeys) {
+  if (!allKeys.length) return null;
+  const key = allKeys[keyRotation[provider] % allKeys.length];
+  keyRotation[provider] = (keyRotation[provider] + 1) % allKeys.length;
+  return key;
+}
+
+// Server-level OpenRouter key — legacy support
 const SERVER_OPENROUTER_KEY = process.env.OPENROUTER_API_KEY || null;
 
 const RETRY_DELAY_MS     = 1500;
-const RATE_LIMIT_WAIT_MS = 60000; // 60s — standard rate-limit window
-const OVERLOAD_WAIT_MS   = 8000;  // 8s — overloaded (529) is usually transient
+const RATE_LIMIT_WAIT_MS = 60000;
+const OVERLOAD_WAIT_MS   = 8000;
 
 // ── Global rate limit cooldown tracker ────────────────────────────────────────
-// Prevents parallel agents all hammering the same provider at once.
-// When one agent hits 429, all other agents respect the same cooldown.
 const providerCooldown = { groq: 0, gemini: 0, openrouter: 0 };
 
 function markRateLimited(provider) {
@@ -109,12 +145,15 @@ async function callLLM(clientIdOrPrompt, keysOrOptions, promptOrOptions = {}, op
   }
 
   // ── 1. Groq ───────────────────────────────────────────────────────────────
-  if (keys.groq) {
+  // ── 1. Groq — rotates across all available keys ──────────────────────────
+  const groqKeys = getGroqKeys(keys.groq);
+  if (groqKeys.length > 0) {
     await waitIfCoolingDown("groq");
+    const groqKey = nextKey("groq", groqKeys);
     const result = await callWithRetry(async () => {
       const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method:  "POST",
-        headers: { Authorization: `Bearer ${keys.groq}`, "Content-Type": "application/json" },
+        headers: { Authorization: `Bearer ${groqKey}`, "Content-Type": "application/json" },
         body:    JSON.stringify({
           model:       "llama-3.1-8b-instant",
           messages,
@@ -135,18 +174,20 @@ async function callLLM(clientIdOrPrompt, keysOrOptions, promptOrOptions = {}, op
     }
   }
 
-  // ── 2. Gemini ─────────────────────────────────────────────────────────────
-  if (keys.gemini) {
+  // ── 2. Gemini — rotates across all available keys ────────────────────────
+  const geminiKeys = getGeminiKeys(keys.gemini);
+  if (geminiKeys.length > 0) {
     await waitIfCoolingDown("gemini");
+    const geminiKey = nextKey("gemini", geminiKeys);
     const result = await callWithRetry(async () => {
       const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${keys.gemini}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
         {
           method:  "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            ...(options.systemPrompt ? { systemInstruction: { parts: [{ text: options.systemPrompt }] } } : {}),
-            contents:         [{ parts: [{ text: prompt }] }],
+            ...(systemPrompt ? { systemInstruction: { parts: [{ text: systemPrompt }] } } : {}),
+            contents:         [{ parts: [{ text: String(prompt || "") }] }],
             generationConfig: { maxOutputTokens: maxTokens, temperature },
           }),
           signal: AbortSignal.timeout(30000),
@@ -164,10 +205,11 @@ async function callLLM(clientIdOrPrompt, keysOrOptions, promptOrOptions = {}, op
     }
   }
 
-  // ── 3. OpenRouter — user key first, then server-level env key ────────────
-  const openrouterKey = keys.openrouter || SERVER_OPENROUTER_KEY;
-  if (openrouterKey) {
+  // ── 3. OpenRouter — rotates across all available keys ────────────────────
+  const openrouterKeys = getOpenRouterKeys(keys.openrouter);
+  if (openrouterKeys.length > 0) {
     await waitIfCoolingDown("openrouter");
+    const openrouterKey = nextKey("openrouter", openrouterKeys);
     const result = await callWithRetry(async () => {
       const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method:  "POST",
