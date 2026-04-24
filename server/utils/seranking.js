@@ -61,7 +61,16 @@ async function getKeywordMetrics(keywords, apiKey, countryCode = "US") {
  */
 async function getDomainKeywords(domain, apiKey, countryCode = "US") {
   if (!apiKey || !domain) return [];
-  const cleanDomain = domain.replace(/^https?:\/\//, "").replace(/\/$/, "");
+  // Clean domain properly — remove protocol, www, trailing slash, paths
+  const cleanDomain = domain
+    .replace(/^https?:\/\//, "")
+    .replace(/^www\./, "")
+    .replace(/\/.*$/, "")
+    .replace(/\/$/, "")
+    .toLowerCase()
+    .trim();
+
+  if (!cleanDomain || cleanDomain.length < 3) return [];
   try {
     const res = await fetch(
       `${SE_BASE}/research/domain/organic/keywords?domain=${encodeURIComponent(cleanDomain)}&country=${countryCode}&limit=50&sort_by=traffic&sort_order=desc`,
