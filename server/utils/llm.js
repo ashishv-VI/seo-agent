@@ -15,26 +15,32 @@ const { recordUsage, checkBudget } = require("./costTracker");
 // This means free tier limits multiply by number of keys available
 const keyRotation = { groq: 0, gemini: 0, openrouter: 0 };
 
-function getGroqKeys(userKey) {
+function getGroqKeys(userKey, keys = {}) {
   return [
     userKey,
+    keys.groq2,
+    keys.groq3,
+    keys.groq4,
     process.env.GROQ_API_KEY_2,
     process.env.GROQ_API_KEY_3,
-    process.env.GROQ_API_KEY_4,
   ].filter(Boolean);
 }
 
-function getGeminiKeys(userKey) {
+function getGeminiKeys(userKey, keys = {}) {
   return [
     userKey,
+    keys.gemini2,
+    keys.gemini3,
     process.env.GEMINI_API_KEY_2,
     process.env.GEMINI_API_KEY_3,
   ].filter(Boolean);
 }
 
-function getOpenRouterKeys(userKey) {
+function getOpenRouterKeys(userKey, keys = {}) {
   return [
     userKey,
+    keys.openrouter2,
+    keys.openrouter3,
     process.env.OPENROUTER_API_KEY,
     process.env.OPENROUTER_API_KEY_2,
     process.env.OPENROUTER_API_KEY_3,
@@ -146,7 +152,7 @@ async function callLLM(clientIdOrPrompt, keysOrOptions, promptOrOptions = {}, op
 
   // ── 1. Groq ───────────────────────────────────────────────────────────────
   // ── 1. Groq — rotates across all available keys ──────────────────────────
-  const groqKeys = getGroqKeys(keys.groq);
+  const groqKeys = getGroqKeys(keys.groq, keys);
   if (groqKeys.length > 0) {
     await waitIfCoolingDown("groq");
     const groqKey = nextKey("groq", groqKeys);
@@ -175,7 +181,7 @@ async function callLLM(clientIdOrPrompt, keysOrOptions, promptOrOptions = {}, op
   }
 
   // ── 2. Gemini — rotates across all available keys ────────────────────────
-  const geminiKeys = getGeminiKeys(keys.gemini);
+  const geminiKeys = getGeminiKeys(keys.gemini, keys);
   if (geminiKeys.length > 0) {
     await waitIfCoolingDown("gemini");
     const geminiKey = nextKey("gemini", geminiKeys);
@@ -206,7 +212,7 @@ async function callLLM(clientIdOrPrompt, keysOrOptions, promptOrOptions = {}, op
   }
 
   // ── 3. OpenRouter — rotates across all available keys ────────────────────
-  const openrouterKeys = getOpenRouterKeys(keys.openrouter);
+  const openrouterKeys = getOpenRouterKeys(keys.openrouter, keys);
   if (openrouterKeys.length > 0) {
     await waitIfCoolingDown("openrouter");
     const openrouterKey = nextKey("openrouter", openrouterKeys);

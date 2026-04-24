@@ -16,6 +16,16 @@ async function getUserKeys(uid) {
     semrush:      userKeys.semrush      || process.env.SEMRUSH_API_KEY    || null,
     google:       userKeys.google       || process.env.GOOGLE_API_KEY     || null,
     gaPropertyId: userKeys.gaPropertyId || process.env.GA_PROPERTY_ID    || null,
+
+    // ── Extra rotation keys — picked up from Render env vars ─────────────
+    // LLM utility uses these to rotate across multiple free-tier keys
+    groq2:        process.env.GROQ_API_KEY_2         || null,
+    groq3:        process.env.GROQ_API_KEY_3         || null,
+    groq4:        process.env.GROQ_API_KEY_4         || null,
+    gemini2:      process.env.GEMINI_API_KEY_2       || null,
+    gemini3:      process.env.GEMINI_API_KEY_3       || null,
+    openrouter2:  process.env.OPENROUTER_API_KEY_2   || null,
+    openrouter3:  process.env.OPENROUTER_API_KEY_3   || null,
   };
 }
 
