@@ -445,7 +445,14 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
         </button>
 
         {/* Notification bell */}
-        <div style={{ position:"relative", cursor:"pointer" }} onClick={() => setActiveTab("alerts")} title="View alerts">
+        <div style={{ position:"relative", cursor:"pointer" }} onClick={async () => {
+          setActiveTab("alerts");
+          if (notifCount > 0) {
+            setNotifCount(0);
+            const token = await getToken().catch(() => null);
+            if (token) fetch(`${API}/api/agents/notifications/read-all`, { method:"POST", headers:{ Authorization:`Bearer ${token}` } }).catch(() => null);
+          }
+        }} title="View alerts">
           <div style={{ padding:"8px 10px", borderRadius:10, border:`1px solid ${bdr}`, background:bg2, fontSize:16 }}>🔔</div>
           {notifCount > 0 && (
             <div style={{ position:"absolute", top:-4, right:-4, background:"#DC2626", color:"#fff", borderRadius:10, fontSize:9, fontWeight:800, padding:"1px 5px", minWidth:16, textAlign:"center" }}>{notifCount}</div>

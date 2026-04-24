@@ -186,11 +186,17 @@ export default function AgencyDashboard({ dark, onClientSelect }) {
                 <div style={{ fontSize:11, color:txt2 }}>{client.website?.replace(/^https?:\/\//, "")}</div>
               </div>
 
-              <div style={{ display:"flex", alignItems:"center" }}>
+              <div style={{ display:"flex", alignItems:"center", gap:4 }}>
                 <span style={{ fontSize:15, fontWeight:800, color:scoreColor(client.seoScore) }}>
                   {client.seoScore ?? "—"}
                 </span>
-                {client.seoScore && <span style={{ fontSize:10, color:txt2, marginLeft:2 }}>/100</span>}
+                {client.seoScore && <span style={{ fontSize:10, color:txt2 }}>/100</span>}
+                {client.scoreStale && (
+                  <span title={`Score last updated ${client.scoreAgeDays} days ago`}
+                    style={{ fontSize:9, padding:"2px 5px", borderRadius:6, background:"#D9770618", color:"#D97706", fontWeight:700, marginLeft:2 }}>
+                    {client.scoreAgeDays}d old
+                  </span>
+                )}
               </div>
 
               <div style={{ display:"flex", alignItems:"center" }}>

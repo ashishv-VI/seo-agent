@@ -73,4 +73,16 @@ const apiLimiter = rateLimit({
   message:       { error: "Too many requests. Slow down." },
 });
 
-module.exports = { authLimiter, agentLimiter, chatLimiter, apiLimiter };
+// ── Pre-sales /audit route: public, no auth — IP-based, tight limit ──────────
+// 10 audits per hour per IP. Without this anyone can call the public audit in a
+// loop and exhaust the monthly LLM budget.
+const presalesLimiter = rateLimit({
+  windowMs:      60 * 60 * 1000, // 1 hour
+  max:           10,
+  keyGenerator:  (req) => req.ip,
+  standardHeaders: true,
+  legacyHeaders:   false,
+  message:       { error: "Audit limit reached. Contact us to run a full audit." },
+});
+
+module.exports = { authLimiter, agentLimiter, chatLimiter, apiLimiter, presalesLimiter };

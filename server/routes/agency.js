@@ -33,12 +33,20 @@ router.get("/dashboard", verifyToken, async (req, res) => {
       const openAlerts = alertSnap ? alertSnap.size : 0;
       const fixesPushed = pushSnap ? pushSnap.size : 0;
       const score = latestScore?.overall || client.seoScore || null;
+      const scoreDate = latestScore?.date || client.pipelineCompletedAt || null;
+      const scoreAgeDays = scoreDate
+        ? Math.floor((Date.now() - new Date(scoreDate).getTime()) / (24 * 60 * 60 * 1000))
+        : null;
+      const scoreStale = scoreAgeDays !== null && scoreAgeDays > 7;
 
       return {
         id:           client.id,
         name:         client.name,
         website:      client.website,
         seoScore:     score,
+        scoreDate,
+        scoreAgeDays,
+        scoreStale,
         pipelineStatus: client.pipelineStatus,
         openAlerts,
         fixesPushed,

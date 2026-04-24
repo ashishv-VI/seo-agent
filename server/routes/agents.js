@@ -1075,6 +1075,23 @@ router.post("/notifications/:notifId/read", verifyToken, async (req, res) => {
   }
 });
 
+// POST mark ALL notifications as read for this user
+router.post("/notifications/read-all", verifyToken, async (req, res) => {
+  try {
+    const snap = await db.collection("notifications")
+      .where("ownerId", "==", req.uid)
+      .where("read", "==", false)
+      .limit(50)
+      .get();
+    const batch = db.batch();
+    snap.docs.forEach(d => batch.update(d.ref, { read: true }));
+    if (!snap.empty) await batch.commit();
+    return res.json({ marked: snap.size });
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
 // ────────────────────────────────────────────────────
 // INTENT MATCH ENGINE
 // ────────────────────────────────────────────────────

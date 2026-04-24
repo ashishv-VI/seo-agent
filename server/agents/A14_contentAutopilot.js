@@ -67,10 +67,18 @@ async function runA14(clientId, keys, maxArticles = 3) {
     p.title.toLowerCase().split(/\s+/).forEach(w => { if (w.length > 4) existingContent.add(w); });
   });
 
-  // Find content gap keywords (high priority, no matching page exists)
+  // Build kill-signal set — keywords A3 flagged as 90+ days ranked, 0 leads
+  const killSet = new Set(
+    (keywords.keywordMap || [])
+      .filter(kw => kw.killSignal === true || kw.priority === "low")
+      .map(kw => kw.keyword.toLowerCase().trim())
+  );
+
+  // Find content gap keywords (high priority, no matching page, not kill-signalled)
   const gapKeywords = (keywords.keywordMap || [])
     .filter(kw => {
       if (kw.priority !== "high") return false;
+      if (killSet.has(kw.keyword.toLowerCase().trim())) return false;
       const kwWords = kw.keyword.toLowerCase().split(/\s+/);
       // Check if any existing page already covers this keyword
       const covered = wpPages.some(p => {

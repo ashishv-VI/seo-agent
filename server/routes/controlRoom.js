@@ -46,6 +46,11 @@ router.get("/:clientId/control-room", verifyToken, async (req, res) => {
 
     const client = clientDocResult.data();
 
+    // Guard: if A1 brief is missing the entire aggregation will crash on undefined reads
+    if (!brief?.websiteUrl) {
+      return res.json({ setupRequired: true, message: "Run onboarding (A1) first to populate Control Room." });
+    }
+
     // ── This Week (GSC signals + week-over-week delta) ─────────────────────
     const gsc        = report?.gscSummary || null;
     const thisSnapW  = weeklySnaps?.[0]?.gsc || null;  // latest weekly snapshot

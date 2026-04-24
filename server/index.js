@@ -19,7 +19,7 @@ process.on("uncaughtException", (err) => {
 // Load rate limiters — graceful fallback if express-rate-limit not yet installed
 let authLimiter, agentLimiter, chatLimiter, apiLimiter;
 try {
-  ({ authLimiter, agentLimiter, chatLimiter, apiLimiter } = require("./middleware/rateLimiter"));
+  ({ authLimiter, agentLimiter, chatLimiter, apiLimiter, presalesLimiter } = require("./middleware/rateLimiter"));
 } catch (e) {
   console.warn("[index] rateLimiter unavailable — using passthrough:", e.message);
   const passthrough = (req, res, next) => next();
@@ -79,7 +79,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // ── A21 Pre-Sales Audit (public — no auth required) ─
 // Used for sales demos: pass ?url=https://example.com, get instant audit
-app.get("/api/presales/audit", async (req, res) => {
+app.get("/api/presales/audit", presalesLimiter, async (req, res) => {
   try {
     const url = req.query.url;
     if (!url) return res.status(400).json({ error: "url query param required" });
@@ -220,9 +220,15 @@ setInterval(async () => {
         // A16: update client AI memory after daily check
         await runA16(doc.id, keys).catch(() => {});
 
-        // CMO: daily self-scheduled wake-up — reads current state + memory,
-        // decides if any action is needed today (re-audit, new content, fix push, etc).
-        // This is what makes the agent "wake up and decide" instead of waiting for a human.
+        // CMO: daily self-scheduled wake-up — skip if pipeline is currently running
+        // to avoid making decisions on half-complete data (e.g. A2 still crawling).
+        const freshClientSnap = await db.collection("clients").doc(doc.id).get().catch(() => null);
+        const freshStatus = freshClientSnap?.data()?.pipelineStatus;
+        if (freshStatus === "running") {
+          console.log(`[daily-monitor] Skipping CMO for ${data.name} — pipeline is running`);
+          continue;
+        }
+
         try {
           const { runCMO } = require("./agents/CMO_agent");
           const cmoResult = await runCMO(doc.id, keys);

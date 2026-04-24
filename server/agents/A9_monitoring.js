@@ -26,26 +26,49 @@ async function generateReport(clientId, keys, gscToken = null) {
   if (!brief?.signedOff) return { success: false, error: "A1 brief not signed off" };
 
   // ── GSC Data (if token available) ─────────────────
+  // GSC has a 3-day data delay. We offset endDate by 3 days so the window
+  // actually contains full data — without this the last 3 days appear as zeros
+  // and trend calculations show false drops.
   let gscSummary = null;
   if (gscToken && brief.websiteUrl) {
     try {
-      const endDate   = new Date().toISOString().split("T")[0];
-      const startDate = new Date(Date.now() - 28*24*60*60*1000).toISOString().split("T")[0];
-      const apiUrl    = `https://searchconsole.googleapis.com/webmasters/v3/sites/${encodeURIComponent(brief.websiteUrl)}/searchAnalytics/query`;
-      const res = await fetch(apiUrl, {
-        method:  "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${gscToken}` },
-        body:    JSON.stringify({ startDate, endDate, dimensions: ["query"], rowLimit: 10 }),
-        signal:  AbortSignal.timeout(20000),
-      });
-      const data = await res.json();
-      if (data.rows) {
-        const rows          = data.rows;
-        const totalClicks   = rows.reduce((a, r) => a + r.clicks, 0);
-        const totalImpress  = rows.reduce((a, r) => a + r.impressions, 0);
-        const avgCTR        = rows.length ? (rows.reduce((a,r) => a+r.ctr, 0)/rows.length*100).toFixed(1) : 0;
-        const avgPos        = rows.length ? (rows.reduce((a,r) => a+r.position, 0)/rows.length).toFixed(1) : 0;
-        gscSummary = { totalClicks, totalImpress, avgCTR, avgPos, topKeywords: rows.slice(0,5).map(r=>({ keyword: r.keys[0], clicks: r.clicks, position: r.position.toFixed(1) })), period: `${startDate} → ${endDate}` };
+      const gscDelay  = 3 * 24 * 60 * 60 * 1000; // GSC 3-day lag
+      const now       = Date.now();
+      // Current 28-day window (offset by 3 days)
+      const endDate   = new Date(now - gscDelay).toISOString().split("T")[0];
+      const startDate = new Date(now - gscDelay - 28*24*60*60*1000).toISOString().split("T")[0];
+      // Prior 28-day window for trend comparison
+      const prevEnd   = new Date(now - gscDelay - 29*24*60*60*1000).toISOString().split("T")[0];
+      const prevStart = new Date(now - gscDelay - 57*24*60*60*1000).toISOString().split("T")[0];
+
+      const apiUrl = `https://searchconsole.googleapis.com/webmasters/v3/sites/${encodeURIComponent(brief.websiteUrl)}/searchAnalytics/query`;
+      const headers = { "Content-Type": "application/json", "Authorization": `Bearer ${gscToken}` };
+
+      const [currRes, prevRes] = await Promise.all([
+        fetch(apiUrl, { method:"POST", headers, body: JSON.stringify({ startDate, endDate, dimensions:["query"], rowLimit:10 }), signal: AbortSignal.timeout(20000) }),
+        fetch(apiUrl, { method:"POST", headers, body: JSON.stringify({ startDate:prevStart, endDate:prevEnd, dimensions:["query"], rowLimit:10 }), signal: AbortSignal.timeout(20000) }),
+      ]);
+      const currData = await currRes.json();
+      const prevData = await prevRes.json().catch(() => ({}));
+
+      if (currData.rows) {
+        const rows         = currData.rows;
+        const prevRows     = prevData.rows || [];
+        const totalClicks  = rows.reduce((a, r) => a + r.clicks, 0);
+        const totalImpress = rows.reduce((a, r) => a + r.impressions, 0);
+        const avgCTR       = rows.length ? (rows.reduce((a,r) => a+r.ctr, 0)/rows.length*100).toFixed(1) : 0;
+        const avgPos       = rows.length ? (rows.reduce((a,r) => a+r.position, 0)/rows.length).toFixed(1) : 0;
+        const prevClicks   = prevRows.reduce((a, r) => a + r.clicks, 0);
+        const prevImpress  = prevRows.reduce((a, r) => a + r.impressions, 0);
+        gscSummary = {
+          totalClicks, totalImpress, avgCTR, avgPos,
+          prevClicks, prevImpress,
+          clicksDelta:     prevClicks  > 0 ? Math.round(((totalClicks  - prevClicks)  / prevClicks)  * 100) : null,
+          impressionsDelta: prevImpress > 0 ? Math.round(((totalImpress - prevImpress) / prevImpress) * 100) : null,
+          topKeywords: rows.slice(0,5).map(r=>({ keyword: r.keys[0], clicks: r.clicks, position: r.position.toFixed(1) })),
+          period:      `${startDate} → ${endDate}`,
+          dataNote:    "GSC data current as of " + endDate + " (3-day lag applied)",
+        };
       }
     } catch { /* skip */ }
   }

@@ -19,8 +19,8 @@ const { db }                  = require("../config/firebase");
  */
 async function runCMO(clientId, keys) {
   try {
-  // Load all available pipeline data
-  const [brief, audit, keywords, competitor, onpage, technical, geo, report, rankings] = await Promise.all([
+  // Load all available pipeline data + A17 quality review
+  const [brief, audit, keywords, competitor, onpage, technical, geo, report, rankings, a17Review] = await Promise.all([
     getState(clientId, "A1_brief").catch(() => null),
     getState(clientId, "A2_audit").catch(() => null),
     getState(clientId, "A3_keywords").catch(() => null),
@@ -30,9 +30,24 @@ async function runCMO(clientId, keys) {
     getState(clientId, "A8_geo").catch(() => null),
     getState(clientId, "A9_report").catch(() => null),
     getState(clientId, "A10_rankings").catch(() => null),
+    getState(clientId, "A17_review").catch(() => null),
   ]);
 
   if (!brief) return { success: false, error: "No brief — run A1 first" };
+
+  // ── A17 quality scores — downweight low-confidence agent data ─────────────
+  // A17 scores each agent output 0–1. If an agent scored < 0.5 its data is
+  // unreliable. We build a quality map so extractSignals + the LLM prompt can
+  // treat low-quality outputs as directional hints rather than hard signals.
+  const agentQuality = {};
+  if (a17Review?.scores) {
+    for (const [agentId, scoreData] of Object.entries(a17Review.scores)) {
+      agentQuality[agentId] = typeof scoreData === "number" ? scoreData : (scoreData?.score ?? 1);
+    }
+  }
+  const lowQualityAgents = Object.entries(agentQuality)
+    .filter(([, score]) => score < 0.5)
+    .map(([id]) => id);
 
   // ── Load client fix history (A16 memory) ─────────
   const clientMemory = await db.collection("client_memory").doc(clientId).get()
@@ -114,9 +129,9 @@ async function runCMO(clientId, keys) {
   const signals = extractSignals({ brief, audit, keywords, competitor, onpage, technical, geo, report, rankings });
 
   // ── LLM decision ──────────────────────────────────
-  // Prompt now tells the LLM which playbooks are proven to fail for this client
-  // + industry, so it stops proposing them in the first place.
-  const prompt = buildCMOPrompt(brief, signals, patternSummary, { failingPlaybooks, allowedAgents });
+  // Prompt tells the LLM which playbooks are proven to fail + which agent outputs
+  // are low quality (A17 score < 0.5) so it treats them as directional only.
+  const prompt = buildCMOPrompt(brief, signals, patternSummary, { failingPlaybooks, allowedAgents, lowQualityAgents });
   let decision;
   try {
     const raw = await callLLM(prompt, keys, { maxTokens: 2000, temperature: 0.2 });
@@ -146,17 +161,46 @@ async function runCMO(clientId, keys) {
 
   // ── Schedule next agents ──────────────────────────
   const nextAgents = (decision.nextAgents || []).slice(0, 3);
+  const confidence = decision.confidence || 0.7;
+
   if (nextAgents.length > 0) {
     await db.collection("cmo_queue").add({
       clientId,
       decision:    decision.decision,
       reasoning:   decision.reasoning,
       nextAgents,
-      confidence:  decision.confidence || 0.7,
+      confidence,
       kpiImpact:   decision.kpiImpact  || [],
       status:      "pending",
       createdAt:   new Date().toISOString(),
     });
+
+    // ── Medium-confidence (0.7–0.84): create in-app notification asking for approval.
+    // Previously these items were queued but silently skipped by the cmo_queue consumer
+    // (which only auto-executes ≥0.85). The user never knew a decision was waiting.
+    if (confidence >= 0.7 && confidence < 0.85) {
+      try {
+        const clientDoc = await db.collection("clients").doc(clientId).get().catch(() => null);
+        const ownerId   = clientDoc?.data()?.ownerId;
+        if (ownerId) {
+          await db.collection("notifications").add({
+            clientId,
+            ownerId,
+            type:    "cmo_approval_needed",
+            title:   `CMO Recommendation — Approval Needed`,
+            message: `${decision.decision || "Strategic action ready"}. Confidence: ${Math.round(confidence * 100)}%. Agents: ${nextAgents.join(", ")}. Open CMO tab to approve.`,
+            meta:    { confidence, nextAgents, reasoning: decision.reasoning },
+            read:    false,
+            createdAt: new Date().toISOString(),
+          });
+        }
+      } catch { /* non-blocking */ }
+    }
+
+    // ── Below 0.7: flag as "needs more data" — still visible, not auto-executed
+    if (confidence < 0.7) {
+      decision.reasoning = `${decision.reasoning || ""} [Low confidence — more pipeline data needed before acting]`;
+    }
   }
 
   const result = {
@@ -168,6 +212,8 @@ async function runCMO(clientId, keys) {
     kpiImpact:   decision.kpiImpact   || [],
     signals,
     patternStats,
+    agentQuality,
+    lowQualityAgents,
     decidedAt:   new Date().toISOString(),
   };
 
@@ -538,7 +584,7 @@ function buildPatternSummary(globalPatterns, clientMemory, businessType = "") {
 
 // ── LLM prompt ────────────────────────────────────
 function buildCMOPrompt(brief, signals, patternSummary = null, vetoContext = {}) {
-  const { failingPlaybooks = new Set(), allowedAgents = null } = vetoContext;
+  const { failingPlaybooks = new Set(), allowedAgents = null, lowQualityAgents = [] } = vetoContext;
   const allAgents = ["A2", "A5", "A6", "A7", "A11", "A14"];
   const pickFrom  = allowedAgents && allowedAgents.length > 0
     ? allowedAgents.filter(a => allAgents.includes(a))
@@ -546,6 +592,10 @@ function buildCMOPrompt(brief, signals, patternSummary = null, vetoContext = {})
 
   const vetoBlock = failingPlaybooks.size > 0
     ? `\n## DO NOT PROPOSE THESE PLAYBOOKS\nThe following playbooks have been proven to FAIL (either for this client or this industry):\n${[...failingPlaybooks].map(p => `- ${p}`).join("\n")}\nDo NOT propose any agent that belongs to these playbooks. Pick a different approach.\n`
+    : "";
+
+  const qualityWarning = lowQualityAgents.length > 0
+    ? `\n## LOW QUALITY DATA WARNING\nA17 Reviewer flagged these agent outputs as low quality (score <0.5). Treat signals from them as directional hints only — do NOT make high-confidence decisions based solely on: ${lowQualityAgents.join(", ")}.\n`
     : "";
 
   return `You are the CMO Agent for an SEO AI platform. Your job is to analyse the signals below and decide the single most impactful next action for this client.
@@ -569,7 +619,7 @@ ${pickFrom.map(a => {
   const labels = { A2: "Re-audit (if critical issues or drops)", A5: "Title/meta rewrite (if CTR is low)", A6: "On-page optimisation (if on-page issues)", A7: "Technical/speed fix (if PageSpeed poor)", A11: "Link building (if keywords stuck on page 2)", A14: "Content creation (if content gaps found)" };
   return `- ${a}: ${labels[a] || a}`;
 }).join("\n")}
-${vetoBlock}${patternSummary ? `\n## Learning — What Has Worked (use this to improve confidence)\n${patternSummary}\n` : ""}
+${vetoBlock}${qualityWarning}${patternSummary ? `\n## Learning — What Has Worked (use this to improve confidence)\n${patternSummary}\n` : ""}
 Return ONLY valid JSON:
 {
   "decision": "one sentence describing the strategic focus",
