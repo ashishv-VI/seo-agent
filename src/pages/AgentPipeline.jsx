@@ -3399,6 +3399,53 @@ function FullContentView({ content, bg2, bg3, bdr, txt, txt2 }) {
 
   return (
     <div>
+      {/* ── 2025 Content Quality Banner ───────────────────────────── */}
+      <div style={{ background: "#FFF3CD", border:"1px solid #D97706", borderRadius:10, padding:"12px 16px", marginBottom:14 }}>
+        <div style={{ fontSize:12, fontWeight:700, color:"#92400E", marginBottom:8 }}>📋 2025 People-First Content Checklist</div>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(220px,1fr))", gap:6 }}>
+          {[
+            { label:"Original angle", desc:"Does this say something no one else has said?", key:"originalAngle" },
+            { label:"First-hand experience", desc:"Does the author have real experience with this?", key:"experience" },
+            { label:"AI Overview defence", desc:"Is this transactional enough to survive zero-click?", key:"aiDefence" },
+            { label:"Topical cluster fit", desc:"Does this complete the authority hub?", key:"clusterFit" },
+            { label:"EEAT signals", desc:"Author credentials, case studies, data cited?", key:"eeat" },
+            { label:"People-first", desc:"Would a user feel satisfied — not cheated?", key:"peoplefirst" },
+          ].map(item => {
+            const passed = d.peopleFirstChecks?.[item.key];
+            const color  = passed === true ? "#059669" : passed === false ? "#DC2626" : "#D97706";
+            const icon   = passed === true ? "✅" : passed === false ? "❌" : "⚠️";
+            return (
+              <div key={item.key} style={{ background:"#fff", borderRadius:8, padding:"8px 10px", border:`1px solid ${color}33` }}>
+                <div style={{ fontSize:11, fontWeight:700, color, marginBottom:2 }}>{icon} {item.label}</div>
+                <div style={{ fontSize:10, color:"#6B7280" }}>{item.desc}</div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── Topical Authority Plan ─────────────────────────────────── */}
+      {(d.topicalClusters || d.contentClusters || content.clusters) && (
+        <div style={{ background:bg2, border:`1px solid ${bdr}`, borderLeft:"4px solid #443DCB", borderRadius:10, padding:"12px 16px", marginBottom:14 }}>
+          <div style={{ fontSize:12, fontWeight:700, color:"#443DCB", marginBottom:8 }}>🏛️ Topical Authority Architecture</div>
+          <div style={{ fontSize:11, color:txt2, marginBottom:10 }}>
+            To rank consistently, build content hubs — one pillar page + cluster pages per topic. Google rewards sites that are the definitive resource on fewer topics.
+          </div>
+          {(d.topicalClusters || []).slice(0,3).map((cluster, i) => (
+            <div key={i} style={{ background:bg3, borderRadius:8, padding:"10px 12px", marginBottom:6 }}>
+              <div style={{ fontSize:12, fontWeight:700, color:txt, marginBottom:4 }}>
+                📌 {cluster.pillarTopic || cluster.topic || `Cluster ${i+1}`}
+              </div>
+              <div style={{ display:"flex", flexWrap:"wrap", gap:4 }}>
+                {(cluster.clusterPages || cluster.pages || []).map((p, j) => (
+                  <span key={j} style={{ fontSize:10, padding:"2px 8px", borderRadius:6, background:"#443DCB18", color:"#443DCB" }}>{p}</span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Summary Cards */}
       <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:10, marginBottom:16 }}>
         {[

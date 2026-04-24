@@ -423,6 +423,34 @@ export default function PrintReport({ client, state, brand = {} }) {
             </div>
           )}
 
+          {/* SEO Head Executive Summary */}
+          {client?.seoHeadSummary && (
+            <div style={{
+              background:"#1F386411", borderLeft:"4px solid #1F3864",
+              borderRadius:"0 6px 6px 0", padding:"12px 16px", marginBottom:8,
+            }}>
+              <div style={{ fontSize:10, color:"#1F3864", fontWeight:800, marginBottom:5, textTransform:"uppercase", letterSpacing:0.8 }}>
+                🧠 SEO Head Executive Summary
+              </div>
+              <div style={{ fontSize:13, color:TX, lineHeight:1.8 }}>{client.seoHeadSummary}</div>
+            </div>
+          )}
+
+          {/* SEO Head Quick Wins */}
+          {(client?.seoHeadStrategy?.quickWins || []).length > 0 && (
+            <div style={{ marginBottom:8 }}>
+              <div style={{ fontSize:10, color:"#059669", fontWeight:800, marginBottom:6, textTransform:"uppercase", letterSpacing:0.8 }}>
+                ✅ Quick Wins (0-30 days)
+              </div>
+              {(client.seoHeadStrategy.quickWins || []).slice(0,3).map((win, i) => (
+                <div key={i} style={{ display:"flex", alignItems:"flex-start", gap:8, marginBottom:5, padding:"6px 10px", background:"#F0FDF4", borderRadius:6 }}>
+                  <span style={{ color:"#059669", fontWeight:700, fontSize:12 }}>{i+1}.</span>
+                  <span style={{ fontSize:12, color:TX, lineHeight:1.5 }}>{win}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
           <PageFooter url={url} page={3} />
         </div>
 
