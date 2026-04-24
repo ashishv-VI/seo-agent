@@ -643,6 +643,45 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
             </div>
           )}
 
+          {/* ── A0 SEO Head Strategy Panel ───────────────────────────── */}
+          {client?.seoHeadStrategy && (
+            <div style={{ background: dark ? "#1a1f2e" : "#EEF4FF", border: `1px solid ${dark ? "#2d3a5a" : "#B8D0F8"}`, borderLeft: "4px solid #443DCB", borderRadius: 12, padding: "14px 18px", marginBottom: 14 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 18 }}>🧠</span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: "#443DCB" }}>SEO Head Priority</span>
+                </div>
+                {client?.seoHeadStrategyAt && (
+                  <span style={{ fontSize: 10, color: txt2 }}>Updated {new Date(client.seoHeadStrategyAt).toLocaleDateString()}</span>
+                )}
+              </div>
+              {/* Top Priority */}
+              <div style={{ fontSize: 13, fontWeight: 700, color: txt, marginBottom: 10, padding: "8px 12px", background: dark ? "#243050" : "#fff", borderRadius: 8, border: `1px solid ${dark ? "#2d3a5a" : "#D0E4FF"}` }}>
+                🎯 {client.seoHeadStrategy.topPriority}
+              </div>
+              {/* Warnings */}
+              {(client.seoHeadStrategy.criticalWarnings || []).length > 0 && (
+                <div style={{ marginBottom: 10 }}>
+                  {(client.seoHeadStrategy.criticalWarnings || []).slice(0, 2).map((w, i) => (
+                    <div key={i} style={{ fontSize: 11, color: "#DC2626", padding: "4px 10px", background: "#FEF2F2", borderRadius: 6, marginBottom: 4, borderLeft: "3px solid #DC2626" }}>
+                      ⚠️ {w}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {/* Quick Wins */}
+              {(client.seoHeadStrategy.quickWins || []).length > 0 && (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 6 }}>
+                  {(client.seoHeadStrategy.quickWins || []).slice(0, 3).map((win, i) => (
+                    <div key={i} style={{ fontSize: 11, color: "#059669", padding: "5px 10px", background: dark ? "#0a2a1a" : "#F0FDF4", borderRadius: 6, border: `1px solid ${dark ? "#134e2a" : "#BBF7D0"}` }}>
+                      ✅ {win}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Visual Pipeline */}
           <div style={s.card}>
             <div style={{ fontSize:12, fontWeight:600, color:txt, marginBottom:12 }}>Agent Status Overview</div>
@@ -793,7 +832,7 @@ export default function AgentPipeline({ dark, clientId, onBack }) {
 
       {/* Report Tab */}
       {activeTab==="report" && state.A9_report && (
-        <FullReportView report={state.A9_report} dark={dark} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2} />
+        <FullReportView report={{...state.A9_report, seoHeadSummary: client?.seoHeadSummary, seoHeadSummaryAt: client?.seoHeadSummaryAt}} dark={dark} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2} />
       )}
 
       {/* Link Building Tab */}
@@ -2264,7 +2303,7 @@ function FullKeywordsView({ kw, bg2, bg3, bdr, txt, txt2 }) {
 
       {/* Table header */}
       <div style={{ display:"grid", gridTemplateColumns:"2.5fr 1fr 1fr 1fr 1fr 1.5fr", padding:"8px 12px", background:bg3, borderRadius:"8px 8px 0 0", borderBottom:`1px solid ${bdr}`, border:`1px solid ${bdr}` }}>
-        {["Keyword","Volume","Difficulty","CPC","Position","Intent / Page"].map(h => (
+        {["Keyword","Volume","Difficulty","CPC","Position","Intent / AI Risk"].map(h => (
           <div key={h} style={{ fontSize:9, fontWeight:700, color:txt2, textTransform:"uppercase", letterSpacing:0.5 }}>{h}</div>
         ))}
       </div>
@@ -2276,6 +2315,15 @@ function FullKeywordsView({ kw, bg2, bg3, bdr, txt, txt2 }) {
           const posColor = !pos ? "#6B7280" : pos <= 3 ? "#059669" : pos <= 10 ? "#D97706" : "#DC2626";
           const dc       = diffColor[k.difficulty] || "#6B7280";
           const ic       = intentColor[k.intent] || "#6B7280";
+
+          // Zero-click AI Overview risk — based on intent
+          const aiRisk = k.aiOverviewRisk ||
+            (k.intent === "informational" ? "high" :
+             k.intent === "commercial"    ? "medium" :
+             k.intent === "transactional" ? "low" : "medium");
+          const aiRiskColor = aiRisk === "high" ? "#DC2626" : aiRisk === "low" ? "#059669" : "#D97706";
+          const aiRiskLabel = aiRisk === "high" ? "⚠️ AI risk" : aiRisk === "low" ? "✅ Safe" : "~ Medium";
+
           return (
             <div key={i} style={{ display:"grid", gridTemplateColumns:"2.5fr 1fr 1fr 1fr 1fr 1.5fr", padding:"10px 12px", borderBottom:`1px solid ${bdr}`, background: i%2===0 ? bg2 : bg3, alignItems:"center" }}>
               {/* Keyword */}
@@ -2305,10 +2353,12 @@ function FullKeywordsView({ kw, bg2, bg3, bdr, txt, txt2 }) {
               <div style={{ fontSize:13, fontWeight:800, color:posColor }}>
                 {pos ? `#${pos}` : "—"}
               </div>
-              {/* Intent + Page */}
+              {/* Intent + AI Risk */}
               <div>
-                <span style={{ fontSize:9, padding:"2px 7px", borderRadius:8, background:`${ic}22`, color:ic, fontWeight:600, display:"inline-block", marginBottom:2 }}>{k.intent}</span>
-                <div style={{ fontSize:10, color:txt2 }}>{k.suggestedPage}</div>
+                <span style={{ fontSize:9, padding:"2px 7px", borderRadius:8, background:`${ic}22`, color:ic, fontWeight:600, display:"inline-block", marginBottom:3 }}>{k.intent}</span>
+                <div>
+                  <span style={{ fontSize:9, padding:"2px 7px", borderRadius:8, background:`${aiRiskColor}18`, color:aiRiskColor, fontWeight:600 }} title="AI Overview risk — HIGH means Google may show AI answer instead of your link">{aiRiskLabel}</span>
+                </div>
               </div>
             </div>
           );
@@ -2927,7 +2977,7 @@ function FullTechnicalView({ tech, audit, bg2, bg3, bdr, txt, txt2, onRefresh })
 
   const CWV_INFO = {
     lcp: { name:"LCP (Largest Contentful Paint)", good:"< 2.5s", desc:"How fast the main content loads" },
-    fid: { name:"FID / INP (Interactivity)", good:"< 100ms", desc:"How fast the page responds to clicks" },
+    inp: { name:"INP (Interaction to Next Paint)", good:"< 200ms", desc:"How fast the page responds to taps and clicks — replaced FID in March 2024" },
     cls: { name:"CLS (Layout Shift)", good:"< 0.1", desc:"Does content jump around while loading" },
     fcp: { name:"FCP (First Contentful Paint)", good:"< 1.8s", desc:"When the first content appears" },
     tbt: { name:"TBT (Total Blocking Time)", good:"< 200ms", desc:"How long JS blocks the browser" },
@@ -3099,7 +3149,7 @@ function FullTechnicalView({ tech, audit, bg2, bg3, bdr, txt, txt2, onRefresh })
         // Pages with response time data
         const withTime  = pageAudits.filter(p => p.responseTime != null).sort((a,b) => b.responseTime - a.responseTime);
         // Pages with performance-related issues
-        const perfTypes = ["cwv","lcp","cls","fid","fcp","tbt","slow","response","speed","js","css","minif","cache","redirect"];
+        const perfTypes = ["cwv","lcp","cls","inp","fcp","tbt","slow","response","speed","js","css","minif","cache","redirect"];
         const withIssues = pageAudits.filter(p =>
           (p.issues||[]).some(i => perfTypes.some(t => (i.type||"").includes(t) || (i.detail||"").toLowerCase().includes(t)))
         );
@@ -3201,7 +3251,7 @@ function FullTechnicalView({ tech, audit, bg2, bg3, bdr, txt, txt2, onRefresh })
                   </div>
                 )}
                 <div style={{ marginTop:8, fontSize:11, color:txt2 }}>
-                  💡 Response times are server-side — measured during the A2 audit crawl. For full CWV (LCP, CLS, FID), add a Google API key and re-run.
+                  💡 Response times are server-side — measured during the A2 audit crawl. For full CWV (LCP, INP, CLS), add a Google API key and re-run.
                 </div>
               </div>
             )}
@@ -3487,6 +3537,17 @@ function FullReportView({ report, bg2, bg3, bdr, txt, txt2 }) {
 
   return (
     <div>
+      {/* ── A0 SEO Head Executive Summary ─────────────────────────── */}
+      {report.seoHeadSummary && (
+        <div style={{ background:"#1F386411", border:"1px solid #1F386433", borderLeft:"4px solid #1F3864", borderRadius:10, padding:"14px 18px", marginBottom:14 }}>
+          <div style={{ fontSize:12, fontWeight:700, color:"#1F3864", marginBottom:8 }}>🧠 SEO Head Executive Analysis</div>
+          <div style={{ fontSize:13, color:txt, lineHeight:1.8 }}>{report.seoHeadSummary}</div>
+          {report.seoHeadSummaryAt && (
+            <div style={{ fontSize:10, color:txt2, marginTop:8 }}>Generated {new Date(report.seoHeadSummaryAt).toLocaleDateString()}</div>
+          )}
+        </div>
+      )}
+
       {/* What this report is */}
       <div style={{ background:"#443DCB0d", border:"1px solid #443DCB22", borderRadius:10, padding:"12px 16px", marginBottom:14 }}>
         <div style={{ fontSize:12, fontWeight:700, color:"#443DCB", marginBottom:4 }}>What is this report?</div>

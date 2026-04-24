@@ -116,7 +116,7 @@ function buildSerpSection(serpIntel) {
   return lines.join("\n");
 }
 
-async function runA5(clientId, keys) {
+async function runA5(clientId, keys, masterPrompt) {
   try {
   const brief      = await getState(clientId, "A1_brief");
   const audit      = await getState(clientId, "A2_audit");
@@ -213,7 +213,7 @@ Generate optimised content recommendations. Return ONLY valid JSON:
 
   let contentData;
   try {
-    const response = await callLLM(prompt, keys, { maxTokens: 4000, temperature: 0.4 });
+    const response = await callLLM(clientId, keys, prompt, {system: masterPrompt || undefined,  maxTokens: 4000, temperature: 0.4 });
     contentData = parseJSON(response);
   } catch (e) {
     console.warn(`[A5] LLM failed — using rule-based content fallback: ${e.message}`);

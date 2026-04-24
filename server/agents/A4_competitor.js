@@ -85,14 +85,14 @@ async function crawlCompetitorPage(url) {
 }
 
 // ── Discover competitors from SERP results ─────────────────────────────────
-async function discoverCompetitorsFromSERP(keywords, targetDomain, location = "in") {
+async function discoverCompetitorsFromSERP(keywords, targetDomain, location = "in", serpApiKey = null) {
   const domainCount = {};   // domain → { count, positions, snippets, titles }
 
   // Check top 5 keywords via SERP
   const checkKws = keywords.slice(0, 5);
   for (const kw of checkKws) {
     try {
-      const serpResult = await getSERP(kw.keyword, { location });
+      const serpResult = await getSERP(kw.keyword, { location, serpApiKey });
       for (const r of serpResult.results || []) {
         if (!r.domain || r.domain === targetDomain) continue;
         if (!domainCount[r.domain]) {
@@ -122,7 +122,7 @@ async function discoverCompetitorsFromSERP(keywords, targetDomain, location = "i
 }
 
 // ── Main A4 function ───────────────────────────────────────────────────────
-async function runA4(clientId, keys) {
+async function runA4(clientId, keys, masterPrompt) {
   try {
   const brief    = await getState(clientId, "A1_brief");
   const keywords = await getState(clientId, "A3_keywords");
@@ -157,7 +157,7 @@ async function runA4(clientId, keys) {
   if (competitorDomains.length === 0) {
     // Auto-discover from SERP
     console.log("[A4] No competitors provided — auto-discovering from SERP...");
-    serpDiscoveredProfiles = await discoverCompetitorsFromSERP(checkKeywords, targetDomain, location);
+    serpDiscoveredProfiles = await discoverCompetitorsFromSERP(checkKeywords, targetDomain, location, keys.serpapi || keys.serp);
     competitorDomains = serpDiscoveredProfiles.map(p => p.domain);
     autoDiscovered = true;
     console.log(`[A4] Discovered ${competitorDomains.length} competitors: ${competitorDomains.join(", ")}`);
@@ -220,7 +220,7 @@ List the top 5 most likely competitor domains (just domains, no https://, no www
     // Free SERP path — use getSERP (DDG → Bing fallback)
     for (const kw of checkKeywords) {
       try {
-        const serpResult = await getSERP(kw.keyword, { location });
+        const serpResult = await getSERP(kw.keyword, { location, serpApiKey: keys.serpapi || keys.serp });
         const results    = serpResult.results || [];
         const clientPos  = results.findIndex(r => (r.domain || "").includes(targetDomain));
         const compPositions = competitorDomains.map(dom => {
@@ -343,7 +343,7 @@ Based on this REAL data, provide deep competitive analysis. Return ONLY valid JS
 
   let analysis;
   try {
-    const response = await callLLM(prompt, keys, { maxTokens: 4000, temperature: 0.3 });
+    const response = await callLLM(clientId, keys, prompt, {system: masterPrompt || undefined,  maxTokens: 4000, temperature: 0.3 });
     analysis = parseJSON(response);
   } catch (e) {
     analysis = {

@@ -6,7 +6,7 @@ const { callLLM, parseJSON }  = require("../utils/llm");
  * Analysis only — NO automated submissions (human gate on everything)
  * Runs in parallel with A5/A6/A7
  */
-async function runA8(clientId, keys, googleToken) {
+async function runA8(clientId, keys, masterPrompt, googleToken) {
   try {
   const brief      = await getState(clientId, "A1_brief");
   const audit      = await getState(clientId, "A2_audit");
@@ -198,7 +198,7 @@ Provide a comprehensive GEO and off-page analysis. Return ONLY valid JSON:
 
   let geoData = ruleGeo; // always have output
   try {
-    const response  = await callLLM(prompt, keys, { maxTokens: 4000, temperature: 0.3 });
+    const response  = await callLLM(clientId, keys, prompt, {system: masterPrompt || undefined,  maxTokens: 4000, temperature: 0.3 });
     const llmGeo    = parseJSON(response);
     if (llmGeo.napStatus || llmGeo.gbpStatus || llmGeo.recommendations?.length > 0) {
       geoData = { ...ruleGeo, ...llmGeo, generatedBy: "llm+rules" };

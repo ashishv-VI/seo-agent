@@ -19,7 +19,7 @@ function sanitize(obj) {
  * Runs in parallel with A5 — no dependency on content
  * Produces implementation specs for HTML + tracking fixes
  */
-async function runA6(clientId, keys) {
+async function runA6(clientId, keys, masterPrompt) {
   try {
   const brief    = await getState(clientId, "A1_brief");
   const audit    = await getState(clientId, "A2_audit");
@@ -338,7 +338,7 @@ Return ONLY valid JSON:
 
   let recommendations = { schemaMarkup: [], trackingSetup: {}, openGraph: { needed: true, tags: [] }, ...ruleRecs };
   try {
-    const response = await callLLM(prompt, keys, { maxTokens: 2000 });
+    const response = await callLLM(clientId, keys, prompt, {system: masterPrompt || undefined,  maxTokens: 2000 });
     const llmRecs  = parseJSON(response);
     // LLM output wins if it has schema markup — otherwise keep rule output
     recommendations = llmRecs.schemaMarkup?.length > 0 ? { ...ruleRecs, ...llmRecs, generatedBy: "llm+rules" } : { ...ruleRecs, generatedBy: "rules" };

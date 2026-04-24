@@ -7,7 +7,7 @@ const { db }                  = require("../config/firebase");
  * Uses Google PageSpeed Insights API for real CWV data
  * Runs in parallel with A5/A6
  */
-async function runA7(clientId, keys) {
+async function runA7(clientId, keys, masterPrompt) {
   try {
   const brief = await getState(clientId, "A1_brief");
   const audit = await getState(clientId, "A2_audit");
@@ -169,7 +169,7 @@ Provide technical fix recommendations. Return ONLY valid JSON:
 
   let techRecs = ruleTechRecs; // default: rule-based (zero API dependency)
   try {
-    const response = await callLLM(prompt, keys, { maxTokens: 2500 });
+    const response = await callLLM(clientId, keys, prompt, {system: masterPrompt || undefined,  maxTokens: 2500 });
     const llmRecs  = parseJSON(response);
     // Merge: LLM enriches rule output — but rules are the safety net
     techRecs = {

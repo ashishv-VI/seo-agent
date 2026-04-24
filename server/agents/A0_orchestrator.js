@@ -775,12 +775,13 @@ async function runFullPipeline(clientId, keys, googleToken = null) {
     db.collection("clients").doc(clientId).update({ [`agents.${agentId}`]: status }).catch(() => {});
 
   // Smart exec: run agent → mark status → SEO Head reviews output
+  // masterPrompt is available in closure from loadLiveKnowledge above
   const exec = async (agentId, fn, skipReview = false) => {
     const timeout = AGENT_TIMEOUT_MS[agentId] || DEFAULT_TIMEOUT;
     try {
       await mark(agentId, "running");
       const result = await Promise.race([
-        fn(clientId, keys),
+        fn(clientId, keys, masterPrompt),
         new Promise((_, reject) =>
           setTimeout(() => reject(new Error(`${agentId} timed out after ${timeout / 1000}s`)), timeout)
         ),
@@ -795,7 +796,7 @@ async function runFullPipeline(clientId, keys, googleToken = null) {
 
       // SEO Head reviews every agent output asynchronously
       if (!skipReview) {
-        reviewAgentOutput(clientId, agentId, result, keys).catch(() => {});
+        reviewAgentOutput(clientId, agentId, result, keys, masterPrompt).catch(() => {});
       }
 
       return true;
@@ -867,14 +868,14 @@ async function runFullPipeline(clientId, keys, googleToken = null) {
     console.log(`[A0-SEOHead] 🏷️  Stage 5: On-page optimisation + local SEO...`);
     await Promise.allSettled([
       exec("A6", runA6),
-      exec("A8", (id, k) => runA8(id, k, googleToken)),
+      exec("A8", (id, k, mp) => runA8(id, k, mp, googleToken)),
     ]);
 
     // ── Stage 6: Report + Rank Tracking ──────────────────────────────────
     console.log(`[A0-SEOHead] 📊 Stage 6: Strategy report + rank tracking...`);
     await Promise.allSettled([
-      exec("A9",  (id, k) => generateReport(id, k, null), true),
-      exec("A10", (id, k) => runA10(id, k, googleToken)),
+      exec("A9",  (id, k, mp) => generateReport(id, k, mp, null), true),
+      exec("A10", (id, k, mp) => runA10(id, k, mp, googleToken)),
     ]);
 
     // ── Mark complete ─────────────────────────────────────────────────────

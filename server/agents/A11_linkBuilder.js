@@ -13,7 +13,7 @@ const { saveState, getState }   = require("../shared-state/stateManager");
 const { callLLM, parseJSON }    = require("../utils/llm");
 const { db, FieldValue }        = require("../config/firebase");
 
-async function runA11(clientId, keys) {
+async function runA11(clientId, keys, masterPrompt) {
   try {
   // ── Dependency checks ─────────────────────────────
   const brief      = await getState(clientId, "A1_brief");
@@ -78,7 +78,7 @@ Return ONLY valid JSON (no markdown, no explanation):
   "summary": "2-sentence strategy overview"
 }`;
 
-      const raw    = await callLLM(prompt, keys, { maxTokens: 2500, temperature: 0.3, systemPrompt: "You are an expert SEO link-building strategist. Return only valid JSON." });
+      const raw    = await callLLM(clientId, keys, prompt, {system: masterPrompt || undefined,  maxTokens: 2500, temperature: 0.3, systemPrompt: "You are an expert SEO link-building strategist. Return only valid JSON." });
       const parsed = parseJSON(raw);
       opportunities = parsed.opportunities || [];
       quickWins     = parsed.quickWins     || [];

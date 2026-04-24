@@ -92,7 +92,7 @@ Write an 8-step SEO report. Return ONLY valid JSON:
 
   let reportData;
   try {
-    const response = await callLLM(prompt, keys, { maxTokens: 4000, temperature: 0.5 });
+    const response = await callLLM(clientId, keys, prompt, {system: masterPrompt || undefined,  maxTokens: 4000, temperature: 0.5 });
     reportData = parseJSON(response);
   } catch (e) {
     console.warn(`[A9] LLM failed — using rule-based report fallback: ${e.message}`);

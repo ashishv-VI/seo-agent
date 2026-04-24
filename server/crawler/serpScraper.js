@@ -372,9 +372,56 @@ async function scrapeYahoo(keyword, options = {}) {
   }
 }
 
-// ── Main SERP function — DDG → Bing → Yahoo ───────────────────────────────
+// ── SerpAPI (Paid — most reliable when key available) ─────────────────────
+async function scrapeSerpAPI(keyword, apiKey, options = {}) {
+  const { location = "in" } = options;
+  const gl = location === "uk" ? "gb" : location === "us" ? "us" : location === "au" ? "au" : "in";
+  try {
+    const url = `https://serpapi.com/search.json?q=${encodeURIComponent(keyword)}&api_key=${apiKey}&num=20&gl=${gl}&hl=en&engine=google`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
+    if (!res.ok) return { results: [], source: "serpapi", error: `HTTP ${res.status}` };
+    const data = await res.json();
+    if (data.error) return { results: [], source: "serpapi", error: data.error };
+
+    const results = (data.organic_results || []).map((r, i) => ({
+      position: r.position || i + 1,
+      url:      r.link || "",
+      domain:   r.displayed_link ? r.displayed_link.replace(/^https?:\/\//, "").split("/")[0] : "",
+      title:    r.title || "",
+      snippet:  r.snippet || "",
+    }));
+
+    const features = [];
+    if (data.answer_box)        features.push("featured_snippet");
+    if (data.knowledge_graph)   features.push("knowledge_graph");
+    if (data.related_questions) features.push("people_also_ask");
+    if (data.local_results)     features.push("local_pack");
+    if (data.shopping_results)  features.push("shopping");
+
+    return {
+      keyword,
+      results,
+      features,
+      paaQuestions:    (data.related_questions || []).map(q => q.question).slice(0, 8),
+      relatedSearches: (data.related_searches  || []).map(s => s.query).slice(0, 8),
+      source:    "serpapi",
+      scrapedAt: new Date().toISOString(),
+    };
+  } catch (e) {
+    return { results: [], source: "serpapi", error: e.message };
+  }
+}
+
+// ── Main SERP function — SerpAPI → DDG → Bing → Yahoo ────────────────────
 async function getSERP(keyword, options = {}) {
-  // 1. Try DuckDuckGo first
+  // 0. Use SerpAPI if key provided (most reliable)
+  if (options.serpApiKey) {
+    const serpResult = await scrapeSerpAPI(keyword, options.serpApiKey, options);
+    if (serpResult.results.length >= 3) return serpResult;
+    console.log(`[serpScraper] SerpAPI returned ${serpResult.results.length} results for "${keyword}" — trying free scrapers`);
+  }
+
+  // 1. Try DuckDuckGo
   const ddgResult = await scrapeDDG(keyword, options);
   if (ddgResult.results.length >= 5) return ddgResult;
 
@@ -388,6 +435,8 @@ async function getSERP(keyword, options = {}) {
   const yahooResult = await scrapeYahoo(keyword, options);
   if (yahooResult.results.length >= 3) return yahooResult;
 
+  console.log(`[serpScraper] Yahoo returned ${yahooResult.results.length} results for "${keyword}" — no results found`);
+
   // Return best non-empty result
   return [ddgResult, bingResult, yahooResult].sort((a, b) => b.results.length - a.results.length)[0];
 }
@@ -397,6 +446,7 @@ module.exports = {
   scrapeDDG,
   scrapeBing,
   scrapeYahoo,
+  scrapeSerpAPI,
   scrapeGoogleShopping,
   scrapeAutocomplete,
   extractPAA,

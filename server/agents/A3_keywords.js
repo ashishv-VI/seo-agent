@@ -8,7 +8,7 @@ const { db }                  = require("../config/firebase");
  * Blocked until A2 audit is complete
  * Uses Groq/Gemini for keyword expansion + SerpAPI for live data
  */
-async function runA3(clientId, keys) {
+async function runA3(clientId, keys, masterPrompt) {
   try {
   const brief = await getState(clientId, "A1_brief");
   const audit = await getState(clientId, "A2_audit");
@@ -81,7 +81,7 @@ Generate 5-8 keywords per cluster. Make them realistic and specific to the busin
 
   let keywordData = seedClusters; // always have something
   try {
-    const response = await callLLM(prompt, keys, { maxTokens: 4000, temperature: 0.4 });
+    const response = await callLLM(clientId, keys, prompt, {system: masterPrompt || undefined,  maxTokens: 4000, temperature: 0.4 });
     const llmData  = parseJSON(response);
     // LLM wins if it returned real clusters
     if (llmData.generic?.length > 0 || llmData.longtail?.length > 0) {
