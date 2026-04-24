@@ -8,7 +8,7 @@ const { renderPage, isJSRendered } = require("../utils/jsRenderer");
  * Runs after A1 brief is signed off
  * Checks: SSL, robots.txt, sitemap, meta tags, redirects, response time
  */
-async function runA2(clientId) {
+async function runA2(clientId, keys, masterPrompt) {
   try {
   // Get brief from A1
   const brief = await getState(clientId, "A1_brief");

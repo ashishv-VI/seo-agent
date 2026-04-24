@@ -833,12 +833,8 @@ async function runFullPipeline(clientId, keys, googleToken = null) {
     await mark("A1", "signed_off");
 
     // ── Stage 1: Technical Foundation ─────────────────────────────────────
-    console.log(`[A0-SEOHead] 🔧 Stage 1: Technical audit + CWV...`);
-    const [a2res] = await Promise.allSettled([
-      exec("A2", runA2),
-      exec("A7", runA7),
-    ]);
-    const a2ok = a2res.status === "fulfilled" && a2res.value;
+    console.log(`[A0-SEOHead] 🔧 Stage 1: Technical audit...`);
+    const a2ok = await exec("A2", runA2);
 
     if (!a2ok) {
       await db.collection("clients").doc(clientId).update({
@@ -848,6 +844,10 @@ async function runFullPipeline(clientId, keys, googleToken = null) {
       });
       return;
     }
+
+    // Run A7 CWV after A2 completes (not parallel — prevents rate limit collision)
+    console.log(`[A0-SEOHead] ⚡ Stage 1b: Core Web Vitals...`);
+    await exec("A7", runA7);
 
     // ── Stage 2: Keyword Intelligence ────────────────────────────────────
     console.log(`[A0-SEOHead] 🔍 Stage 2: Keyword research...`);
