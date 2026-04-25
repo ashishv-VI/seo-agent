@@ -208,6 +208,24 @@ setInterval(async () => {
           } catch { /* non-blocking */ }
         }
 
+        // A25: Core Update Scanner — runs daily after A9 alerts, checks E-E-A-T + AI content risk
+        try {
+          const { runA25 } = require("./agents/A25_coreUpdateScanner");
+          const cuResult = await runA25(doc.id, keys);
+          if (cuResult?.highRiskCount > 0) {
+            console.log(`[daily-monitor] A25: ${cuResult.highRiskCount} high-risk core update issue(s) for ${data.name}`);
+            await db.collection("notifications").add({
+              clientId:  doc.id,
+              ownerId:   data.ownerId,
+              type:      "core_update_risk",
+              title:     "Google Core Update Risk Detected",
+              message:   `${cuResult.highRiskCount} high-risk issue(s) found: ${cuResult.overallRisk} risk level. Check Core Update tab in Control Room.`,
+              read:      false,
+              createdAt: new Date().toISOString(),
+            }).catch(() => {});
+          }
+        } catch { /* non-blocking */ }
+
         // Rules Engine: evaluate all IFTTT automation rules
         try {
           const { evaluateRules } = require("./routes/rulesEngine");

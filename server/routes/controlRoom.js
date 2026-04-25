@@ -380,4 +380,60 @@ router.get("/:clientId/war-room", verifyToken, async (req, res) => {
   }
 });
 
+/**
+ * GET /:clientId/competitor-radar
+ * Real-time competitor threat intelligence for the Competitor Radar panel.
+ */
+router.get("/:clientId/competitor-radar", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const clientId = req.params.clientId;
+
+    const [competitorState, a4State, approvalSnap, alertsSnap] = await Promise.all([
+      getState(clientId, "A15_competitorMonitor").catch(() => null),
+      getState(clientId, "A4_competitor").catch(() => null),
+      db.collection("approval_queue")
+        .where("clientId", "==", clientId)
+        .where("type", "==", "competitor_counter_content")
+        .where("status", "==", "pending")
+        .limit(10)
+        .get().catch(() => null),
+      db.collection("alerts")
+        .where("clientId", "==", clientId)
+        .where("source", "==", "A15")
+        .where("resolved", "==", false)
+        .limit(20)
+        .get().catch(() => null),
+    ]);
+
+    const threats = competitorState?.highThreatUrls || [];
+    const results = competitorState?.results || [];
+    const counterContent = competitorState?.counterContentSuggestions || [];
+    const pendingActions = approvalSnap ? approvalSnap.docs.map(d => ({ id: d.id, ...d.data() })) : [];
+    const activeAlerts   = alertsSnap   ? alertsSnap.docs.map(d => ({ id: d.id, ...d.data() }))   : [];
+
+    // Competitor landscape from A4
+    const knownCompetitors = [
+      ...[].concat(a4State?.competitors || []),
+      ...[].concat(a4State?.discoveredCompetitors || []),
+    ].slice(0, 8);
+
+    return res.json({
+      checkedAt:         competitorState?.checkedAt || null,
+      competitorsChecked: competitorState?.competitorsChecked || 0,
+      totalNewPages:     competitorState?.totalNewPages || 0,
+      totalHighThreat:   competitorState?.totalHighThreatPages || 0,
+      threats,
+      results,
+      counterContent,
+      pendingActions,
+      activeAlerts,
+      knownCompetitors,
+      hasData: !!competitorState?.checkedAt,
+    });
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
 module.exports = router;

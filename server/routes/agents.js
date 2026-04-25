@@ -1897,4 +1897,30 @@ router.get("/:clientId/A23/investigations", verifyToken, async (req, res) => {
   }
 });
 
+// POST /:clientId/A25/scan — run Core Update Scanner on-demand
+router.post("/:clientId/A25/scan", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const { runA25 } = require("../agents/A25_coreUpdateScanner");
+    const keys = await getUserKeys(req.uid);
+    const result = await runA25(req.params.clientId, keys);
+    return res.json(result);
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
+// GET /:clientId/A25/results — latest Core Update Scanner results
+router.get("/:clientId/A25/results", verifyToken, async (req, res) => {
+  try {
+    await getClientDoc(req.params.clientId, req.uid);
+    const { getState } = require("../shared-state/stateManager");
+    const result = await getState(req.params.clientId, "A25_coreUpdateScanner");
+    if (!result) return res.json({ notRun: true });
+    return res.json(result);
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
 module.exports = router;

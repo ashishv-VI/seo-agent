@@ -67,6 +67,14 @@ const AGENTS = {
     load: () => require("./A24_strategist").runA24,
     args: (clientId, keys) => [clientId, keys],
   },
+  A25: {
+    load: () => require("./A25_coreUpdateScanner").runA25,
+    args: (clientId, keys) => [clientId, keys],
+  },
+  A15: {
+    load: () => require("./A15_competitorMonitor").runA15,
+    args: (clientId, keys) => [clientId, keys],
+  },
 };
 
 /**

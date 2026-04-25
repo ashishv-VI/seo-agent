@@ -139,22 +139,31 @@ async function runA15(clientId, keys) {
       if (newUrls.length > 0) {
         allNewUrls.push(...newUrls.slice(0, 10));
 
-        // Create alert for significant new content
-        if (newUrls.length >= 2 || prevUrls.size > 0) {
+        // Create alert — P1 if competitor is targeting our high-priority keywords
+        if (newUrls.length >= 1 || prevUrls.size > 0) {
+          // Pre-compute threat scores for this batch
+          const urlsWithScores = newUrls.map(u => ({ url: u, threat: scoreUrlThreat(u) }));
+          const hasHighThreat  = urlsWithScores.some(u => u.threat >= 60);
+          const tier           = hasHighThreat ? "P1" : "P2";
+
           const alertRef = db.collection("alerts").doc();
           newAlerts.push({
             id: alertRef.id,
             ref: alertRef,
             data: {
               clientId,
-              type:      "competitor_new_content",
-              tier:      "P2",
-              source:    "A15",
-              message:   `${competitorUrl} published ${newUrls.length} new page(s) since last check`,
-              detail:    newUrls.slice(0, 5).join(", "),
-              fix:       "Review competitor content and create counter-content for relevant topics",
-              resolved:  false,
-              createdAt: now,
+              type:        "competitor_new_content",
+              tier,
+              severity:    tier.toLowerCase(),
+              source:      "A15",
+              message:     `${competitorUrl} published ${newUrls.length} new page(s)${hasHighThreat ? " — targeting YOUR keywords" : ""}`,
+              detail:      newUrls.slice(0, 5).join(", "),
+              fix:         hasHighThreat
+                ? "Counter-content needed urgently — competitor is attacking your top keywords. A14 can draft a response."
+                : "Review competitor content and create counter-content for relevant topics",
+              resolved:    false,
+              createdAt:   now,
+              highThreat:  hasHighThreat,
             },
           });
         }
@@ -163,6 +172,48 @@ async function runA15(clientId, keys) {
       results.push({ url: competitorUrl, error: e.message, checkedAt: now });
     }
   }
+
+  // ── Threat scoring — how dangerous is each new competitor page? ─────────
+  // Score 0–100 based on keyword overlap with our target keywords.
+  // High score = competitor is directly attacking our best keywords.
+  const ourKeywords = new Set(
+    (keywords?.keywordMap || [])
+      .filter(k => k.priority === "high" || k.priority === "medium")
+      .map(k => k.keyword.toLowerCase())
+  );
+  const ourHighPriority = new Set(
+    (keywords?.keywordMap || [])
+      .filter(k => k.priority === "high")
+      .map(k => k.keyword.toLowerCase())
+  );
+
+  function scoreUrlThreat(url) {
+    const slug  = url.replace(/^https?:\/\/[^/]+/, "").toLowerCase();
+    const words = slug.replace(/[-_/]/g, " ").split(/\s+/).filter(w => w.length > 3);
+    let score   = 0;
+    for (const kw of ourKeywords) {
+      const kwWords = kw.split(/\s+/);
+      if (kwWords.every(w => words.includes(w) || slug.includes(w))) {
+        score += ourHighPriority.has(kw) ? 40 : 20;
+      }
+    }
+    return Math.min(score, 100);
+  }
+
+  // Attach threat score to each new URL in results
+  for (const result of results) {
+    if (result.newUrls) {
+      result.newUrlsWithThreat = result.newUrls.map(url => ({
+        url,
+        threatScore: scoreUrlThreat(url),
+        threatLevel: scoreUrlThreat(url) >= 60 ? "high" : scoreUrlThreat(url) >= 30 ? "medium" : "low",
+      })).sort((a, b) => b.threatScore - a.threatScore);
+      result.highThreatCount = result.newUrlsWithThreat.filter(u => u.threatLevel === "high").length;
+    }
+  }
+
+  // Critical threat: competitor targeting our top keywords — upgrade to P1 alert
+  const highThreatUrls = results.flatMap(r => (r.newUrlsWithThreat || []).filter(u => u.threatLevel === "high"));
 
   // ── Generate counter-content suggestions with AI ───────────────────────
   let counterContentSuggestions = [];
@@ -173,40 +224,52 @@ async function runA15(clientId, keys) {
         .slice(0, 10)
         .map(k => k.keyword);
 
-      const prompt = `You are an SEO strategist. A competitor has published new content. Suggest counter-content for our client.
+      // Prioritise high-threat URLs in the prompt
+      const priorityUrls = [
+        ...highThreatUrls.map(u => u.url),
+        ...allNewUrls.filter(u => !highThreatUrls.find(h => h.url === u)),
+      ].slice(0, 10);
+
+      const prompt = `You are an SEO strategist. A competitor has published new content that overlaps with our target keywords.
 
 Client: ${brief.businessName}
 Website: ${brief.websiteUrl}
 Services: ${[].concat(brief.services || []).join(", ")}
 Our target keywords: ${[].concat(topKeywords || []).join(", ")}
 
-Competitor new pages/URLs:
-${allNewUrls.slice(0, 10).join("\n")}
+Competitor new pages (sorted by relevance to our keywords):
+${priorityUrls.join("\n")}
 
-Analyze these URLs and suggest counter-content. Return ONLY valid JSON:
+For each high-relevance URL, suggest a counter-content piece that covers the same topic but from our client's angle.
+Return ONLY valid JSON:
 {
   "counterContent": [
     {
       "competitorUrl": "their URL",
       "topic": "the topic they covered",
-      "ourAngle": "how we cover it better / differently",
-      "suggestedTitle": "our article title",
+      "ourAngle": "how we cover it better / differently — what unique insight or service angle we bring",
+      "suggestedTitle": "our article title (SEO-optimised)",
       "targetKeyword": "main keyword to target",
       "priority": "high|medium|low",
-      "reason": "why this matters for our SEO"
+      "urgency": "publish within X days/weeks — before Google fully indexes competitor page",
+      "reason": "why this matters for our revenue"
     }
   ],
-  "strategicInsight": "1-2 sentence summary of what this competitor is doing"
+  "strategicInsight": "1-2 sentence summary of what this competitor is doing strategically",
+  "threatLevel": "high|medium|low",
+  "windowOfOpportunity": "how long before competitor content gets fully indexed and ranked"
 }`;
 
-      const response = await callLLM(prompt, keys, { maxTokens: 1500, temperature: 0.3 });
+      const response = await callLLM(prompt, keys, { maxTokens: 1800, temperature: 0.3 });
       const parsed   = parseJSON(response);
       counterContentSuggestions = parsed.counterContent || [];
 
-      // Add strategic insight to results
-      if (parsed.strategicInsight) {
-        results.forEach(r => { r.strategicInsight = parsed.strategicInsight; });
-      }
+      // Attach AI threat assessment to results
+      results.forEach(r => {
+        r.strategicInsight       = parsed.strategicInsight       || null;
+        r.aiThreatLevel          = parsed.threatLevel            || null;
+        r.windowOfOpportunity    = parsed.windowOfOpportunity    || null;
+      });
     } catch { /* non-blocking — suggestions are optional */ }
   }
 
@@ -218,13 +281,15 @@ Analyze these URLs and suggest counter-content. Return ONLY valid JSON:
   }
 
   // ── Auto-queue high-priority counter-content as pending content_drafts ──
-  // A14 checks content_drafts for status="queued" items and generates articles
-  // for them on its next run. Without this bridge, A15's counter-content
-  // suggestions were just stored in state — nobody acted on them.
+  // Also creates approval_queue items for high-threat competitive responses
+  // so the user sees "Competitor is attacking — counter-content ready. Approve?"
   if (counterContentSuggestions.length > 0) {
     try {
-      const qBatch = db.batch();
+      const qBatch  = db.batch();
+      const aqBatch = db.batch();
       let queued = 0;
+      let aqItems = 0;
+
       for (const suggestion of counterContentSuggestions.filter(s => s.priority === "high").slice(0, 3)) {
         // Check if we already queued this keyword to avoid duplicates
         const existing = await db.collection("content_drafts")
@@ -245,16 +310,35 @@ Analyze these URLs and suggest counter-content. Return ONLY valid JSON:
           competitorUrl:   suggestion.competitorUrl,
           ourAngle:        suggestion.ourAngle,
           reason:          suggestion.reason,
+          urgency:         suggestion.urgency || null,
           status:          "queued",
           generatedBy:     null,
           createdAt:       FieldValue.serverTimestamp(),
         });
         queued++;
+
+        // High-threat: also create approval_queue item so user is notified
+        if (highThreatUrls.length > 0 || suggestion.priority === "high") {
+          const aqRef = db.collection("approval_queue").doc();
+          aqBatch.set(aqRef, {
+            clientId,
+            type:             "competitor_counter_content",
+            status:           "pending",
+            source:           "A15_competitorMonitor",
+            title:            `Counter-Content Needed: "${suggestion.suggestedTitle}"`,
+            suggestedAction:  `Publish counter-content targeting "${suggestion.targetKeyword}" before competitor's new page gets fully indexed`,
+            detail:           `Competitor published: ${suggestion.competitorUrl}\nOur angle: ${suggestion.ourAngle}\nUrgency: ${suggestion.urgency || "publish within 2 weeks"}`,
+            competitorUrl:    suggestion.competitorUrl,
+            targetKeyword:    suggestion.targetKeyword,
+            estimatedImpact:  suggestion.reason || "Defend keyword position from competitor",
+            contentDraftId:   ref.id,
+            createdAt:        new Date().toISOString(),
+          });
+          aqItems++;
+        }
       }
-      if (queued > 0) {
-        await qBatch.commit();
-        console.log(`[A15] Auto-queued ${queued} counter-content brief(s) for ${clientId}`);
-      }
+      if (queued > 0)  { await qBatch.commit();  console.log(`[A15] Auto-queued ${queued} counter-content brief(s) for ${clientId}`); }
+      if (aqItems > 0) { await aqBatch.commit(); console.log(`[A15] Created ${aqItems} approval queue item(s) for ${clientId}`); }
     } catch { /* non-blocking */ }
   }
 
@@ -275,16 +359,20 @@ Analyze these URLs and suggest counter-content. Return ONLY valid JSON:
     contentGaps:   counterContentSuggestions.slice(0, 5).map(s => s.suggestedTitle),
   });
 
+  const totalHighThreat = results.reduce((s, r) => s + (r.highThreatCount || 0), 0);
+
   const output = {
     status:                  "complete",
     checkedAt:               now,
     competitorsChecked:      results.filter(r => !r.error).length,
     totalNewPages:           results.reduce((sum, r) => sum + (r.newPages || 0), 0),
+    totalHighThreatPages:    totalHighThreat,
     alertsCreated:           newAlerts.length,
     results,
     counterContentSuggestions,
+    highThreatUrls:          highThreatUrls.slice(0, 10),
     competitorSnapshots:     newSnapshots,
-    summary: `Monitored ${competitorList.length} competitors. Found ${allNewUrls.length} new pages. Created ${newAlerts.length} alert(s).`,
+    summary: `Monitored ${competitorList.length} competitors. Found ${allNewUrls.length} new pages (${totalHighThreat} high-threat targeting your keywords). Created ${newAlerts.length} alert(s).`,
   };
 
   await saveState(clientId, "A15_competitorMonitor", output);
