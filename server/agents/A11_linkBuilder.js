@@ -43,7 +43,7 @@ async function runA11(clientId, keys, masterPrompt) {
 
   if (keys?.groq || keys?.gemini || keys?.openrouter) {
     try {
-      const prompt = `You are a senior off-page SEO specialist. Generate link-building opportunities for this business.
+      const prompt = `You are a world-class off-page SEO specialist with deep 2025 algorithm knowledge.
 
 Business: ${businessName}
 Website: ${websiteUrl}
@@ -51,31 +51,52 @@ Industry: ${industry}
 Target Locations: ${locations}
 Competitor Domains: ${competitorDomains.join(", ") || "not available"}
 
-Generate exactly 15 link-building opportunities across these categories:
-- Directory listings (industry-specific + local)
-- Guest post targets (relevant blogs/publications)
-- Resource page inclusions
-- Broken link replacements
-- PR / HARO opportunities
-- Partnership / sponsorship links
+2025 LINK BUILDING REALITY:
+- Google's May 2024 Link Spam Update targeted SCALED guest post schemes — bulk guest posts = penalty risk
+- Links must be EARNED through genuine value, not manufactured through schemes
+- Digital PR (original research, data studies) = highest ROI link tactic in 2025
+- Brand mentions + unlinked citations are now tracked as authority signals
+- HARO/Qwoted (expert quotes in publications) = passive, compound link building
+- Broken link building still works and is still underused
 
-Return ONLY valid JSON (no markdown, no explanation):
+WHAT TO AVOID (will be penalised):
+- Bulk guest post services
+- Paid link schemes
+- Low-quality directory spam
+- Exact match anchor text in bulk
+- PBNs or expired domain schemes
+
+Generate exactly 15 link-building opportunities across THESE 2025 categories:
+- digital_pr (original research, data studies, newsworthy angles)
+- haro_expert (HARO/Qwoted expert quote opportunities)
+- broken_link (find broken links on relevant pages and offer replacement)
+- unlinked_mention (brand mentioned without link — convert to backlink)
+- resource_page (genuine resource pages relevant to industry)
+- podcast_appearance (podcast guest appearance — brand + show notes link)
+- local_citation (Google Business Profile, Bing Places, industry directories)
+- partnership (genuine business partnerships, sponsorships, community)
+
+Return ONLY valid JSON:
 {
   "opportunities": [
     {
-      "type": "directory|guest_post|resource_page|broken_link|pr|partnership",
-      "target": "website or platform name",
+      "type": "digital_pr|haro_expert|broken_link|unlinked_mention|resource_page|podcast_appearance|local_citation|partnership",
+      "target": "specific target platform, publication, or approach",
       "url": "target URL if known, else empty string",
       "domainAuthority": "low|medium|high",
       "difficulty": "easy|medium|hard",
       "priority": "high|medium|low",
-      "approach": "exact outreach approach in 1 sentence",
-      "emailSubjectLine": "ready-to-use email subject line",
-      "estimatedTimeToSecure": "1-2 weeks|1 month|2-3 months"
+      "approach": "exact outreach approach — specific and actionable",
+      "emailSubjectLine": "ready-to-use subject line",
+      "estimatedTimeToSecure": "1-2 weeks|1 month|2-3 months",
+      "linkType": "editorial|citation|mention",
+      "why2025": "why this tactic is safe and effective in 2025"
     }
   ],
-  "quickWins": ["3 easiest links to get in next 30 days"],
-  "summary": "2-sentence strategy overview"
+  "quickWins": ["3 easiest links to get in next 30 days — be specific"],
+  "digitalPRAngles": ["3 original research/data angles this business could create to earn links naturally"],
+  "unlinkedMentionStrategy": "how to find and convert unlinked brand mentions",
+  "summary": "2-sentence 2025 link strategy overview"
 }`;
 
       const raw    = await callLLM(clientId, keys, prompt, {system: masterPrompt || undefined,  maxTokens: 2500, temperature: 0.3, systemPrompt: "You are an expert SEO link-building strategist. Return only valid JSON." });
@@ -91,12 +112,12 @@ Return ONLY valid JSON (no markdown, no explanation):
   // ── Fallback: generic opportunities if LLM unavailable ──
   if (!opportunities.length) {
     opportunities = [
-      { type:"directory",    target:"Google Business Profile",  url:"business.google.com",      domainAuthority:"high",   difficulty:"easy",   priority:"high",   approach:"Claim or optimise existing listing",                     emailSubjectLine:"N/A — self-serve",                       estimatedTimeToSecure:"1-2 weeks" },
-      { type:"directory",    target:"Bing Places",              url:"bingplaces.com",            domainAuthority:"high",   difficulty:"easy",   priority:"high",   approach:"Claim listing and add full business details",            emailSubjectLine:"N/A — self-serve",                       estimatedTimeToSecure:"1-2 weeks" },
-      { type:"directory",    target:"Yell.com",                 url:"yell.com",                  domainAuthority:"medium", difficulty:"easy",   priority:"medium", approach:"Submit free basic listing",                             emailSubjectLine:"N/A — self-serve",                       estimatedTimeToSecure:"1-2 weeks" },
-      { type:"directory",    target:"Thomson Local",            url:"thomsonlocal.com",           domainAuthority:"medium", difficulty:"easy",   priority:"medium", approach:"Submit business details for free",                      emailSubjectLine:"N/A — self-serve",                       estimatedTimeToSecure:"1-2 weeks" },
+      { type:"local_citation",    target:"Google Business Profile",  url:"business.google.com",      domainAuthority:"high",   difficulty:"easy",   priority:"high",   approach:"Claim or optimise existing listing",  emailSubjectLine:"N/A — self-serve",  estimatedTimeToSecure:"1-2 weeks" },
+      { type:"local_citation",    target:"Bing Places",              url:"bingplaces.com",            domainAuthority:"high",   difficulty:"easy",   priority:"high",   approach:"Claim listing and add full business details", emailSubjectLine:"N/A — self-serve", estimatedTimeToSecure:"1-2 weeks" },
+      { type:"haro_expert",       target:"HARO / Qwoted",            url:"qwoted.com",                domainAuthority:"high",   difficulty:"medium", priority:"high",   approach:"Sign up as expert source. Respond to journalist queries in your industry", emailSubjectLine:"Expert response: [expertise]", estimatedTimeToSecure:"1-4 weeks" },
+      { type:"unlinked_mention",  target:"Brand mention monitoring", url:"",                          domainAuthority:"medium", difficulty:"easy",   priority:"high",   approach:"Set up Google Alerts for brand. Contact sites mentioning you without a link", emailSubjectLine:"Quick question about your mention of [brand]", estimatedTimeToSecure:"1-2 weeks" },
       { type:"pr",           target:"HARO (Help A Reporter Out)",url:"helpareporter.com",         domainAuthority:"high",   difficulty:"medium", priority:"high",   approach:"Sign up as a source and respond to relevant queries",    emailSubjectLine:"Expert source for your story on [topic]", estimatedTimeToSecure:"1 month"   },
-      { type:"guest_post",   target:"Industry blog",            url:"",                          domainAuthority:"medium", difficulty:"medium", priority:"medium", approach:"Pitch a unique data-driven article to relevant blogs",   emailSubjectLine:"Guest post pitch: [topic] for [blog]",    estimatedTimeToSecure:"1 month"   },
+      { type:"digital_pr",      target:"Original research angle",  url:"",                          domainAuthority:"high",   difficulty:"hard",   priority:"high",   approach:"Create original data study. Pitch to industry publications for editorial links", emailSubjectLine:"Exclusive data story: [finding]", estimatedTimeToSecure:"2-3 months" },
       { type:"resource_page",target:"Local council / chamber",  url:"",                          domainAuthority:"medium", difficulty:"easy",   priority:"medium", approach:"Contact local business associations for directory links", emailSubjectLine:"Request to be listed on your resources page", estimatedTimeToSecure:"2-3 months"},
     ];
     quickWins = ["Claim Google Business Profile", "Submit to Bing Places", "Sign up to HARO as an expert source"];

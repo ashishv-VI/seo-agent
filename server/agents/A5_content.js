@@ -148,7 +148,7 @@ async function runA5(clientId, keys, masterPrompt) {
   // ── LLM: Generate optimised on-page content ────────
   const serpSection = buildSerpSection(serpIntel);
 
-  const prompt = `You are an expert SEO content strategist.
+  const prompt = `You are a world-class SEO content strategist with deep 2025 algorithm knowledge.
 
 Client: ${brief.businessName}
 Website: ${brief.websiteUrl}
@@ -161,54 +161,76 @@ Current Homepage:
 - Meta Description: "${currentDesc}"
 - H1: "${currentH1}"
 
-Top Target Keywords: ${topKeywords.map(k => k.keyword).join(", ")}
-Content Gaps to Fill: ${contentGaps.slice(0,3).map(g => g.topic).join(", ")}
+Top Target Keywords: ${topKeywords.map(k => `${k.keyword} (AI risk: ${k.aiOverviewRisk || "unknown"}, intent: ${k.intent || "unknown"})`).join(", ")}
+Content Gaps: ${contentGaps.slice(0,3).map(g => g.topic || g.keyword).join(", ")}
+Topical Hubs: ${(keywords?.topicalHubs || []).slice(0,3).map(h => h.hubName).join(", ") || "not mapped yet"}
+Zero-click risk: ${keywords?.zeroClickRiskPct || 0}% of keywords at high AI Overview risk
 ${serpSection}
-Generate optimised content recommendations. Return ONLY valid JSON:
 
+2025 CONTENT STANDARDS — every brief MUST apply these:
+
+PEOPLE-FIRST TEST (Google HCU 2022-2025):
+- Does this content show ORIGINAL angle no one else has?
+- Does the author have FIRST-HAND EXPERIENCE with this topic?
+- Does it have UNIQUE DATA, case studies, or real examples?
+- Would a user feel SATISFIED (not cheated) after reading?
+
+E-E-A-T SIGNALS (must include in every brief):
+- Author credentials relevant to this topic
+- First-hand experience signals to add
+- Data or research to cite
+- Trust signals (reviews, case studies, credentials)
+
+AI OVERVIEW DEFENCE:
+- For HIGH-risk informational keywords: add transactional hook so content survives zero-click
+- For LOW-risk transactional keywords: these are priority — optimise aggressively
+- For each brief: specify if target is traffic OR brand visibility + featured snippet
+
+TOPICAL AUTHORITY ARCHITECTURE:
+- Plan content as HUBS not random posts
+- Each brief should show which pillar it belongs to
+- Identify if this is a PILLAR page (broad) or CLUSTER page (specific)
+
+Return ONLY valid JSON:
 {
   "homepageOptimisation": {
-    "titleTag": {
-      "current": "${currentTitle}",
-      "recommended": "optimised title (50-60 chars with primary keyword)",
-      "characterCount": 0,
-      "rationale": "why this title"
-    },
-    "metaDescription": {
-      "current": "${currentDesc}",
-      "recommended": "optimised meta description (140-155 chars with keyword + CTA)",
-      "characterCount": 0,
-      "rationale": "why this description"
-    },
-    "h1Tag": {
-      "current": "${currentH1}",
-      "recommended": "optimised H1 with primary keyword",
-      "rationale": "why this H1"
-    },
-    "h2Suggestions": ["h2 subheading 1", "h2 subheading 2", "h2 subheading 3"],
-    "internalLinkSuggestions": [
-      { "anchorText": "anchor text", "targetPage": "/page-path", "reason": "why link here" }
-    ]
+    "titleTag": { "current": "${currentTitle}", "recommended": "", "characterCount": 0, "rationale": "" },
+    "metaDescription": { "current": "${currentDesc}", "recommended": "", "characterCount": 0, "rationale": "" },
+    "h1Tag": { "current": "${currentH1}", "recommended": "", "rationale": "" },
+    "h2Suggestions": ["", "", ""],
+    "internalLinkSuggestions": [{ "anchorText": "", "targetPage": "/", "reason": "" }]
   },
   "newPageBriefs": [
     {
-      "title": "page title",
-      "targetKeyword": "primary keyword",
-      "secondaryKeywords": ["kw2", "kw3"],
+      "title": "",
+      "targetKeyword": "",
+      "secondaryKeywords": ["", ""],
       "intent": "transactional|informational|commercial",
+      "aiOverviewRisk": "high|medium|low",
+      "contentGoal": "traffic|featured_snippet|brand_visibility|geo_citation",
+      "topicalHub": "which hub this belongs to",
+      "pageType": "pillar|cluster",
       "recommendedWordCount": 1200,
-      "headingStructure": ["H1: main heading", "H2: section 1", "H2: section 2"],
-      "contentOutline": ["point 1", "point 2", "point 3"],
-      "competitorBenchmark": "what competitors do on this topic",
+      "headingStructure": ["H1: ", "H2: ", "H2: "],
+      "contentOutline": ["", "", ""],
+      "peoplefirstChecklist": {
+        "originalAngle": "what unique angle/data does this page have?",
+        "experienceSignal": "what first-hand experience should the author show?",
+        "eeeatElements": ["author bio with credentials", "case study or real example", "original data point"],
+        "aiOverviewDefence": "how does this page survive zero-click? what transactional hook exists?"
+      },
+      "competitorBenchmark": "",
+      "schemaMarkup": ["Article", "FAQPage"],
       "urgency": "high|medium|low"
     }
   ],
-  "faqContent": [
-    { "question": "question text", "answer": "answer text (2-3 sentences)", "targetPage": "/" }
-  ],
-  "contentRefreshFlags": [
-    { "page": "/existing-page", "issue": "why it needs refresh", "action": "what to update" }
-  ]
+  "faqContent": [{ "question": "", "answer": "", "targetPage": "/" }],
+  "contentRefreshFlags": [{ "page": "/", "issue": "", "action": "" }],
+  "topicalAuthorityPlan": {
+    "hubs": [{ "hubName": "", "pillarPage": "/", "clusterPages": ["/", "/"], "priority": "high" }],
+    "recommendation": "overall topical authority strategy for this business"
+  },
+  "aiOverviewStrategy": "how to protect and grow traffic given current AI Overview landscape for this business"
 }`;
 
   let contentData;

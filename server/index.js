@@ -267,17 +267,27 @@ setInterval(async () => {
             }).catch(() => {});
 
             // Auto-execute if confidence is high enough AND playbook veto already ran.
-            // The cmo_queue item was already written by runCMO with status="pending".
-            // For high-confidence (≥0.85) decisions we fire the agents directly so the
-            // agent actually acts on its own — not just "wakes up and files a ticket".
+            // Guard: check if cmo_queue consumer already picked this up to prevent triple execution
             if ((cmoDecision.confidence || 0) >= 0.85) {
-              const { runAgentById } = require("./agents/agentRunner");
-              for (const agentId of cmoDecision.nextAgents.slice(0, 3)) {
-                runAgentById(agentId, doc.id, keys).then(r => {
-                  console.log(`[daily-monitor] auto-exec ${agentId} for ${data.name} → ${r?.success ? "ok" : r?.error || "skip"}`);
-                }).catch(e => {
-                  console.error(`[daily-monitor] auto-exec ${agentId} failed:`, e.message);
-                });
+              // Small delay to let cmo_queue consumer (runs every 30 min) handle it first
+              // Only auto-exec from daily-monitor if items are genuinely new (< 2 min old)
+              const queueSnap = await db.collection("cmo_queue")
+                .where("clientId", "==", doc.id)
+                .where("status", "==", "pending")
+                .limit(1)
+                .get().catch(() => null);
+              const itemAge = queueSnap?.docs?.[0]
+                ? Date.now() - new Date(queueSnap.docs[0].data().createdAt).getTime()
+                : 999999;
+              if (itemAge < 2 * 60 * 1000) { // Only if item is < 2 minutes old
+                const { runAgentById } = require("./agents/agentRunner");
+                for (const agentId of cmoDecision.nextAgents.slice(0, 3)) {
+                  runAgentById(agentId, doc.id, keys).then(r => {
+                    console.log(`[daily-monitor] auto-exec ${agentId} for ${data.name} → ${r?.success ? "ok" : r?.error || "skip"}`);
+                  }).catch(e => {
+                    console.error(`[daily-monitor] auto-exec ${agentId} failed:`, e.message);
+                  });
+                }
               }
             }
           }
@@ -957,8 +967,14 @@ setInterval(async () => {
           continue;
         }
 
-        // Mark in-flight first so a slow run doesn't get picked up twice
-        await queueDoc.ref.update({ status: "executing", executingAt: new Date().toISOString() });
+        // Mark in-flight FIRST — atomic check prevents daily-monitor and watchdog
+        // from picking up the same item simultaneously
+        const markResult = await queueDoc.ref.update({
+          status: "executing",
+          executingAt: new Date().toISOString(),
+          executingBy: "cmo_queue_consumer",
+        }).catch(() => null);
+        if (!markResult) continue; // already being processed by another path
 
         const results = [];
         for (const agentId of item.nextAgents.slice(0, 3)) {

@@ -1,384 +1,387 @@
-const { saveState, getState } = require("../shared-state/stateManager");
-const { callLLM, parseJSON }  = require("../utils/llm");
-const { emitToolSuggestion }  = require("../utils/toolBridge");
-const { db }                  = require("../config/firebase");
+const { saveState, getState }  = require("../shared-state/stateManager");
+const { callLLM, parseJSON }   = require("../utils/llm");
+const { emitToolSuggestion }   = require("../utils/toolBridge");
+const { db }                   = require("../config/firebase");
 
 /**
- * A3 — Keyword Research & Mapping Agent
- * Blocked until A2 audit is complete
- * Uses Groq/Gemini for keyword expansion + SerpAPI for live data
+ * A3 — Keyword Research & Mapping Agent (v2.0 — 2025 Edition)
+ *
+ * New in v2:
+ * - Intent classification per keyword
+ * - AI Overview risk scoring (HIGH/MEDIUM/LOW)
+ * - Zero-click probability estimate
+ * - GEO keyword identification (ChatGPT/Perplexity/Gemini citation)
+ * - Topical authority hub planning (pillar + cluster)
+ * - Featured snippet opportunities
+ * - Keyword cannibalization detection
+ * - Kill-signal: zero-conversion keywords deprioritized
  */
 async function runA3(clientId, keys, masterPrompt) {
   try {
-  const brief = await getState(clientId, "A1_brief");
-  const audit = await getState(clientId, "A2_audit");
+    const brief = await getState(clientId, "A1_brief");
+    const audit = await getState(clientId, "A2_audit");
 
-  if (!brief?.signedOff) return { success: false, error: "A1 brief not signed off" };
-  if (!audit || audit.status !== "complete") return { success: false, error: "A2 audit must complete before keyword research" };
+    if (!brief?.signedOff)
+      return { success: false, error: "A1 brief not signed off" };
+    if (!audit || audit.status !== "complete")
+      return { success: false, error: "A2 audit must complete before keyword research" };
 
-  const seedKeywords  = [].concat(brief.primaryKeywords  || []);
-  const services      = [].concat(brief.services         || []);
-  const audience      = brief.targetAudience || "";
-  const locations     = [].concat(brief.targetLocations  || []);
-  const businessDesc  = brief.businessDescription || "";
+    const seedKeywords = [].concat(brief.primaryKeywords  || []);
+    const services     = [].concat(brief.services         || []);
+    const audience     = brief.targetAudience || "";
+    const locations    = [].concat(brief.targetLocations  || []);
+    const businessDesc = brief.businessDescription || "";
+    const websiteUrl   = brief.websiteUrl || "";
 
-  // ── LLM: Expand keywords into clusters ────────────
-  const prompt = `You are an expert SEO keyword researcher. Based on this business information, generate a comprehensive keyword map.
+    const locationStr = locations.join(" ").toLowerCase();
+    const country = locationStr.includes("uk") || locationStr.includes("united kingdom") ? "GB"
+                  : locationStr.includes("australia") ? "AU"
+                  : locationStr.includes("canada") ? "CA"
+                  : locationStr.includes("india") ? "IN" : "US";
+    const gl = { GB:"gb", AU:"au", CA:"ca", IN:"in" }[country] || "us";
+
+    // Save seed state immediately so A4 never blocks on missing A3 state
+    const seedClusters = buildSeedClusters(brief);
+    await saveState(clientId, "A3_keywords", {
+      status: "complete", totalKeywords: flattenClusters(seedClusters).length,
+      clusters: seedClusters, keywordMap: flattenClusters(seedClusters),
+      gaps: [], serpData: {}, hasSerpData: false,
+      generatedAt: new Date().toISOString(), seedOnly: true,
+    });
+
+    // ── LLM: 2025 keyword map with AI Overview risk ──────────────────────────
+    const llmPrompt = `You are a world-class SEO keyword researcher with deep 2025 algorithm knowledge.
 
 Business: ${brief.businessName}
 Description: ${businessDesc}
 Services: ${services.join(", ")}
 Target Audience: ${audience}
-Target Locations: ${locations.join(", ")}
+Locations: ${locations.join(", ")}
 Seed Keywords: ${seedKeywords.join(", ")}
 
-Generate a keyword map with exactly these 4 clusters. Return ONLY valid JSON, no explanation:
+2025 CRITICAL CONTEXT:
+- AI Overviews appear for 40%+ of informational queries — zero-click is real
+- Transactional/local keywords still send clicks — these are priority
+- Topical authority (content hubs) beats random keyword targeting
+- GEO: informational keywords can be structured for ChatGPT/Perplexity citation
 
+For EVERY keyword include:
+- intent: "informational"|"commercial"|"transactional"|"navigational"|"local"
+- aiOverviewRisk: "high" (AI will answer, zero clicks) | "medium" | "low" (safe, clicks expected)
+- zeroClickProbability: 0-100
+- geoOpportunity: true/false (can rank in AI answer citations)
+- topicalHub: which authority cluster does this belong to
+- difficulty: "low"|"medium"|"high"
+- priority: "high"|"medium"|"low"
+- suggestedPage: URL path
+- notes: brief explanation
+
+Return ONLY valid JSON:
 {
-  "brand": [
-    { "keyword": "keyword here", "intent": "navigational", "difficulty": "low|medium|high", "priority": "high|medium|low", "suggestedPage": "/page-path", "notes": "why this keyword" }
-  ],
-  "generic": [
-    { "keyword": "keyword here", "intent": "transactional", "difficulty": "low|medium|high", "priority": "high|medium|low", "suggestedPage": "/page-path", "notes": "why this keyword" }
-  ],
-  "longtail": [
-    { "keyword": "keyword here", "intent": "commercial", "difficulty": "low|medium|high", "priority": "high|medium|low", "suggestedPage": "/page-path", "notes": "why this keyword" }
-  ],
-  "informational": [
-    { "keyword": "keyword here", "intent": "informational", "difficulty": "low|medium|high", "priority": "high|medium|low", "suggestedPage": "/blog/slug", "notes": "why this keyword" }
-  ],
-  "gaps": [
-    { "keyword": "keyword here", "reason": "high volume, no page exists", "recommendedAction": "create new page" }
-  ],
-  "localVariants": [
-    { "keyword": "keyword + location", "location": "city/region", "intent": "transactional", "difficulty": "low" }
-  ]
+  "brand": [{"keyword":"","intent":"navigational","aiOverviewRisk":"low","zeroClickProbability":5,"geoOpportunity":false,"topicalHub":"","difficulty":"low","priority":"high","suggestedPage":"/","notes":""}],
+  "generic": [...],
+  "longtail": [...],
+  "informational": [{"keyword":"","intent":"informational","aiOverviewRisk":"high","zeroClickProbability":70,"geoOpportunity":true,"topicalHub":"","difficulty":"low","priority":"medium","suggestedPage":"/blog/","notes":"High AI risk — target for featured snippet + GEO citation"}],
+  "transactional": [{"keyword":"","intent":"transactional","aiOverviewRisk":"low","zeroClickProbability":10,"geoOpportunity":false,"topicalHub":"","difficulty":"medium","priority":"high","suggestedPage":"/","notes":"Safe from AI — prioritise for traffic"}],
+  "local": [{"keyword":"","intent":"local","location":"","aiOverviewRisk":"low","zeroClickProbability":8,"geoOpportunity":false,"topicalHub":"","difficulty":"low","priority":"high","suggestedPage":"/","notes":""}],
+  "gaps": [{"keyword":"","reason":"","recommendedAction":"","estimatedTrafficOpportunity":"high"}],
+  "topicalHubs": [{"hubName":"","pillarPage":"/","clusterPages":["/","/"],"keywords":["",""],"priority":"high","rationale":""}]
 }
+5-8 keywords per cluster. Realistic and specific to this business.`;
 
-Generate 5-8 keywords per cluster. Make them realistic and specific to the business.`;
-
-  // Build rule-based seed clusters from brief data — works even with no LLM
-  const seedClusters = buildSeedClusters(brief);
-
-  // Save minimal seed state immediately so downstream agents (A4) always
-  // find an A3_keywords doc even if LLM/SerpAPI timeout kills this agent mid-run
-  await saveState(clientId, "A3_keywords", {
-    status:        "complete",
-    totalKeywords: (seedClusters.brand?.length || 0) + (seedClusters.generic?.length || 0) + (seedClusters.longtail?.length || 0),
-    clusters:      seedClusters,
-    keywordMap:    [
-      ...(seedClusters.brand         || []).map(k => ({ ...k, cluster: "brand" })),
-      ...(seedClusters.generic       || []).map(k => ({ ...k, cluster: "generic" })),
-      ...(seedClusters.longtail      || []).map(k => ({ ...k, cluster: "longtail" })),
-      ...(seedClusters.informational || []).map(k => ({ ...k, cluster: "informational" })),
-    ],
-    gaps:          [],
-    serpData:      {},
-    hasSerpData:   false,
-    generatedAt:   new Date().toISOString(),
-    seedOnly:      true,
-  });
-
-  let keywordData = seedClusters; // always have something
-  try {
-    const response = await callLLM(clientId, keys, prompt, {system: masterPrompt || undefined,  maxTokens: 4000, temperature: 0.4 });
-    const llmData  = parseJSON(response);
-    // LLM wins if it returned real clusters
-    if (llmData.generic?.length > 0 || llmData.longtail?.length > 0) {
-      keywordData = llmData;
+    let keywordData = seedClusters;
+    try {
+      const response = await callLLM(clientId, keys, llmPrompt, {
+        system: masterPrompt, maxTokens: 4000, temperature: 0.3,
+      });
+      const llmData = parseJSON(response);
+      if (llmData?.generic?.length > 0 || llmData?.longtail?.length > 0) {
+        keywordData = llmData;
+        console.log(`[A3] LLM generated ${flattenClustersAll(llmData).length} keywords`);
+      }
+    } catch (e) {
+      console.warn(`[A3] LLM unavailable — using rule-based seed clusters: ${e.message}`);
     }
-  } catch {
-    console.warn("[A3] LLM unavailable — using rule-based keyword seed clusters");
-  }
 
-  // ── SerpAPI: Get live SERP data ────────────────────
-  const serpData = {};
-  if (keys.serpapi) {
-    const allKeywords = [
-      ...(keywordData.generic || []),
-      ...(keywordData.longtail || []),
-    ].slice(0, 8); // limit API calls
+    // ── SerpAPI: Live SERP data + AI Overview detection ─────────────────────
+    const serpData = {};
+    const serpKey = keys.serpapi || keys.serp;
+    if (serpKey) {
+      const checkKws = [
+        ...(keywordData.generic      || []),
+        ...(keywordData.transactional|| []),
+        ...(keywordData.longtail     || []),
+      ].slice(0, 8);
 
-    for (const kw of allKeywords) {
+      for (const kw of checkKws) {
+        try {
+          const url  = `https://serpapi.com/search.json?q=${encodeURIComponent(kw.keyword)}&api_key=${serpKey}&num=10&gl=${gl}&hl=en`;
+          const res  = await fetch(url, { signal: AbortSignal.timeout(8000) });
+          const data = await res.json();
+          if (data.organic_results) {
+            const hasAiOverview = !!(data.ai_overview);
+            serpData[kw.keyword] = {
+              topDomains: data.organic_results.slice(0, 5).map(r => ({
+                position: r.position,
+                domain: r.displayed_link?.split("/")[0] || "",
+                title: r.title,
+              })),
+              hasAiOverview,
+              hasFeaturedSnippet: !!(data.answer_box),
+              hasLocalPack:       !!(data.local_results),
+              paaQuestions:    (data.related_questions || []).slice(0, 4).map(q => q.question),
+              relatedSearches: (data.related_searches  || []).slice(0, 4).map(r => r.query),
+            };
+            // Update risk based on real SERP
+            if (hasAiOverview) {
+              kw.aiOverviewRisk = "high";
+              kw.zeroClickProbability = Math.max(kw.zeroClickProbability || 50, 65);
+              kw.aiOverviewConfirmed = true;
+            }
+          }
+        } catch { /* skip */ }
+      }
+    }
+
+    // ── SE Ranking: Real volume + difficulty ─────────────────────────────────
+    const seMetrics = {};
+    if (keys.seranking) {
       try {
-        const locationStr = [].concat(brief.targetLocations || []).join(" ").toLowerCase();
-        const gl = locationStr.includes("uk") || locationStr.includes("united kingdom") ? "gb"
-                 : locationStr.includes("australia") ? "au"
-                 : locationStr.includes("canada") ? "ca"
-                 : locationStr.includes("india") ? "in"
-                 : "us";
-        const url  = `https://serpapi.com/search.json?q=${encodeURIComponent(kw.keyword)}&api_key=${keys.serpapi}&num=10&gl=${gl}&hl=en`;
-        const res  = await fetch(url, { signal: AbortSignal.timeout(8000) });
-        const data = await res.json();
-        if (data.organic_results) {
-          serpData[kw.keyword] = {
-            topDomains: data.organic_results.slice(0, 5).map(r => ({
-              position: r.position,
-              domain:   new URL(r.link).hostname,
-              title:    r.title,
-            })),
-            relatedSearches: data.related_searches?.slice(0, 3).map(r => r.query) || [],
-          };
+        const { getKeywordMetrics, getDomainKeywords } = require("../utils/seranking");
+        const allKwStrs = getAllKwStrings(keywordData);
+        const [metrics, domainKws] = await Promise.all([
+          getKeywordMetrics(allKwStrs, keys.seranking, country),
+          getDomainKeywords(websiteUrl, keys.seranking, country),
+        ]);
+        Object.assign(seMetrics, metrics);
+        ["brand","generic","longtail","informational","transactional","local"].forEach(c => {
+          (keywordData[c] || []).forEach(kw => {
+            const m = seMetrics[(kw.keyword || "").toLowerCase()];
+            if (m) {
+              kw.searchVolume = m.volume; kw.realDifficulty = m.difficulty; kw.cpc = m.cpc;
+              kw.difficulty = m.difficulty >= 70 ? "high" : m.difficulty >= 40 ? "medium" : "low";
+            }
+          });
+        });
+        if (domainKws.length > 0) {
+          keywordData.currentRankings = domainKws.slice(0, 30);
+          keywordData.rankingKeywords = domainKws.filter(dk =>
+            allKwStrs.some(k => (k||"").toLowerCase().includes((dk.keyword||"").toLowerCase()))
+          );
         }
-      } catch { /* skip on error */ }
-    }
-  }
-
-  // ── SE Ranking: Enrich keywords with real volume + difficulty ──
-  const seMetrics = {};
-  if (keys.seranking) {
-    const { getKeywordMetrics, getDomainKeywords } = require("../utils/seranking");
-    const allKws = [
-      ...(keywordData.brand        || []),
-      ...(keywordData.generic      || []),
-      ...(keywordData.longtail     || []),
-      ...(keywordData.informational|| []),
-    ].map(k => k.keyword).filter(Boolean);
-
-    // Detect country from locations
-    const locationStr = [].concat(brief.targetLocations || []).join(" ").toLowerCase();
-    const country = locationStr.includes("uk") || locationStr.includes("united kingdom") ? "GB"
-                  : locationStr.includes("australia") ? "AU"
-                  : locationStr.includes("canada") ? "CA"
-                  : locationStr.includes("india") ? "IN"
-                  : "US";
-
-    const [metrics, domainKws] = await Promise.all([
-      getKeywordMetrics(allKws, keys.seranking, country),
-      getDomainKeywords(brief.websiteUrl, keys.seranking, country),
-    ]);
-
-    Object.assign(seMetrics, metrics);
-
-    // Enrich each keyword cluster with real data
-    ["brand","generic","longtail","informational"].forEach(cluster => {
-      (keywordData[cluster] || []).forEach(kw => {
-        const m = seMetrics[(kw.keyword || "").toLowerCase()];
-        if (m) {
-          kw.searchVolume  = m.volume;
-          kw.realDifficulty= m.difficulty;
-          kw.cpc           = m.cpc;
-          // Override difficulty label based on real data
-          if (m.difficulty >= 70) kw.difficulty = "high";
-          else if (m.difficulty >= 40) kw.difficulty = "medium";
-          else kw.difficulty = "low";
-        }
-      });
-    });
-
-    // Store domain's current rankings
-    if (domainKws.length > 0) {
-      keywordData.currentRankings = domainKws.slice(0, 30);
-      // Find keywords we rank for that are in our keyword map
-      keywordData.rankingKeywords = domainKws.filter(dk =>
-        allKws.some(k => (k || "").toLowerCase().includes((dk.keyword || "").toLowerCase()))
-      );
-    }
-  }
-
-  // ── Build keyword map ──────────────────────────────
-  const allKeywords = [
-    ...(keywordData.brand         || []).map(k => ({ ...k, cluster: "brand" })),
-    ...(keywordData.generic       || []).map(k => ({ ...k, cluster: "generic" })),
-    ...(keywordData.longtail      || []).map(k => ({ ...k, cluster: "longtail" })),
-    ...(keywordData.informational || []).map(k => ({ ...k, cluster: "informational" })),
-    ...(keywordData.localVariants || []).map(k => ({ ...k, cluster: "local" })),
-  ];
-
-  // ── Keyword Cannibalization Detection ─────────────
-  // Group keywords by suggestedPage — if 3+ different intent/cluster keywords
-  // target the same page, flag cannibalization risk
-  const pageKeywordMap = {};
-  for (const kw of allKeywords) {
-    const page = kw.suggestedPage || "/";
-    if (!pageKeywordMap[page]) pageKeywordMap[page] = [];
-    pageKeywordMap[page].push({ keyword: kw.keyword, intent: kw.intent, cluster: kw.cluster, difficulty: kw.difficulty });
-  }
-
-  const cannibalization = [];
-  for (const [page, kws] of Object.entries(pageKeywordMap)) {
-    if (kws.length < 3) continue;
-    // Multiple intents on same page = cannibalization risk
-    const intents = [...new Set(kws.map(k => k.intent))];
-    const clusters = [...new Set(kws.map(k => k.cluster))];
-    if (intents.length >= 2 || kws.length >= 4) {
-      cannibalization.push({
-        page,
-        keywords:     kws.map(k => k.keyword),
-        keywordCount: kws.length,
-        intents,
-        risk:         kws.length >= 5 ? "high" : "medium",
-        fix:          `Split keywords across dedicated pages. Keep only 1-2 primary keywords per page. Create separate pages for: ${kws.slice(0,2).map(k=>k.keyword).join(", ")}`,
-      });
-    }
-  }
-
-  // ── Topical Authority Map ──────────────────────────
-  // Group by topic clusters to show coverage gaps
-  const topicClusters = {};
-  for (const kw of allKeywords) {
-    const topic = kw.notes?.split(" ")[0] || kw.cluster;
-    if (!topicClusters[topic]) topicClusters[topic] = [];
-    topicClusters[topic].push(kw.keyword);
-  }
-
-  // ── Featured Snippet Opportunities ──────────────────
-  // Questions + "how to" + "best" + "vs" keywords are snippet candidates
-  const snippetTriggers = /^(what|how|why|when|where|who|which|is|are|can|does|best|top|vs\.?|difference|compare)/i;
-  const snippetOpps = allKeywords
-    .filter(kw => snippetTriggers.test(kw.keyword))
-    .slice(0, 8)
-    .map(kw => ({
-      keyword:       kw.keyword,
-      snippetType:   /^how/i.test(kw.keyword) ? "how_to" : /^(what|why|when|where|who|is|are|can|does)/i.test(kw.keyword) ? "definition" : "list",
-      targetPage:    kw.suggestedPage || "/",
-      strategy:      /^how/i.test(kw.keyword)
-        ? "Use numbered steps format (1. 2. 3.) under an H2 matching the question"
-        : /^(what|why)/i.test(kw.keyword)
-        ? "Answer directly in 40-60 words in the first paragraph under the H2 that matches the question"
-        : "Use a bulleted or numbered list of 5-8 items under the matching H2",
-      priority:      kw.priority || "medium",
-    }));
-
-  const result = {
-    status:         "complete",
-    totalKeywords:  allKeywords.length,
-    clusters:       keywordData,
-    keywordMap:     allKeywords,
-    gaps:           keywordData.gaps || [],
-    serpData,
-    hasSerpData:    Object.keys(serpData).length > 0,
-    seRankingData: Object.keys(seMetrics).length > 0 ? {
-      enriched: true,
-      keywordsEnriched: Object.keys(seMetrics).length,
-      currentRankings: keywordData.currentRankings || [],
-    } : null,
-    cannibalization,
-    hasCannibalization: cannibalization.length > 0,
-    snippetOpportunities: snippetOpps,
-    hasSnippetOpps: snippetOpps.length > 0,
-    pageKeywordMap,
-    summary: {
-      totalKeywords:   allKeywords.length,
-      cannibalization: cannibalization.length,
-      snippetOpps:     snippetOpps.length,
-    },
-    generatedAt:    new Date().toISOString(),
-  };
-
-  // ── Kill-signal: deprioritize keywords that produced 0 leads in 90 days ──
-  // If a keyword has been ranking but hasn't converted, it's dead weight.
-  // Only applies to keywords that have existed for 90+ days AND have attribution data.
-  try {
-    const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
-    // Simple single-field query to avoid composite index requirement
-    const convSnap = await db.collection("conversions")
-      .where("clientId", "==", clientId)
-      .get();
-
-    const leadsByKeyword = {};
-    convSnap.docs.forEach(d => {
-      const data = d.data();
-      // Filter by date in memory — avoids composite index requirement
-      if (data.submittedAt && data.submittedAt >= ninetyDaysAgo) {
-        const kw = (data.gscKeyword || "").toLowerCase();
-        if (kw) leadsByKeyword[kw] = (leadsByKeyword[kw] || 0) + 1;
-      }
-    });
-
-    // Check historical rankings — if keyword has had rankings for 90+ days with 0 leads, deprioritize
-    const rankings = await getState(clientId, "A10_rankings") || {};
-    const rankedKeywords = (rankings.keywords || []).map(r => (r.keyword || "").toLowerCase());
-    let deprioritized = 0;
-
-    for (const kw of result.keywordMap) {
-      const normalized = (kw.keyword || "").toLowerCase();
-      const isRanked   = rankedKeywords.includes(normalized);
-      const leadCount  = leadsByKeyword[normalized] || 0;
-      // Mark dead keywords: ranked for 90+ days, 0 leads, and wasn't already low priority
-      if (isRanked && leadCount === 0 && kw.priority !== "low") {
-        kw.priority      = "low";
-        kw.deprioritized = true;
-        kw.killReason    = "0 leads in 90 days despite rankings";
-        deprioritized++;
+      } catch (e) {
+        console.warn(`[A3] SE Ranking failed: ${e.message}`);
       }
     }
-    if (deprioritized > 0) {
-      console.log(`[A3] Deprioritized ${deprioritized} keyword(s) for ${clientId} — 0 leads in 90 days`);
-      result.killSignals = { deprioritized, reason: "no_conversions_90d" };
-    }
-  } catch (e) {
-    console.error(`[A3] Kill-signal check failed:`, e.message);
-  }
 
-  await saveState(clientId, "A3_keywords", result);
+    // ── Build full keyword map ───────────────────────────────────────────────
+    const allKeywords = flattenClustersAll(keywordData);
 
-  // Emit tool suggestions: content brief for top keywords, AEO for question keywords
-  try {
-    const topKws = (result.keywordMap || []).slice(0, 10).map(k => k.keyword);
-    if (topKws.length > 0) {
-      emitToolSuggestion(clientId, "keywords_ready", {}, {
-        keywords:     topKws,
-        businessName: brief.businessName || "",
-        url:          brief.websiteUrl   || "",
-      }).catch(() => {});
-    }
-    // AEO suggestion for any question-format keywords
-    const questionKw = (result.snippetOpportunities || []).find(k => /^(what|how|why|when|where|which)/i.test(k.keyword));
-    if (questionKw) {
-      emitToolSuggestion(clientId, "aeo_opportunity", { keyword: questionKw.keyword, topic: questionKw.cluster || "" }, {}).catch(() => {});
-    }
-  } catch { /* non-blocking */ }
+    // ── AI Overview risk summary ─────────────────────────────────────────────
+    const aiRiskSummary = {
+      high:      allKeywords.filter(k => k.aiOverviewRisk === "high").length,
+      medium:    allKeywords.filter(k => k.aiOverviewRisk === "medium").length,
+      low:       allKeywords.filter(k => k.aiOverviewRisk === "low").length,
+      confirmed: allKeywords.filter(k => k.aiOverviewConfirmed).length,
+    };
+    const zeroClickRiskPct = allKeywords.length > 0
+      ? Math.round(aiRiskSummary.high / allKeywords.length * 100) : 0;
 
-  return { success: true, keywords: result };
+    // ── GEO keywords (for AI answer citation) ────────────────────────────────
+    const geoKeywords = allKeywords
+      .filter(k => k.geoOpportunity === true || k.intent === "informational")
+      .slice(0, 10)
+      .map(k => ({
+        keyword: k.keyword, intent: k.intent,
+        geoStrategy: k.intent === "informational"
+          ? "Structure as clear Q&A with definitive answer in first 50 words. Add FAQ schema. Authoritative, quotable language."
+          : "Create definitive resource page with unique data and clear statements.",
+      }));
+
+    // ── Topical authority hubs ───────────────────────────────────────────────
+    const topicalHubs = Array.isArray(keywordData.topicalHubs) && keywordData.topicalHubs.length > 0
+      ? keywordData.topicalHubs
+      : buildTopicalHubs(allKeywords);
+
+    // ── Featured snippet opportunities ───────────────────────────────────────
+    const snippetTriggers = /^(what|how|why|when|where|who|which|is|are|can|does|best|top|vs\.?|difference|compare)/i;
+    const snippetOpportunities = allKeywords
+      .filter(k => snippetTriggers.test(k.keyword))
+      .slice(0, 10)
+      .map(k => ({
+        keyword: k.keyword,
+        snippetType: /^how/i.test(k.keyword) ? "how_to" : /^(what|why|when|where|who|is|are)/i.test(k.keyword) ? "definition" : "list",
+        targetPage: k.suggestedPage || "/",
+        strategy: /^how/i.test(k.keyword)
+          ? "Numbered steps (1. 2. 3.) under H2 matching question exactly"
+          : /^(what|why)/i.test(k.keyword)
+          ? "Answer in 40-60 words in first paragraph. H2 must match question."
+          : "Bulleted/numbered list of 5-8 items under matching H2",
+        aiOverviewRisk: k.aiOverviewRisk || "medium",
+        priority: k.priority || "medium",
+      }));
+
+    // ── Cannibalization ──────────────────────────────────────────────────────
+    const cannibalization = detectCannibalization(allKeywords);
+
+    // ── Kill signals ─────────────────────────────────────────────────────────
+    let killSignals = null;
+    try {
+      const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+      const convSnap = await db.collection("conversions").where("clientId","==",clientId).get();
+      const leadsByKw = {};
+      convSnap.docs.forEach(d => {
+        const data = d.data();
+        if (data.submittedAt >= ninetyDaysAgo) {
+          const kw = (data.gscKeyword || "").toLowerCase();
+          if (kw) leadsByKw[kw] = (leadsByKw[kw] || 0) + 1;
+        }
+      });
+      const rankings = await getState(clientId, "A10_rankings") || {};
+      const rankedKws = (rankings.keywords || []).map(r => (r.keyword || "").toLowerCase());
+      let deprioritized = 0;
+      for (const kw of allKeywords) {
+        const norm = (kw.keyword || "").toLowerCase();
+        if (rankedKws.includes(norm) && !leadsByKw[norm] && kw.priority !== "low") {
+          kw.priority = "low"; kw.deprioritized = true;
+          kw.killReason = "0 leads in 90 days despite rankings"; deprioritized++;
+        }
+      }
+      if (deprioritized > 0) killSignals = { deprioritized, reason: "no_conversions_90d" };
+    } catch (e) {
+      console.warn(`[A3] Kill-signal check failed: ${e.message}`);
+    }
+
+    // ── AI Overview defence strategy (only if high risk) ────────────────────
+    let aiOverviewDefence = null;
+    if (zeroClickRiskPct > 30) {
+      try {
+        const defencePrompt = `Our keyword portfolio has ${zeroClickRiskPct}% at HIGH AI Overview risk.
+High-risk: ${allKeywords.filter(k=>k.aiOverviewRisk==="high").slice(0,5).map(k=>k.keyword).join(", ")}
+Safe: ${allKeywords.filter(k=>k.aiOverviewRisk==="low").slice(0,5).map(k=>k.keyword).join(", ")}
+
+As SEO Head, give a zero-click defence strategy in 3 sentences:
+1. Which safe keywords to prioritise for traffic
+2. How to handle high-risk keywords (featured snippet + GEO)
+3. What content type survives AI Overview for this business`;
+
+        const d = await callLLM(clientId, keys, defencePrompt, {
+          system: masterPrompt, maxTokens: 300, temperature: 0.3,
+        });
+        aiOverviewDefence = d?.content || d;
+      } catch { /* non-blocking */ }
+    }
+
+    const result = {
+      status:           "complete",
+      totalKeywords:    allKeywords.length,
+      clusters:         keywordData,
+      keywordMap:       allKeywords,
+      gaps:             keywordData.gaps || [],
+      serpData,
+      hasSerpData:      Object.keys(serpData).length > 0,
+      seRankingData:    Object.keys(seMetrics).length > 0
+        ? { enriched:true, keywordsEnriched:Object.keys(seMetrics).length, currentRankings:keywordData.currentRankings||[] }
+        : null,
+      // 2025 intelligence
+      aiRiskSummary,
+      zeroClickRiskPct,
+      aiOverviewDefence,
+      geoKeywords,
+      topicalHubs,
+      snippetOpportunities,
+      hasSnippetOpps:   snippetOpportunities.length > 0,
+      cannibalization,
+      hasCannibalization: cannibalization.length > 0,
+      killSignals,
+      summary: {
+        totalKeywords: allKeywords.length,
+        highAIRisk:    aiRiskSummary.high,
+        lowAIRisk:     aiRiskSummary.low,
+        zeroClickRiskPct,
+        topicalHubs:   topicalHubs.length,
+        snippetOpps:   snippetOpportunities.length,
+        geoOpps:       geoKeywords.length,
+      },
+      generatedAt: new Date().toISOString(),
+    };
+
+    await saveState(clientId, "A3_keywords", result);
+
+    try {
+      const safePriority = allKeywords.filter(k => k.aiOverviewRisk==="low" && k.priority==="high").slice(0,10).map(k=>k.keyword);
+      if (safePriority.length > 0) {
+        emitToolSuggestion(clientId, "keywords_ready", {}, { keywords:safePriority, businessName:brief.businessName||"", url:websiteUrl }).catch(()=>{});
+      }
+      if (geoKeywords[0]) emitToolSuggestion(clientId, "geo_opportunity", { keyword:geoKeywords[0].keyword }, {}).catch(()=>{});
+    } catch { /* non-blocking */ }
+
+    console.log(`[A3] ✅ ${allKeywords.length} keywords | AI risk: ${zeroClickRiskPct}% high | ${topicalHubs.length} hubs | ${geoKeywords.length} GEO opps`);
+    return { success: true, keywords: result };
+
   } catch (e) {
     console.error(`[A3] Keyword research failed for ${clientId}:`, e.message);
     return { success: false, error: e.message };
   }
 }
 
-// ── Rule-based keyword seed builder (no LLM required) ────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function getAllKwStrings(kd) {
+  return ["brand","generic","longtail","informational","transactional","local"]
+    .flatMap(c => (kd[c]||[]).map(k=>k.keyword)).filter(Boolean);
+}
+function flattenClusters(clusters) {
+  return ["brand","generic","longtail","informational","local"]
+    .flatMap(c => (clusters[c]||[]).map(k=>({...k,cluster:c})));
+}
+function flattenClustersAll(kd) {
+  return ["brand","generic","longtail","informational","transactional","local"]
+    .flatMap(c => (kd[c]||[]).map(k=>({...k,cluster:c})));
+}
+function buildTopicalHubs(allKws) {
+  const hubMap = {};
+  for (const kw of allKws) {
+    const hub = kw.topicalHub || kw.cluster || "general";
+    if (!hubMap[hub]) hubMap[hub] = { hubName:hub, keywords:[], clusterPages:[] };
+    hubMap[hub].keywords.push(kw.keyword);
+    if (kw.suggestedPage && !hubMap[hub].clusterPages.includes(kw.suggestedPage))
+      hubMap[hub].clusterPages.push(kw.suggestedPage);
+  }
+  return Object.values(hubMap).filter(h=>h.keywords.length>=2).map(h=>({
+    hubName: h.hubName, pillarPage: h.clusterPages[0]||"/",
+    clusterPages: h.clusterPages.slice(1,5), keywords: h.keywords.slice(0,8),
+    priority: h.keywords.length>=5?"high":"medium",
+  }));
+}
+function detectCannibalization(allKws) {
+  const pageMap = {};
+  for (const kw of allKws) {
+    const page = kw.suggestedPage || "/";
+    if (!pageMap[page]) pageMap[page] = [];
+    pageMap[page].push(kw);
+  }
+  return Object.entries(pageMap).filter(([,kws])=>kws.length>=3).map(([page,kws])=>{
+    const intents = [...new Set(kws.map(k=>k.intent))];
+    if (intents.length<2 && kws.length<4) return null;
+    return { page, keywords:kws.map(k=>k.keyword), keywordCount:kws.length, intents,
+      risk: kws.length>=5?"high":"medium",
+      fix: `Split into ${intents.length} separate pages — one per intent.` };
+  }).filter(Boolean);
+}
 function buildSeedClusters(brief) {
-  const name       = (brief?.businessName || "").toString();
-  const services   = [].concat(brief?.services || []).filter(s => s && typeof s === "string");
-  const locations  = [].concat(brief?.targetLocations || (brief?.targetLocation ? [brief.targetLocation] : [])).filter(Boolean);
-  const desc       = (brief?.businessDescription || "").toString();
-  const keywords   = [].concat(brief?.primaryKeywords || []).filter(k => k && typeof k === "string");
-
-  // Brand cluster
+  const name     = (brief?.businessName||"").toString();
+  const services = [].concat(brief?.services||[]).filter(s=>s&&typeof s==="string");
+  const locs     = [].concat(brief?.targetLocations||(brief?.targetLocation?[brief.targetLocation]:[])).filter(Boolean);
+  const keywords = [].concat(brief?.primaryKeywords||[]).filter(k=>k&&typeof k==="string");
   const brand = [
-    { keyword: name.toLowerCase(), intent: "navigational", difficulty: "low", priority: "high", suggestedPage: "/" },
-    ...keywords.map(k => ({ keyword: k, intent: "navigational", difficulty: "low", priority: "high", suggestedPage: "/" })),
-  ].slice(0, 5);
-
-  // Generic / commercial cluster
-  const generic = services.slice(0, 6).map(s => ({
-    keyword: s.toLowerCase(), intent: "transactional", difficulty: "medium", priority: "high", suggestedPage: "/services",
-  }));
-  if (generic.length === 0 && desc) {
-    const words = desc.toLowerCase().split(/\s+/).filter(w => w.length > 4).slice(0, 6);
-    words.forEach(w => generic.push({ keyword: w, intent: "transactional", difficulty: "medium", priority: "medium", suggestedPage: "/services" }));
-  }
-
-  // Long-tail cluster
-  const longtail = services.slice(0, 4).map(s => ({
-    keyword: `best ${s.toLowerCase()}`, intent: "commercial", difficulty: "medium", priority: "medium", suggestedPage: "/services",
-  }));
-
-  // Local variants
-  const localVariants = [];
-  for (const loc of locations.slice(0, 3)) {
-    for (const svc of services.slice(0, 2)) {
-      localVariants.push({ keyword: `${svc.toLowerCase()} ${loc.toLowerCase()}`, location: loc, intent: "transactional", difficulty: "low" });
-    }
-  }
-
-  // Informational cluster
-  const informational = services.slice(0, 3).map(s => ({
-    keyword: `how to choose ${s.toLowerCase()}`, intent: "informational", difficulty: "low", priority: "low", suggestedPage: "/blog",
-  }));
-
-  return { brand, generic, longtail, localVariants, informational, gaps: [], generatedBy: "rule-engine" };
+    {keyword:name.toLowerCase(),intent:"navigational",aiOverviewRisk:"low",zeroClickProbability:5,difficulty:"low",priority:"high",suggestedPage:"/"},
+    ...keywords.map(k=>({keyword:k,intent:"navigational",aiOverviewRisk:"low",zeroClickProbability:5,difficulty:"low",priority:"high",suggestedPage:"/"})),
+  ].slice(0,5);
+  const generic = services.slice(0,6).map(s=>({keyword:s.toLowerCase(),intent:"transactional",aiOverviewRisk:"low",zeroClickProbability:10,difficulty:"medium",priority:"high",suggestedPage:"/services"}));
+  const longtail = services.slice(0,4).map(s=>({keyword:`best ${s.toLowerCase()}`,intent:"commercial",aiOverviewRisk:"medium",zeroClickProbability:30,difficulty:"medium",priority:"medium",suggestedPage:"/services"}));
+  const local = locs.slice(0,3).flatMap(loc=>services.slice(0,2).map(s=>({keyword:`${s.toLowerCase()} ${loc.toLowerCase()}`,location:loc,intent:"local",aiOverviewRisk:"low",zeroClickProbability:8,difficulty:"low",priority:"high",suggestedPage:"/services"})));
+  const informational = services.slice(0,3).map(s=>({keyword:`how to choose ${s.toLowerCase()}`,intent:"informational",aiOverviewRisk:"high",zeroClickProbability:70,geoOpportunity:true,difficulty:"low",priority:"medium",suggestedPage:"/blog",notes:"High AI risk — optimise for snippet + GEO"}));
+  return { brand, generic, longtail, local, informational, gaps:[], topicalHubs:[], generatedBy:"rule-engine" };
 }
 
 module.exports = { runA3 };
