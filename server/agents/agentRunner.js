@@ -75,6 +75,46 @@ const AGENTS = {
     load: () => require("./A15_competitorMonitor").runA15,
     args: (clientId, keys) => [clientId, keys],
   },
+  AI1: {
+    load: () => require("./AI1_intentDrift").runAI1,
+    args: (clientId, keys) => [clientId, keys],
+  },
+  AI2: {
+    load: () => require("./AI2_topicalAuthority").runAI2,
+    args: (clientId, keys) => [clientId, keys],
+  },
+  AI3: {
+    load: () => require("./AI3_serpVolatility").runAI3,
+    args: (clientId, keys) => [clientId, keys],
+  },
+  AI4: {
+    load: () => require("./AI4_leadQualityScore").runAI4,
+    args: (clientId, keys) => [clientId, keys],
+  },
+  AI5: {
+    load: () => require("./AI5_seasonalOpportunity").runAI5,
+    args: (clientId, keys) => [clientId, keys],
+  },
+  AI6: {
+    load: () => require("./AI6_negativeSeoShield").runAI6,
+    args: (clientId, keys) => [clientId, keys],
+  },
+  AI7: {
+    load: () => require("./AI7_contentDecay").runAI7,
+    args: (clientId, keys) => [clientId, keys],
+  },
+  AI8: {
+    load: () => require("./AI8_voiceSearch").runAI8,
+    args: (clientId, keys) => [clientId, keys],
+  },
+  AI9: {
+    load: () => require("./AI9_zeroClick").runAI9,
+    args: (clientId, keys) => [clientId, keys],
+  },
+  AI10: {
+    load: () => require("./AI10_agencyBenchmark").runAI10,
+    args: (clientId, keys) => [clientId, keys],
+  },
 };
 
 /**

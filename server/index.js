@@ -208,6 +208,38 @@ setInterval(async () => {
           } catch { /* non-blocking */ }
         }
 
+        // Intelligence agents — run daily for continuous monitoring
+        // AI7 (content decay) + AI3 (SERP volatility) — lightweight, high signal
+        try {
+          const { runAI7 } = require("./agents/AI7_contentDecay");
+          const ai7 = await runAI7(doc.id, keys);
+          if (ai7?.highDecay > 0) {
+            console.log(`[daily-monitor] AI7: ${ai7.highDecay} high-decay pages for ${data.name}`);
+            await db.collection("notifications").add({
+              clientId:  doc.id,
+              ownerId:   data.ownerId,
+              type:      "content_decay",
+              title:     "Content Decay Detected",
+              message:   `${ai7.decayCount} pages losing traffic (${ai7.highDecay} high severity). Refresh queue updated.`,
+              read:      false,
+              createdAt: new Date().toISOString(),
+            }).catch(() => {});
+          }
+        } catch { /* non-blocking */ }
+
+        try {
+          const { runAI3 } = require("./agents/AI3_serpVolatility");
+          const ai3 = await runAI3(doc.id, keys);
+          if (ai3?.updateSignal) {
+            console.log(`[daily-monitor] AI3: SERP volatility ${ai3.volatilityScore} for ${data.name}`);
+          }
+        } catch { /* non-blocking */ }
+
+        try {
+          const { runAI6 } = require("./agents/AI6_negativeSeoShield");
+          await runAI6(doc.id, keys); // writes its own alert on high risk
+        } catch { /* non-blocking */ }
+
         // A25: Core Update Scanner — runs daily after A9 alerts, checks E-E-A-T + AI content risk
         try {
           const { runA25 } = require("./agents/A25_coreUpdateScanner");

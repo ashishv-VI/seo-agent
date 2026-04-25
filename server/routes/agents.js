@@ -1897,6 +1897,53 @@ router.get("/:clientId/A23/investigations", verifyToken, async (req, res) => {
   }
 });
 
+// ── Intelligence Agents (AI1–AI10) — on-demand scan + results ────────────────
+const AI_AGENTS = {
+  AI1:  { module: "../agents/AI1_intentDrift",        fn: "runAI1"  },
+  AI2:  { module: "../agents/AI2_topicalAuthority",   fn: "runAI2"  },
+  AI3:  { module: "../agents/AI3_serpVolatility",     fn: "runAI3"  },
+  AI4:  { module: "../agents/AI4_leadQualityScore",   fn: "runAI4"  },
+  AI5:  { module: "../agents/AI5_seasonalOpportunity",fn: "runAI5"  },
+  AI6:  { module: "../agents/AI6_negativeSeoShield",  fn: "runAI6"  },
+  AI7:  { module: "../agents/AI7_contentDecay",       fn: "runAI7"  },
+  AI8:  { module: "../agents/AI8_voiceSearch",        fn: "runAI8"  },
+  AI9:  { module: "../agents/AI9_zeroClick",          fn: "runAI9"  },
+  AI10: { module: "../agents/AI10_agencyBenchmark",   fn: "runAI10" },
+};
+
+// POST /:clientId/AIX/scan + GET /:clientId/AIX/results — generic handler
+Object.entries(AI_AGENTS).forEach(([id, cfg]) => {
+  router.post(`/:clientId/${id}/scan`, verifyToken, async (req, res) => {
+    try {
+      await getClientDoc(req.params.clientId, req.uid);
+      const agentFn = require(cfg.module)[cfg.fn];
+      const keys    = await getUserKeys(req.uid);
+      const result  = await agentFn(req.params.clientId, keys);
+      return res.json(result);
+    } catch (e) {
+      return res.status(e.code || 500).json({ error: e.message });
+    }
+  });
+
+  router.get(`/:clientId/${id}/results`, verifyToken, async (req, res) => {
+    try {
+      await getClientDoc(req.params.clientId, req.uid);
+      const stateKey = `${id}_${cfg.fn.replace("run", "")}`;
+      // Map agent ID to state key
+      const stateMap = {
+        AI1: "AI1_intentDrift", AI2: "AI2_topicalAuthority", AI3: "AI3_serpVolatility",
+        AI4: "AI4_leadQualityScore", AI5: "AI5_seasonalOpportunity", AI6: "AI6_negativeSeoShield",
+        AI7: "AI7_contentDecay", AI8: "AI8_voiceSearch", AI9: "AI9_zeroClick", AI10: "AI10_agencyBenchmark",
+      };
+      const result = await getState(req.params.clientId, stateMap[id] || stateKey);
+      if (!result) return res.json({ notRun: true });
+      return res.json(result);
+    } catch (e) {
+      return res.status(e.code || 500).json({ error: e.message });
+    }
+  });
+});
+
 // POST /:clientId/A25/scan — run Core Update Scanner on-demand
 router.post("/:clientId/A25/scan", verifyToken, async (req, res) => {
   try {
