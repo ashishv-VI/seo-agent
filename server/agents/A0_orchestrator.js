@@ -633,6 +633,8 @@ async function createAlert(clientId, tier, type, message, fix) {
 
 async function handleFailure(clientId, agentId, error) {
   const tier = TIER[agentId];
+  // Log exact error so Render logs show what went wrong
+  console.error(`[A0] ❌ ${agentId} FAILED (Tier ${tier}): ${error}`);
   await db.collection("clients").doc(clientId).update({
     [`agents.${agentId}`]: "failed",
     ...(tier === 1 ? { orchestratorAlert: `TIER 1 FAILURE: ${agentId} — ${error}` } : {}),
