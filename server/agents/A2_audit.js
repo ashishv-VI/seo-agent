@@ -1,16 +1,17 @@
 const { saveState, getState } = require("../shared-state/stateManager");
 const { emitTasks, clearTasks } = require("../utils/taskQueue");
 const { emitToolSuggestion }    = require("../utils/toolBridge");
-const { renderPage, isJSRendered } = require("../utils/jsRenderer");
+const { smartAudit }            = require("../crawler/smartCrawler");
 
 /**
- * A2 — Technical & On-Page Audit Agent
- * Runs after A1 brief is signed off
- * Checks: SSL, robots.txt, sitemap, meta tags, redirects, response time
+ * A2 — Technical & On-Page Audit Agent (Smart Crawler 2025)
+ * 12 audit layers: HTTP, Crawlability, Indexability, On-Page, Content Quality,
+ * Internal Links, Media, Core Web Vitals (INP 2024), Schema 2025,
+ * E-E-A-T, AEO/GEO/AI readiness, Security.
+ * Cloudflare bypass: sitemap-first → GSC → Common Crawl → direct crawl.
  */
 async function runA2(clientId, keys, masterPrompt) {
   try {
-  // Get brief from A1
   const brief = await getState(clientId, "A1_brief");
   if (!brief) {
     return { success: false, error: "A1 brief not found — run onboarding first" };
@@ -105,24 +106,27 @@ async function runA2(clientId, keys, masterPrompt) {
 
     // Parse HTML for on-page checks
     let rawHtml = await res.text();
-    checks.isJSRendered = isJSRendered(rawHtml);
-    if (checks.isJSRendered) {
-      console.log(`[A2] JS-rendered page detected at ${siteUrl} → trying Puppeteer`);
-      try {
-        // Hard 15s timeout on renderPage — Puppeteer unavailable on Render free tier
+
+    // JS-render fallback — lazy-loaded with hard 15s timeout (Puppeteer unavailable on Render free tier)
+    try {
+      const { isJSRendered: isJSR, renderPage: rp } = require("../utils/jsRenderer");
+      checks.isJSRendered = isJSR(rawHtml);
+      if (checks.isJSRendered) {
+        console.log(`[A2] JS-rendered page detected at ${siteUrl} → trying Puppeteer`);
         const renderResult = await Promise.race([
-          renderPage(siteUrl, 12000),
-          new Promise((_, reject) => setTimeout(() => reject(new Error("renderPage timeout")), 15000))
+          rp(siteUrl, 12000),
+          new Promise((_, reject) => setTimeout(() => reject(new Error("renderPage timeout")), 15000)),
         ]);
         if (renderResult?.html && renderResult.html.length > rawHtml.length) {
           rawHtml = renderResult.html;
           checks.jsRenderingUsed = renderResult.rendered;
         }
-      } catch (renderErr) {
-        console.warn(`[A2] renderPage failed (${renderErr.message}) — using fetch HTML`);
-        checks.jsRenderingUsed = false;
       }
+    } catch (renderErr) {
+      console.warn(`[A2] renderPage failed (${renderErr?.message}) — using fetch HTML`);
+      checks.isJSRendered = false;
     }
+
     const html = rawHtml;
     checks._homepageHtml = html;
     const onPage = parseOnPage(html, res.url, clientId);
@@ -212,7 +216,7 @@ async function runA2(clientId, keys, masterPrompt) {
     checks.sitemap = { exists: false, error: "Could not fetch" };
   }
 
-  // ── 5. Multi-Page Crawler ──────────────────────────────────────────────────
+  // ── 5. Smart Audit — 12 layers, Cloudflare bypass, 2025 SEO rules ───────────
   const pageAudits    = [];
   const brokenLinks   = [];
   let   discoveredUrls = [];
@@ -220,168 +224,122 @@ async function runA2(clientId, keys, masterPrompt) {
   // Skip crawl if site is firewall-blocked — all pages will return 403
   if (checks.isAccessible && !checks.isFirewallBlocked) {
     try {
-      const domain = new URL(siteUrl).hostname;
+      // Pull GSC page list from A10 state if available (helps bypass Cloudflare)
+      let gscPages = null;
+      try {
+        const a10 = await getState(clientId, "A10_rankings");
+        if (a10?.rankings) gscPages = a10.rankings.map(r => r.page || r.url).filter(Boolean);
+      } catch { /* skip */ }
 
-      // Sitemap-first URL discovery (same as before)
-      const SKIP_EXTENSIONS = /\.(css|js|ico|png|jpg|jpeg|gif|svg|webp|woff|woff2|ttf|eot|pdf|zip|xml|json|txt|mp4|mp3|wav|avi|mov|map|gz|tar|rar|exe|dmg)(\?.*)?$/i;
-      const SKIP_PATTERNS   = [/\/wp-content\//i, /\/wp-json\//i, /\/feed\/?$/i, /\/xmlrpc\.php/i, /\/wp-admin\//i, /\/wp-login/i, /\/tag\//i, /\/author\//i, /\/page\/\d+/i];
-
-      const sitemapUrls = await discoverFromSitemap(siteUrl, domain, SKIP_EXTENSIONS, SKIP_PATTERNS);
-      checks.sitemapPagesFound = sitemapUrls.length;
-
-      // ── Use new concurrent crawlDomain ────────────────────────────────────
-      const { crawlDomain } = require("../crawler/webCrawler");
-      const crawlResult = await crawlDomain(siteUrl, {
-        maxPages:       50,
-        maxDepth:       2,
-        concurrency:    3,
-        delayMs:        300,
-        maxTotalTimeMs: 5 * 60 * 1000, // 5 min hard cap — A2 has 12 min total, leaves room for analysis
-        onProgress:  (done, total) => {
-          if (done % 25 === 0) {
-            console.log(`[A2] Crawled ${done}/${total} pages...`);
-            // Write progress to Firestore so frontend can poll it
-            const { db: fdb } = require("../config/firebase");
-            fdb.collection("clients").doc(clientId).update({
-              crawlProgress: { crawled: done, total, pct: Math.round((done / Math.max(1, total)) * 100) },
-            }).catch(() => {});
+      const crawlResult = await smartAudit(siteUrl, {
+        maxPages:    60,
+        concurrency: 4,
+        delayMs:     250,
+        gscPages,
+        clientId,
+        onProgress: (done, total, phase) => {
+          if (done % 10 === 0 || phase === "discovered") {
+            console.log(`[A2] ${phase}: ${done}/${total}`);
           }
         },
       });
 
       const crawledPages = crawlResult.pages || [];
-      checks.internalLinksFound = crawledPages.filter(p => !p.broken).length;
-      discoveredUrls = crawledPages.filter(p => !p.broken).map(p => p.url);
+      checks.internalLinksFound  = crawledPages.length;
+      checks.sitemapPagesFound   = crawlResult.urlsDiscovered || 0;
+      checks.isCloudflareProtected = crawlResult.isCloudflareProtected || false;
+      discoveredUrls = crawledPages.map(p => p.url);
 
-      // Convert crawled pages → pageAudits format (run parseOnPage for detailed checks)
+      // Convert smart audit page results → pageAudits format
       for (const cp of crawledPages) {
-        if (cp.broken || (cp.statusCode && cp.statusCode >= 400)) {
-          brokenLinks.push({ url: cp.url, status: cp.statusCode || cp.status || 0 });
-          continue;
-        }
-
-        // Re-use metadata already extracted by crawlDomain (extractMeta)
-        // Run parseOnPage only if we need deep issue detection
-        const pgIssues = [];
-        if (!cp.title || cp.title === "")          pgIssues.push({ type: "missing_title",    severity: "critical", fix: "Add a title tag with primary keyword" });
-        if (cp.title?.length > 70)                 pgIssues.push({ type: "long_title",       severity: "warning",  fix: `Title too long (${cp.title.length} chars) — shorten to 60` });
-        if (!cp.h1)                                pgIssues.push({ type: "missing_h1",       severity: "critical", fix: "Add one H1 tag with primary keyword" });
-        if (!cp.description)                       pgIssues.push({ type: "missing_meta_desc",severity: "warning",  fix: "Add meta description (140-155 chars)" });
-        if (!cp.canonical || cp.canonical === cp.url) {} // canonical present — ok
-        if (cp.noindex)                            pgIssues.push({ type: "noindex_detected", severity: "critical", fix: "Remove noindex — page is invisible to Google" });
-        if ((cp.wordCount || 0) < 300)             pgIssues.push({ type: "thin_content",     severity: "warning",  fix: `Only ${cp.wordCount} words — expand to 500+` });
-        if ((cp.imgAlt?.missingAlt || 0) > 3)      pgIssues.push({ type: "missing_alt_text", severity: "warning",  fix: `${cp.imgAlt.missingAlt} images missing alt text` });
-        if ((cp.responseTime || 0) > 3000)         pgIssues.push({ type: "slow_page",        severity: "warning",  fix: `Page takes ${cp.responseTime}ms — optimise server` });
+        const pgIssues = (cp.issues || []).map(i => ({
+          type:     i.type,
+          severity: i.severity || "p3",
+          detail:   i.detail || "",
+          fix:      i.fix || "",
+        }));
 
         pageAudits.push({
           url:             cp.url,
           title:           cp.title || "(missing)",
-          titleLength:     cp.title?.length || 0,
-          metaDescription: cp.description || "",
+          titleLength:     cp.titleLength || 0,
+          metaDescription: cp.metaDescription || "",
           hasH1:           !!(cp.h1),
           h1:              cp.h1 || null,
           h2Count:         cp.h2Count || 0,
           h3Count:         cp.h3Count || 0,
-          hasMeta:         !!(cp.description),
+          hasMeta:         !!(cp.metaDescription),
           hasCanonical:    !!(cp.canonical),
           hasSchema:       (cp.schemaTypes?.length || 0) > 0,
           schemas:         cp.schemaTypes || [],
           noindex:         !!cp.noindex,
-          altMissing:      cp.imgAlt?.missingAlt || 0,
+          altMissing:      cp.imgMissingAlt || 0,
           wordCount:       cp.wordCount || 0,
-          freshness:       "unknown",
-          crawlDepth:      cp.depth || 1,
+          contentRatio:    cp.contentRatio || 0,
+          freshnessSignal: cp.freshnessSignal || "unknown",
+          crawlDepth:      1,
           responseTime:    cp.responseTime || null,
-          inboundLinks:    cp.inboundInternalLinks || 0,
-          jsRendered:      cp.jsRendered || false,
-          thinContent:     cp.thinContent || null,
+          pageScore:       cp.pageScore || 70,
+          eeat:            cp.eeat || null,
+          aeo:             cp.aeo || null,
+          geo:             cp.geo || null,
+          aiContentRisk:   cp.aiContentRisk || null,
+          securityHeaders: cp.securityHeaders || {},
+          schemaTypes:     cp.schemaTypes || [],
+          hasFAQSchema:    cp.hasFAQSchema || false,
+          hasHowToSchema:  cp.hasHowToSchema || false,
+          hasLocalSchema:  cp.hasLocalSchema || false,
+          hasBreadcrumb:   cp.hasBreadcrumb || false,
+          hasViewport:     cp.hasViewport || false,
+          hasMobileCSS:    cp.hasMobileCSS || false,
+          ogTags:          cp.ogTags || {},
+          renderBlockingJS: cp.renderBlockingJS || 0,
           issues:          pgIssues,
           issueCount:      pgIssues.length,
         });
       }
 
-      // ── Issues from crawl analysis ─────────────────────────────────────────
-      const analysis = crawlResult.analysis || {};
+      // ── Merge global issues from smart audit ──────────────────────────────
+      const gi = crawlResult.globalIssues || { p1: [], p2: [], p3: [] };
+      for (const issue of gi.p1) issues.p1.push(issue);
+      for (const issue of gi.p2) issues.p2.push(issue);
+      for (const issue of gi.p3) issues.p3.push(issue);
 
-      if (brokenLinks.length > 0) {
-        issues.p1.push({
-          type:   "broken_links",
-          detail: `${brokenLinks.length} broken link(s) found`,
-          fix:    "Fix or redirect all broken URLs — they leak PageRank and hurt UX",
-          urls:   brokenLinks.map(b => `${b.url} [${b.status}]`).slice(0, 10),
-        });
+      // Broken pages
+      for (const bp of (crawlResult.brokenPages || [])) {
+        brokenLinks.push({ url: bp.url, status: bp.status });
       }
 
-      const noTitle = pageAudits.filter(p => p.title === "(missing)");
-      if (noTitle.length > 0) issues.p2.push({ type: "inner_pages_no_title", detail: `${noTitle.length} page(s) missing title tag`, fix: "Add unique keyword-rich title to every page", urls: noTitle.map(p => p.url).slice(0, 10) });
-
-      const noH1 = pageAudits.filter(p => !p.hasH1);
-      if (noH1.length > 0) issues.p2.push({ type: "inner_pages_no_h1", detail: `${noH1.length} page(s) missing H1`, fix: "Add one H1 to every page", urls: noH1.map(p => p.url).slice(0, 10) });
-
-      if ((analysis.dupTitles?.length || 0) > 0) issues.p2.push({ type: "duplicate_titles", detail: `${analysis.dupTitles.length} duplicate title(s)`, fix: "Give every page a unique title tag", examples: analysis.dupTitles.slice(0, 5).map(d => `"${d.title}" on: ${d.urls.join(", ")}`) });
-
-      if ((analysis.dupMetas?.length || 0) > 0)  issues.p3.push({ type: "duplicate_meta_desc", detail: `${analysis.dupMetas.length} duplicate meta description(s)`, fix: "Write a unique meta description for every page" });
-
-      if ((analysis.orphanCount || 0) > 0) issues.p2.push({ type: "orphan_pages", detail: `${analysis.orphanCount} orphan page(s) with no internal links pointing to them`, fix: "Add internal links to orphan pages from related content", urls: (analysis.orphanPages || []).slice(0, 10) });
-
-      if ((analysis.cannibalization?.length || 0) > 3) issues.p3.push({ type: "keyword_cannibalization", detail: `${analysis.cannibalization.length} potential keyword cannibalization conflicts`, fix: "Consolidate or differentiate pages targeting the same keyword", examples: analysis.cannibalization.slice(0, 3).map(c => `"${c.keyword}" on ${c.count} pages`) });
-
-      // Store crawl analysis for AuditPatterns + pageScorer to use
+      const analysis = crawlResult.analysis || {};
       checks.crawlAnalysis = {
-        orphanCount:        analysis.orphanCount || 0,
-        cannibalizationCount: analysis.cannibalization?.length || 0,
-        dupTitleCount:      analysis.dupTitles?.length || 0,
-        avgResponseTime:    analysis.avgResponseTime || 0,
-        slowPagesCount:     analysis.slowPages?.length || 0,
-        jsRenderedCount:    analysis.jsRenderedCount || 0,
+        orphanCount:            analysis.orphanCount || 0,
+        cannibalizationCount:   analysis.cannibalization?.length || 0,
+        dupTitleCount:          analysis.dupTitles?.length || 0,
+        avgResponseTime:        analysis.avgResponseTime || 0,
+        slowPagesCount:         analysis.slowPages?.length || 0,
+        thinCount:              analysis.thinCount || 0,
+        noSchemaCount:          analysis.noSchemaCount || 0,
+        isCloudflareProtected:  crawlResult.isCloudflareProtected || false,
       };
 
+      // E-E-A-T from homepage
+      if (crawlResult.eeat) checks.eeat = crawlResult.eeat;
+      // AEO/GEO from homepage
+      if (crawlResult.aeo) checks.aeo = crawlResult.aeo;
+      if (crawlResult.geo) checks.geo = crawlResult.geo;
+
+      // Infrastructure
+      checks.sitemap = crawlResult.infrastructure?.sitemap || checks.sitemap;
+      checks.robotsTxt = crawlResult.infrastructure?.robots || checks.robotsTxt;
+      checks.redirectChain = crawlResult.infrastructure?.redirects || checks.redirectChain;
+
     } catch (e) {
-      console.error("[A2] Crawl error:", e.message);
+      console.error("[A2] Smart audit error:", e.message);
     }
   }
 
   checks.pageAudits  = pageAudits;
   checks.brokenLinks = brokenLinks;
-
-  // ── 6. E-E-A-T Signals Audit ──────────────────────
-  // Google's "Experience, Expertise, Authoritativeness, Trustworthiness" — critical post-HCU
-  if (checks._homepageHtml) {
-    const h = checks._homepageHtml;
-    const eeat = {
-      hasAboutPage:     /href=["'][^"']*\/about(?:-us|team|company)?[/"']/i.test(h),
-      hasContactPage:   /href=["'][^"']*\/contact(?:-us)?[/"']/i.test(h),
-      hasPrivacyPolicy: /href=["'][^"']*\/privacy(?:-policy)?[/"']/i.test(h),
-      hasAuthorBio:     /<[^>]*class=["'][^"']*(?:author|byline)[^"']*["']/i.test(h),
-      hasSchemaOrg:     /"@context"\s*:\s*"https?:\/\/schema\.org"/i.test(h),
-      hasBreadcrumb:    /(?:breadcrumb|BreadcrumbList)/i.test(h),
-      hasTestimonials:  /<[^>]*class=["'][^"']*(?:testimonial|review|rating)[^"']*["']/i.test(h),
-      hasSocialLinks:   /href=["'][^"']*(?:linkedin|twitter|facebook|instagram)\.com/i.test(h),
-    };
-    eeat.score    = Object.values(eeat).filter(Boolean).length;
-    eeat.maxScore = 8;
-    checks.eeat   = eeat;
-
-    const missing = [];
-    if (!eeat.hasAboutPage)     missing.push("About/Team page");
-    if (!eeat.hasContactPage)   missing.push("Contact page");
-    if (!eeat.hasPrivacyPolicy) missing.push("Privacy Policy");
-    if (!eeat.hasSchemaOrg)     missing.push("Schema.org structured data");
-
-    if (missing.length >= 3) {
-      issues.p2.push({
-        type:   "weak_eeat",
-        detail: `E-E-A-T signals weak (${eeat.score}/8) — missing: ${missing.join(", ")}`,
-        fix:    "Add About, Contact, Privacy Policy pages and Schema.org markup to build Google trust",
-      });
-    } else if (missing.length > 0) {
-      issues.p3.push({
-        type:   "eeat_improvements",
-        detail: `E-E-A-T score ${eeat.score}/8 — could improve: ${missing.join(", ")}`,
-        fix:    "Strengthen trust signals to improve E-E-A-T and Google's confidence in site authority",
-      });
-    }
-  }
 
   delete checks._homepageHtml;
 
@@ -398,20 +356,29 @@ async function runA2(clientId, keys, masterPrompt) {
     checks,
     pages: discoveredUrls.slice(0, 50).map(url => ({ url, discovered: "crawl" })),
     summary: {
-      p1Count:       issues.p1.length,
-      p2Count:       issues.p2.length,
-      p3Count:       issues.p3.length,
-      pagesCrawled:  pageAudits.length + 1,
-      brokenLinks:   brokenLinks.length,
-      redirectDepth: checks.redirectChain?.depth || 0,
-      eeatScore:     checks.eeat?.score || 0,
-      thinPages:     pageAudits.filter(p => p.wordCount < 300).length,
-      message:  issues.p1.length > 0
+      p1Count:        issues.p1.length,
+      p2Count:        issues.p2.length,
+      p3Count:        issues.p3.length,
+      pagesCrawled:   pageAudits.length + 1,
+      brokenLinks:    brokenLinks.length,
+      redirectDepth:  checks.redirectChain?.depth || 0,
+      eeatScore:      checks.eeat?.score || 0,
+      eeatMaxScore:   checks.eeat?.maxScore || 12,
+      aeoScore:       checks.aeo?.score || 0,
+      aeoMaxScore:    checks.aeo?.maxScore || 12,
+      geoScore:       checks.geo?.score || 0,
+      thinPages:      pageAudits.filter(p => p.wordCount < 300).length,
+      noSchemaPages:  pageAudits.filter(p => !p.hasSchema).length,
+      isCloudflareProtected: checks.crawlAnalysis?.isCloudflareProtected || false,
+      message: issues.p1.length > 0
         ? `${issues.p1.length} critical issue(s) blocking rankings — fix immediately`
         : issues.p2.length > 0
           ? `No critical issues. ${issues.p2.length} issues hurting rankings`
           : "Site looks technically healthy",
     },
+    eeat:      checks.eeat  || null,
+    aeo:       checks.aeo   || null,
+    geo:       checks.geo   || null,
     auditedAt: new Date().toISOString(),
   };
 
