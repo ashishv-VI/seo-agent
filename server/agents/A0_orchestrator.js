@@ -776,8 +776,10 @@ async function runFullPipeline(clientId, keys, googleToken = null) {
   const mark = async (agentId, status) =>
     db.collection("clients").doc(clientId).update({ [`agents.${agentId}`]: status }).catch(() => {});
 
+  // masterPrompt declared here so exec closure can capture it after it's assigned below
+  let masterPrompt = "";
+
   // Smart exec: run agent → mark status → SEO Head reviews output
-  // masterPrompt is available in closure from loadLiveKnowledge above
   const exec = async (agentId, fn, skipReview = false) => {
     const timeout = AGENT_TIMEOUT_MS[agentId] || DEFAULT_TIMEOUT;
     try {
@@ -812,7 +814,7 @@ async function runFullPipeline(clientId, keys, googleToken = null) {
     // ── STEP 0: Load live SEO knowledge (L2 — auto-refreshes every 7 days) ──
     console.log(`[A0-L2] Loading live SEO knowledge...`);
     const liveKnowledge = await loadLiveKnowledge(keys);
-    const masterPrompt  = buildMasterSystemPrompt(liveKnowledge);
+    masterPrompt        = buildMasterSystemPrompt(liveKnowledge);
     console.log(`[A0-L2] Knowledge ready (${liveKnowledge.length} chars)`);
 
     // ── PRE-PIPELINE: SEO Head strategic brief ────────────────────────────
