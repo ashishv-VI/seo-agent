@@ -63,8 +63,8 @@ async function runA16(clientId, keys) {
       await updateMemorySection(clientId, "seoProgress", {
         lastScore:    currentScore,
         scoreHistory: [...scoreHistory, { score: currentScore, date: new Date().toISOString() }].slice(-20),
-        totalIssuesFound: Number((audit?.issues?.p1?.length || 0) + (audit?.issues?.p2?.length || 0) + (audit?.issues?.p3?.length || 0)) || 0,
-        totalKeywords:    Number(keywords?.keywordMap?.length || 0),
+        totalIssuesFound: Number((audit?.issues?.p1?.length ?? 0) + (audit?.issues?.p2?.length ?? 0) + (audit?.issues?.p3?.length ?? 0)) || 0,
+        totalKeywords:    Number(keywords?.keywordMap?.length ?? 0) || 0,
         updatedAt:        new Date().toISOString(),
       });
     }

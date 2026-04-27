@@ -12,7 +12,7 @@ const { getTopTasks }                                  = require("../utils/taskQ
  */
 
 // ── Generate Full Report ───────────────────────────
-async function generateReport(clientId, keys, gscToken = null) {
+async function generateReport(clientId, keys, masterPrompt = "", gscToken = null) {
   try {
   const brief      = await getState(clientId, "A1_brief");
   const audit      = await getState(clientId, "A2_audit");
