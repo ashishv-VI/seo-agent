@@ -239,13 +239,16 @@ function extractMeta(html, url) {
 // 10x faster than sequential for 100+ page sites
 async function crawlDomain(startUrl, options = {}) {
   const {
-    maxPages    = 100,   // pages to crawl
-    maxDepth    = 4,     // BFS depth
-    concurrency = 10,    // pages fetched in parallel
-    delayMs     = 200,   // polite delay between batches (not per page)
+    maxPages    = 100,
+    maxDepth    = 4,
+    concurrency = 10,
+    delayMs     = 200,
     onPageCrawled = null,
-    onProgress    = null, // callback(crawled, total) for real-time progress
+    onProgress    = null,
+    maxTotalTimeMs = 8 * 60 * 1000, // 8 min hard cap — prevents silent hang
   } = options;
+
+  const crawlDeadline = Date.now() + maxTotalTimeMs;
 
   let rootDomain;
   try { rootDomain = new URL(startUrl).hostname.replace(/^www\./, ""); }
@@ -272,6 +275,11 @@ async function crawlDomain(startUrl, options = {}) {
 
   // Process queue in batches of `concurrency`
   while (queue.length > 0 && pages.length < maxPages) {
+    // Hard deadline check — prevents silent hang
+    if (Date.now() > crawlDeadline) {
+      console.warn(`[webCrawler] Hard timeout reached after ${Math.round(maxTotalTimeMs/1000)}s — returning ${pages.length} pages crawled so far`);
+      break;
+    }
     // Take next batch
     const batch = [];
     while (queue.length > 0 && batch.length < concurrency && pages.length + batch.length < maxPages) {

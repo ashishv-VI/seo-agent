@@ -64,6 +64,20 @@ router.post("/:clientId/run-pipeline", verifyToken, async (req, res) => {
       });
     }
 
+    // ── Guard: prevent double-trigger ─────────────────────────────────────
+    // If pipeline is already running (started < 20 min ago), reject the request
+    const clientDoc = await db.collection("clients").doc(req.params.clientId).get();
+    const clientData = clientDoc.data() || {};
+    if (clientData.pipelineStatus === "running" && clientData.pipelineStartedAt) {
+      const runningFor = Date.now() - new Date(clientData.pipelineStartedAt).getTime();
+      if (runningFor < 20 * 60 * 1000) { // 20 minutes
+        return res.status(409).json({
+          error: `Pipeline already running (started ${Math.round(runningFor / 60000)} min ago). Wait for it to complete or use Hard Reset first.`,
+          alreadyRunning: true,
+        });
+      }
+    }
+
     // Reset all downstream agents to pending so frontend shows fresh state
     await db.collection("clients").doc(req.params.clientId).update({
       "agents.A2": "pending",
