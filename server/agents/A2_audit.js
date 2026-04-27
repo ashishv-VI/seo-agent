@@ -382,15 +382,36 @@ async function runA2(clientId, keys, masterPrompt) {
     auditedAt: new Date().toISOString(),
   };
 
-  // ── Remove large pageAudits array from doc before saving ─────────────────
-  // Firestore 1MB doc limit: store per-page data in subcollection instead
-  // Keep only the count so downstream agents can check if data exists
+  // ── Trim doc before saving — Firestore 1MB limit ─────────────────────────
   const pageAuditsCount = pageAudits.length;
-  delete auditResult.checks.pageAudits; // remove from doc — stored in subcollection below
+  delete auditResult.checks.pageAudits;
   auditResult.checks.pageAuditCount = pageAuditsCount;
 
-  // Save to shared state
-  await saveState(clientId, "A2_audit", auditResult);
+  // Cap issues arrays to 30 items each to stay well under 1MB
+  auditResult.issues.p1 = (auditResult.issues.p1 || []).slice(0, 30);
+  auditResult.issues.p2 = (auditResult.issues.p2 || []).slice(0, 30);
+  auditResult.issues.p3 = (auditResult.issues.p3 || []).slice(0, 30);
+  // Cap pages array (only used for display, not pipeline logic)
+  auditResult.pages = (auditResult.pages || []).slice(0, 30);
+  // Remove checks.brokenLinks from top-level checks (already in brokenLinks summary)
+  delete auditResult.checks.brokenLinks;
+
+  // Save to shared state — wrapped so a Firestore error can't fail the whole agent
+  try {
+    await saveState(clientId, "A2_audit", auditResult);
+  } catch (saveErr) {
+    console.error("[A2] saveState failed:", saveErr.message, "— retrying with minimal payload");
+    // Retry with a minimal payload so downstream agents still have something to read
+    await saveState(clientId, "A2_audit", {
+      status:      auditResult.status,
+      siteUrl:     auditResult.siteUrl,
+      healthScore: auditResult.healthScore,
+      totalIssues: auditResult.totalIssues,
+      summary:     auditResult.summary,
+      issues:      { p1: auditResult.issues.p1.slice(0, 5), p2: auditResult.issues.p2.slice(0, 5), p3: [] },
+      auditedAt:   auditResult.auditedAt,
+    });
+  }
 
   // ── Write per-page docs to subcollection (non-blocking) ──────────────────
   // Skip if >20 pages to avoid burning Firestore write quota on Blaze plan.

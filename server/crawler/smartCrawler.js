@@ -109,7 +109,7 @@ async function smartFetch(url, timeoutMs = 12000, opts = {}) {
         if (attempt < retries) { await sleep(800); continue; }
         return { html: null, status: 403, blocked: true, finalUrl: res.url, headers: {} };
       }
-      if (!res.ok) return { html: null, status: res.status, finalUrl: res.url, headers: Object.fromEntries(res.headers) };
+      if (!res.ok) return { html: null, status: res.status, finalUrl: res.url, headers: {} };
 
       const ct = res.headers.get("content-type") || "";
       if (!ct.includes("text/html")) {
