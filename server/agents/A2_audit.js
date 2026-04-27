@@ -86,15 +86,23 @@ async function runA2(clientId, keys, masterPrompt) {
     }
 
     // Parse HTML for on-page checks
-    // If page appears JS-rendered (blank body), try Puppeteer for real content
     let rawHtml = await res.text();
     checks.isJSRendered = isJSRendered(rawHtml);
     if (checks.isJSRendered) {
       console.log(`[A2] JS-rendered page detected at ${siteUrl} → trying Puppeteer`);
-      const { html: renderedHtml, rendered } = await renderPage(siteUrl, 20000);
-      if (renderedHtml && renderedHtml.length > rawHtml.length) {
-        rawHtml = renderedHtml;
-        checks.jsRenderingUsed = rendered; // true = Puppeteer, false = fetch fallback
+      try {
+        // Hard 15s timeout on renderPage — Puppeteer unavailable on Render free tier
+        const renderResult = await Promise.race([
+          renderPage(siteUrl, 12000),
+          new Promise((_, reject) => setTimeout(() => reject(new Error("renderPage timeout")), 15000))
+        ]);
+        if (renderResult?.html && renderResult.html.length > rawHtml.length) {
+          rawHtml = renderResult.html;
+          checks.jsRenderingUsed = renderResult.rendered;
+        }
+      } catch (renderErr) {
+        console.warn(`[A2] renderPage failed (${renderErr.message}) — using fetch HTML`);
+        checks.jsRenderingUsed = false;
       }
     }
     const html = rawHtml;
@@ -209,10 +217,11 @@ async function runA2(clientId, keys, masterPrompt) {
       // ── Use new concurrent crawlDomain ────────────────────────────────────
       const { crawlDomain } = require("../crawler/webCrawler");
       const crawlResult = await crawlDomain(siteUrl, {
-        maxPages:    50,   // 50 pages is enough for SEO audit; keeps A2 within 12-min timeout
-        maxDepth:    2,
-        concurrency: 3,    // gentle on Render free tier CPU
-        delayMs:     300,  // polite delay
+        maxPages:       50,
+        maxDepth:       2,
+        concurrency:    3,
+        delayMs:        300,
+        maxTotalTimeMs: 5 * 60 * 1000, // 5 min hard cap — A2 has 12 min total, leaves room for analysis
         onProgress:  (done, total) => {
           if (done % 25 === 0) {
             console.log(`[A2] Crawled ${done}/${total} pages...`);
@@ -795,7 +804,11 @@ async function discoverFromSitemap(siteUrl, domain, skipExt, skipPatterns) {
       // Sitemap index — contains <sitemap><loc> pointing to child sitemaps
       if (xml.includes("<sitemapindex")) {
         const children = [...xml.matchAll(/<loc>\s*(https?:\/\/[^<]+)\s*<\/loc>/gi)].map(m => m[1].trim());
-        await Promise.allSettled(children.slice(0, 20).map(child => parseSitemap(child, depth + 1)));
+        // Limit children + add timeout to prevent hang on large sitemap indices
+        await Promise.race([
+          Promise.allSettled(children.slice(0, 5).map(child => parseSitemap(child, depth + 1))),
+          new Promise(resolve => setTimeout(resolve, 15000)), // 15s max for all children
+        ]);
         return;
       }
 
