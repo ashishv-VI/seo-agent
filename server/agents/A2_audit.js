@@ -212,17 +212,13 @@ async function runA2(clientId, keys, masterPrompt) {
     checks.sitemap = { exists: false, error: "Could not fetch" };
   }
 
-  // ── 5. Multi-Page Crawler (concurrent — 10 pages at a time) ──────────────
-  // Uses the upgraded webCrawler.js with:
-  //   - Concurrent fetching (10x faster than sequential)
-  //   - JS rendering per page (React/Next/Vue get Puppeteer fallback)
-  //   - Smart retry on 403/429/503
-  //   - Internal link equity map, orphan detection, cannibalization
+  // ── 5. Multi-Page Crawler ──────────────────────────────────────────────────
   const pageAudits    = [];
   const brokenLinks   = [];
   let   discoveredUrls = [];
 
-  if (checks.isAccessible) {
+  // Skip crawl if site is firewall-blocked — all pages will return 403
+  if (checks.isAccessible && !checks.isFirewallBlocked) {
     try {
       const domain = new URL(siteUrl).hostname;
 
