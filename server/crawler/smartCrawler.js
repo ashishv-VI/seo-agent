@@ -935,13 +935,17 @@ async function auditRedirects(siteUrl) {
 // ─────────────────────────────────────────────────────────────────────────────
 async function smartAudit(siteUrl, options = {}) {
   const {
-    maxPages    = 60,
-    concurrency = 4,
-    delayMs     = 250,
-    gscPages    = null,
-    onProgress  = null,
-    clientId    = null,
+    maxPages       = 60,
+    concurrency    = 4,
+    delayMs        = 250,
+    gscPages       = null,
+    onProgress     = null,
+    clientId       = null,
+    maxTotalTimeMs = 9 * 60 * 1000,  // 9-min hard cap — A2 has 12 min in A0
   } = options;
+
+  const auditStart = Date.now();
+  const isTimedOut = () => Date.now() - auditStart > maxTotalTimeMs;
 
   // ── Phase 1: Infrastructure checks (parallel) ─────────────────────────────
   const [sitemapResult, robotsResult, redirectResult] = await Promise.all([
@@ -964,6 +968,10 @@ async function smartAudit(siteUrl, options = {}) {
 
   // Process in batches of `concurrency`
   for (let i = 0; i < urlsToAudit.length; i += concurrency) {
+    if (isTimedOut()) {
+      console.warn(`[smartCrawler] 9-min timeout — stopping at ${crawled}/${urlsToAudit.length} pages`);
+      break;
+    }
     const batch = urlsToAudit.slice(i, i + concurrency);
 
     const batchResults = await Promise.allSettled(
