@@ -136,4 +136,91 @@ router.get("/dashboard", verifyToken, async (req, res) => {
   }
 });
 
+// ── Bulk Pipeline — queue full pipeline for all clients ───────────────────
+// Enqueues a pipeline run for every client the owner has.
+// Respects a 2-minute stagger so all clients don't hit the LLM simultaneously.
+// Returns a batch job ID that the UI can poll.
+
+router.post("/bulk-pipeline", verifyToken, async (req, res) => {
+  try {
+    const snap = await db.collection("clients")
+      .where("ownerId", "==", req.uid)
+      .get();
+
+    if (snap.empty) return res.status(400).json({ error: "No clients found" });
+
+    const clients = snap.docs.map(d => ({ id: d.id, name: d.data().name || d.data().businessName || d.id }));
+    const batchId = `bulk_${req.uid}_${Date.now()}`;
+    const now = new Date();
+
+    const jobs = clients.map((client, idx) => ({
+      batchId,
+      clientId:  client.id,
+      clientName: client.name,
+      status:    "queued",
+      queuedAt:  now.toISOString(),
+      // Stagger: 2 minutes between each client to avoid hammering LLM
+      scheduledFor: new Date(now.getTime() + idx * 2 * 60 * 1000).toISOString(),
+    }));
+
+    // Write all jobs to Firestore
+    const batch = db.batch();
+    for (const job of jobs) {
+      const ref = db.collection("bulk_pipeline_jobs").doc();
+      batch.set(ref, { id: ref.id, ...job });
+    }
+    await batch.commit();
+
+    // Fire first client immediately (don't wait), rest via staggered queue
+    // The daily-monitor cron will pick up pending bulk jobs automatically
+    try {
+      const { runFullPipeline } = require("../agents/A0_orchestrator");
+      const { getUserKeys }     = require("../utils/getUserKeys");
+      const keys = await getUserKeys(req.uid).catch(() => ({}));
+      // Run first client immediately (non-blocking)
+      if (clients[0]) {
+        runFullPipeline(clients[0].id, keys).catch(e =>
+          console.warn(`[bulk-pipeline] ${clients[0].id} error:`, e.message)
+        );
+        await db.collection("bulk_pipeline_jobs")
+          .where("batchId", "==", batchId)
+          .where("clientId", "==", clients[0].id)
+          .get()
+          .then(s => s.docs[0]?.ref.update({ status: "running", startedAt: new Date().toISOString() }))
+          .catch(() => {});
+      }
+    } catch { /* non-blocking */ }
+
+    return res.json({
+      success:    true,
+      batchId,
+      totalClients: clients.length,
+      jobs: jobs.map(j => ({ clientId: j.clientId, clientName: j.clientName, scheduledFor: j.scheduledFor })),
+      message:    `Pipeline queued for ${clients.length} client(s). First starts immediately, others staggered every 2 minutes.`,
+    });
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
+router.get("/bulk-pipeline/:batchId", verifyToken, async (req, res) => {
+  try {
+    const snap = await db.collection("bulk_pipeline_jobs")
+      .where("batchId", "==", req.params.batchId)
+      .get();
+    if (snap.empty) return res.status(404).json({ error: "Batch not found" });
+    const jobs = snap.docs.map(d => d.data());
+    const summary = {
+      total:     jobs.length,
+      queued:    jobs.filter(j => j.status === "queued").length,
+      running:   jobs.filter(j => j.status === "running").length,
+      complete:  jobs.filter(j => j.status === "complete").length,
+      failed:    jobs.filter(j => j.status === "failed").length,
+    };
+    return res.json({ batchId: req.params.batchId, summary, jobs });
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
 module.exports = router;

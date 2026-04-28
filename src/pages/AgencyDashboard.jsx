@@ -6,6 +6,8 @@ export default function AgencyDashboard({ dark, onClientSelect }) {
   const [data,    setData]    = useState(null);
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState("");
+  const [bulkRunning,  setBulkRunning]  = useState(false);
+  const [bulkResult,   setBulkResult]   = useState(null);
   const [sort,    setSort]    = useState("score");
 
   const bg   = dark ? "#0a0a0a" : "#f5f5f0";
@@ -17,6 +19,22 @@ export default function AgencyDashboard({ dark, onClientSelect }) {
   const B    = "#443DCB";
 
   async function getToken() { return user?.getIdToken?.() || ""; }
+
+  async function runBulkPipeline() {
+    setBulkRunning(true);
+    setBulkResult(null);
+    try {
+      const token = await getToken();
+      const r = await fetch(`${API}/api/agency/bulk-pipeline`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      });
+      const json = await r.json();
+      if (!r.ok) setBulkResult({ error: json.error || "Failed" });
+      else setBulkResult(json);
+    } catch (e) { setBulkResult({ error: e.message }); }
+    setBulkRunning(false);
+  }
 
   useEffect(() => {
     (async () => {
@@ -72,10 +90,29 @@ export default function AgencyDashboard({ dark, onClientSelect }) {
     <div style={{ background:bg, minHeight:"100%", padding:24 }}>
 
       {/* Header */}
-      <div style={{ marginBottom:24 }}>
-        <div style={{ fontSize:11, fontWeight:700, color:txt2, textTransform:"uppercase", letterSpacing:1, marginBottom:4 }}>Agency Dashboard</div>
-        <div style={{ fontSize:22, fontWeight:800, color:txt }}>All Clients Overview</div>
-        <div style={{ fontSize:12, color:txt2, marginTop:2 }}>Sprint 5 — {summary.totalClients} clients{data.generatedAt ? ` · Generated ${new Date(data.generatedAt).toLocaleString()}` : ""}</div>
+      <div style={{ marginBottom:24, display:"flex", alignItems:"flex-start", justifyContent:"space-between", flexWrap:"wrap", gap:12 }}>
+        <div>
+          <div style={{ fontSize:11, fontWeight:700, color:txt2, textTransform:"uppercase", letterSpacing:1, marginBottom:4 }}>Agency Dashboard</div>
+          <div style={{ fontSize:22, fontWeight:800, color:txt }}>All Clients Overview</div>
+          <div style={{ fontSize:12, color:txt2, marginTop:2 }}>{summary.totalClients} clients{data.generatedAt ? ` · Updated ${new Date(data.generatedAt).toLocaleString()}` : ""}</div>
+        </div>
+        <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:6 }}>
+          <button
+            onClick={runBulkPipeline}
+            disabled={bulkRunning}
+            style={{ padding:"10px 18px", borderRadius:10, border:"none", background:B, color:"#fff", fontSize:13, fontWeight:800, cursor:bulkRunning?"not-allowed":"pointer", opacity:bulkRunning?0.7:1, whiteSpace:"nowrap", boxShadow:`0 2px 8px ${B}44` }}
+          >
+            {bulkRunning ? "Queuing…" : "⚡ Run All Pipelines"}
+          </button>
+          {bulkResult && !bulkResult.error && (
+            <div style={{ fontSize:11, color:"#059669", fontWeight:600 }}>
+              ✓ {bulkResult.totalClients} pipeline(s) queued · starts now
+            </div>
+          )}
+          {bulkResult?.error && (
+            <div style={{ fontSize:11, color:"#DC2626" }}>{bulkResult.error}</div>
+          )}
+        </div>
       </div>
 
       {/* Summary tiles */}
