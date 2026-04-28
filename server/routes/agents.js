@@ -2208,4 +2208,123 @@ router.get("/:clientId/ai-citations/results", verifyToken, async (req, res) => {
   }
 });
 
+// ── SERP Feature Tracker — Featured Snippet, PAA, Knowledge Panel, Image Pack ─
+// Scrapes Bing SERP HTML for each keyword and detects which SERP features fire.
+// Zero paid APIs — pure HTML scraping with feature fingerprinting.
+// Stores results in serp_features/{clientId} Firestore doc.
+
+router.post("/:clientId/serp-features/scan", verifyToken, async (req, res) => {
+  try {
+    const { clientId } = req.params;
+    await getClientDoc(clientId, req.uid);
+
+    const keywords = await getState(clientId, "A3_keywords");
+    const brief    = await getState(clientId, "A1_brief");
+    if (!keywords?.keywordMap?.length) return res.status(400).json({ error: "Run A3 keywords first" });
+
+    const domain = brief?.websiteUrl ? new URL(brief.websiteUrl).hostname.replace("www.", "") : null;
+    const kws    = keywords.keywordMap.slice(0, 15).map(k => k.keyword);
+    const results = [];
+
+    for (const kw of kws) {
+      try {
+        const bingUrl = `https://www.bing.com/search?q=${encodeURIComponent(kw)}&setlang=en&cc=US`;
+        const r = await fetch(bingUrl, {
+          signal: AbortSignal.timeout(12000),
+          headers: {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36",
+            "Accept-Language": "en-US,en;q=0.9",
+          },
+        });
+
+        if (!r.ok) { results.push({ keyword: kw, error: `HTTP ${r.status}` }); continue; }
+        const html = await r.text();
+
+        // ── SERP feature detection fingerprints ────────────────────────────
+        // Featured Snippet (answer box)
+        const featuredSnippet = /class=["'][^"']*b_ans\b[^"']*["']|b_algoSlim|b_answerCard/i.test(html);
+        // Check if client is in featured snippet
+        const featuredSnippetOwned = featuredSnippet && domain && html.substring(0, html.indexOf("b_results") || html.length).includes(domain);
+
+        // PAA (People Also Ask)
+        const paaPresent = /b_paa|b_accordion|people.also.ask|related.questions/i.test(html);
+        const paaMatches = [...html.matchAll(/<div[^>]+class=["'][^"']*b_accordion[^"']*["'][^>]*>[\s\S]*?<div[^>]+class=["'][^"']*b_title[^"']*["'][^>]*>([\s\S]*?)<\/div>/gi)]
+          .map(m => m[1].replace(/<[^>]+>/g, "").trim()).filter(Boolean).slice(0, 5);
+
+        // Knowledge Panel
+        const knowledgePanel = /b_entityTP|b_entity_side|entity_sidebar|b_entitySlider/i.test(html);
+
+        // Image Pack
+        const imagePack = /b_imgSerpCite|b_imageSerpCite|b_imgResult|image.pack/i.test(html);
+
+        // Video results
+        const videoPack = /b_videoResult|b_onPageEntity.*video|b_videoSerpCite/i.test(html);
+
+        // Local Pack (maps / local results)
+        const localPack = /b_localResults|b_lstItem|localOneBox|maps\.bing\.com/i.test(html);
+
+        // Shopping ads / product listing
+        const shoppingPack = /b_sideImages|bing\.com\/shop|productSerpCard/i.test(html);
+
+        // Sitelinks
+        const sitelinks = /b_deep|b_deeplinks|b_sitelinks/i.test(html);
+
+        // Top stories
+        const topStories = /b_newsResult|b_nwsResult|TopStories/i.test(html);
+
+        const features = [];
+        if (featuredSnippet)  features.push({ type: "featured_snippet", owned: featuredSnippetOwned });
+        if (paaPresent)       features.push({ type: "people_also_ask",  questions: paaMatches });
+        if (knowledgePanel)   features.push({ type: "knowledge_panel" });
+        if (imagePack)        features.push({ type: "image_pack" });
+        if (videoPack)        features.push({ type: "video_pack" });
+        if (localPack)        features.push({ type: "local_pack" });
+        if (shoppingPack)     features.push({ type: "shopping" });
+        if (sitelinks)        features.push({ type: "sitelinks" });
+        if (topStories)       features.push({ type: "top_stories" });
+
+        results.push({
+          keyword:            kw,
+          features,
+          featureCount:       features.length,
+          hasOpportunity:     featuredSnippet && !featuredSnippetOwned,
+          checkedAt:          new Date().toISOString(),
+        });
+
+        await new Promise(r2 => setTimeout(r2, 700));
+      } catch (e) {
+        results.push({ keyword: kw, features: [], error: e.message });
+      }
+    }
+
+    const summary = {
+      totalChecked:      results.length,
+      withFeatures:      results.filter(r => r.featureCount > 0).length,
+      featuredSnippets:  results.filter(r => r.features?.some(f => f.type === "featured_snippet")).length,
+      ownedSnippets:     results.filter(r => r.features?.some(f => f.type === "featured_snippet" && f.owned)).length,
+      paaPresent:        results.filter(r => r.features?.some(f => f.type === "people_also_ask")).length,
+      localPacks:        results.filter(r => r.features?.some(f => f.type === "local_pack")).length,
+      opportunities:     results.filter(r => r.hasOpportunity).length,
+      checkedAt:         new Date().toISOString(),
+    };
+
+    await db.collection("serp_features").doc(clientId).set({ clientId, keywords: results, summary, updatedAt: new Date().toISOString() });
+    return res.json({ success: true, summary, keywords: results });
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
+router.get("/:clientId/serp-features/results", verifyToken, async (req, res) => {
+  try {
+    const { clientId } = req.params;
+    await getClientDoc(clientId, req.uid);
+    const doc = await db.collection("serp_features").doc(clientId).get();
+    if (!doc.exists) return res.json({ notRun: true });
+    return res.json(doc.data());
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
 module.exports = router;
