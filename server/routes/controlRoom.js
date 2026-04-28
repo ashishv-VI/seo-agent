@@ -198,6 +198,7 @@ router.get("/:clientId/control-room", verifyToken, async (req, res) => {
       confidence:          cmoDecision.confidence,
       confidenceReasoning: cmoDecision.confidenceReasoning || null,
       kpiImpact:           cmoDecision.kpiImpact  || [],
+      pageActions:         cmoDecision.pageActions || [],
       signals:             cmoDecision.signals    || {},
       patternStats:        cmoDecision.patternStats || null,
       decidedAt:           cmoDecision.decidedAt  || null,
@@ -341,9 +342,12 @@ router.get("/:clientId/war-room", verifyToken, async (req, res) => {
 
     // ── CMO summary for War Room header ─────────────
     const cmoSummary = cmoDecision ? {
-      decision:   cmoDecision.decision,
-      confidence: cmoDecision.confidence,
-      nextAgents: cmoDecision.nextAgents || [],
+      decision:    cmoDecision.decision,
+      reasoning:   cmoDecision.reasoning,
+      confidence:  cmoDecision.confidence,
+      nextAgents:  cmoDecision.nextAgents || [],
+      kpiImpact:   cmoDecision.kpiImpact  || [],
+      pageActions: cmoDecision.pageActions || [],
     } : null;
 
     // ── Revenue projection: if win rate continues ────

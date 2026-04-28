@@ -1,9 +1,10 @@
 /**
- * IntelligencePanel — hosts all 10 AI intelligence modules
+ * IntelligencePanel — hosts all 11 AI intelligence modules
  * as tabs within the Control Room "Intelligence" section.
  */
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "../context/AuthContext";
+import AIOTrackerPanel from "./AIOTrackerPanel";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared fetch hook
@@ -869,6 +870,7 @@ function AgencyBenchmarkPanel({ clientId, dark, bg2, bg3, bdr, txt, txt2, B, API
 // Main Intelligence Panel — tab controller
 // ─────────────────────────────────────────────────────────────────────────────
 const INTEL_TABS = [
+  { id:"aio",       label:"AI Overview",      icon:"🤖" },
   { id:"decay",     label:"Content Decay",    icon:"📉" },
   { id:"volatility",label:"SERP Volatility",  icon:"🌊" },
   { id:"shield",    label:"Negative SEO",     icon:"🛡️" },
@@ -883,7 +885,7 @@ const INTEL_TABS = [
 
 export default function IntelligencePanel({ dark, clientId, bg2, bg3, bdr, txt, txt2, B }) {
   const { user, API } = useAuth();
-  const [tab, setTab] = useState("decay");
+  const [tab, setTab] = useState("aio");
   async function getToken() { return user?.getIdToken?.() || ""; }
 
   const props = { clientId, dark, bg2, bg3, bdr, txt, txt2, B, API, getToken };
@@ -905,6 +907,7 @@ export default function IntelligencePanel({ dark, clientId, bg2, bg3, bdr, txt, 
         ))}
       </div>
 
+      {tab === "aio"        && <AIOTrackerPanel        dark={dark} clientId={clientId} />}
       {tab === "decay"      && <ContentDecayPanel     {...props} />}
       {tab === "volatility" && <SerpVolatilityPanel   {...props} />}
       {tab === "shield"     && <NegativeSeoPanel      {...props} />}

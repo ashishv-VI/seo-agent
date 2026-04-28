@@ -75,10 +75,35 @@ export default function ControlRoom({ dark, clientId, clientName }) {
   );
   if (!data) return null;
   if (data.setupRequired) return (
-    <div style={{ padding:40, textAlign:"center" }}>
-      <div style={{ fontSize:32, marginBottom:12 }}>🚀</div>
-      <div style={{ fontSize:16, fontWeight:800, color:txt, marginBottom:8 }}>Complete Onboarding First</div>
-      <div style={{ fontSize:13, color:txt2 }}>{data.message || "Run the A1 Onboarding agent to set up this client before accessing the Control Room."}</div>
+    <div style={{ padding:40, textAlign:"center", maxWidth:480, margin:"0 auto" }}>
+      <div style={{ fontSize:48, marginBottom:16 }}>🚀</div>
+      <div style={{ fontSize:18, fontWeight:800, color:txt, marginBottom:8 }}>Set Up This Client First</div>
+      <div style={{ fontSize:13, color:txt2, marginBottom:24 }}>{data.message || "Complete the onboarding form to start tracking SEO performance."}</div>
+      <div style={{ fontSize:12, color:txt2, padding:"12px 16px", background:bg3, borderRadius:10, border:`1px solid ${bdr}`, textAlign:"left" }}>
+        <div style={{ fontWeight:700, marginBottom:8, color:txt }}>What to do:</div>
+        <div style={{ marginBottom:4 }}>1. Go to <strong>Agent Pipeline</strong> tab</div>
+        <div style={{ marginBottom:4 }}>2. Fill in the onboarding form (A1)</div>
+        <div>3. Run the full pipeline — Control Room will populate automatically</div>
+      </div>
+    </div>
+  );
+
+  // Pipeline hasn't been run yet — show actionable empty state
+  const pipelineNotRun = !data.siteHealth?.score && !data.thisWeek?.hasData && !data.cmo;
+  if (pipelineNotRun) return (
+    <div style={{ padding:40, textAlign:"center", maxWidth:520, margin:"0 auto" }}>
+      <div style={{ fontSize:48, marginBottom:16 }}>⚡</div>
+      <div style={{ fontSize:18, fontWeight:800, color:txt, marginBottom:8 }}>Run Your First Pipeline</div>
+      <div style={{ fontSize:13, color:txt2, marginBottom:24 }}>The Control Room needs at least one full pipeline run to show data. This takes about 3-5 minutes.</div>
+      <div style={{ display:"flex", flexDirection:"column", gap:10, fontSize:12, color:txt2, padding:"16px", background:bg3, borderRadius:10, border:`1px solid ${bdr}`, textAlign:"left", marginBottom:24 }}>
+        <div style={{ fontWeight:700, color:txt, marginBottom:4 }}>What the pipeline does:</div>
+        <div>✓ <strong>A2</strong> — Audits all pages, finds ranking blockers</div>
+        <div>✓ <strong>A3</strong> — Discovers your best keyword opportunities</div>
+        <div>✓ <strong>A4</strong> — Analyses competitors and finds gaps</div>
+        <div>✓ <strong>A9</strong> — Generates your first SEO report</div>
+        <div>✓ <strong>CMO</strong> — AI decides what to fix first for maximum revenue impact</div>
+      </div>
+      <div style={{ fontSize:12, color:txt2 }}>Go to <strong>Agent Pipeline</strong> tab → click <strong>Run Full Pipeline</strong></div>
     </div>
   );
 
@@ -200,6 +225,31 @@ export default function ControlRoom({ dark, clientId, clientName }) {
                           )}
                         </div>
                         <div style={{ color:txt2, fontSize:10, marginTop:2 }}>{k.mechanism}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* PAGE-LEVEL ACTIONS — specific URL + exact fix + impact */}
+              {cmo.pageActions?.length > 0 && (
+                <div style={{ marginBottom:12 }}>
+                  <div style={{ fontSize:10, color:txt2, fontWeight:700, textTransform:"uppercase", letterSpacing:0.8, marginBottom:6 }}>Specific Pages to Fix</div>
+                  <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
+                    {cmo.pageActions.slice(0, 5).map((pa, i) => (
+                      <div key={i} style={{ display:"flex", alignItems:"flex-start", gap:8, fontSize:11, padding:"7px 10px", borderRadius:8, background:bg3, border:`1px solid ${bdr}` }}>
+                        <span style={{ color:B, fontWeight:800, flexShrink:0, minWidth:16 }}>{i + 1}.</span>
+                        <div style={{ flex:1, minWidth:0 }}>
+                          {pa.url && (
+                            <a href={pa.url} target="_blank" rel="noopener noreferrer" style={{ color:B, fontWeight:700, fontSize:10, display:"block", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:320, marginBottom:2 }}>
+                              {pa.url.replace(/^https?:\/\/[^/]+/, "") || "/"}
+                            </a>
+                          )}
+                          <span style={{ color:txt }}>{pa.fix}</span>
+                        </div>
+                        {pa.expectedImpact && (
+                          <span style={{ color:"#059669", fontWeight:700, flexShrink:0, fontSize:10, whiteSpace:"nowrap" }}>{pa.expectedImpact}</span>
+                        )}
                       </div>
                     ))}
                   </div>

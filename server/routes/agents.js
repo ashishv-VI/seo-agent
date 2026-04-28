@@ -1984,4 +1984,95 @@ router.get("/:clientId/A25/results", verifyToken, async (req, res) => {
   }
 });
 
+// ── AIO Tracker — Google AI Overview monitoring ─────────────────────────────
+// Checks whether each tracked keyword appears in an AI Overview box on Bing/Google
+// by scraping the SERP HTML and detecting AI answer box patterns.
+// Stores results in aio_tracker/{clientId} Firestore doc.
+
+router.post("/:clientId/aio/scan", verifyToken, async (req, res) => {
+  try {
+    const { clientId } = req.params;
+    await getClientDoc(clientId, req.uid);
+
+    const keywords = await getState(clientId, "A3_keywords");
+    const brief    = await getState(clientId, "A1_brief");
+    if (!keywords?.keywordMap?.length) return res.status(400).json({ error: "Run A3 keywords first" });
+
+    const kws = keywords.keywordMap.slice(0, 15).map(k => k.keyword);
+    const domain = brief?.websiteUrl ? new URL(brief.websiteUrl).hostname.replace("www.", "") : null;
+
+    const results = [];
+    for (const kw of kws) {
+      try {
+        // Bing SERP — AI overview box appears as data-tag="RelaxedQuery" or .b_ans
+        const bingUrl = `https://www.bing.com/search?q=${encodeURIComponent(kw)}&mkt=en-IN`;
+        const r = await fetch(bingUrl, {
+          signal: AbortSignal.timeout(12000),
+          headers: {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Accept": "text/html",
+          },
+        });
+        if (!r.ok) { results.push({ keyword: kw, aioPresent: false, error: `HTTP ${r.status}` }); continue; }
+        const html = await r.text();
+
+        // Detect AI Overview / Copilot answer box
+        const hasAIO = /class=["'][^"']*b_codeSnippet|CopilotAnswer|b_wbAns|ai-answer|sydney-answer|ai_feedback/i.test(html)
+          || /data-tag=["']Copilot|AIAnswer|ai-generated/i.test(html)
+          || /(?:AI-generated|Generative AI|Based on sources)/i.test(html);
+
+        // Check if client domain appears in AIO sources
+        const clientInAIO = domain && hasAIO && html.includes(domain);
+
+        // Featured snippet (position 0)
+        const hasFeaturedSnippet = /class=["'][^"']*b_ans\b|b_algoSlim\b/i.test(html);
+
+        // PAA boxes
+        const paaMatches = [...html.matchAll(/class=["'][^"']*b_sugexp[^"']*["'][^>]*>([\s\S]*?)<\/li>/gi)];
+        const paaQuestions = paaMatches.slice(0, 4).map(m => m[1].replace(/<[^>]+>/g, "").trim()).filter(Boolean);
+
+        results.push({
+          keyword:       kw,
+          aioPresent:    hasAIO,
+          clientInAIO:   clientInAIO,
+          featuredSnippet: hasFeaturedSnippet,
+          paaQuestions:  paaQuestions,
+          checkedAt:     new Date().toISOString(),
+        });
+
+        await new Promise(r2 => setTimeout(r2, 800)); // polite delay
+      } catch (e) {
+        results.push({ keyword: kw, aioPresent: false, error: e.message });
+      }
+    }
+
+    const summary = {
+      totalChecked:   results.length,
+      aioPresent:     results.filter(r => r.aioPresent).length,
+      clientInAIO:    results.filter(r => r.clientInAIO).length,
+      featuredSnippets: results.filter(r => r.featuredSnippet).length,
+      checkedAt:      new Date().toISOString(),
+    };
+
+    await db.collection("aio_tracker").doc(clientId).set({ clientId, keywords: results, summary, updatedAt: new Date().toISOString() });
+
+    return res.json({ success: true, summary, keywords: results });
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
+router.get("/:clientId/aio/results", verifyToken, async (req, res) => {
+  try {
+    const { clientId } = req.params;
+    await getClientDoc(clientId, req.uid);
+    const doc = await db.collection("aio_tracker").doc(clientId).get();
+    if (!doc.exists) return res.json({ notRun: true });
+    return res.json(doc.data());
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
 module.exports = router;

@@ -203,6 +203,20 @@ async function runCMO(clientId, keys) {
     }
   }
 
+  // pageActions: prefer LLM-generated (URL + exact fix + impact),
+  // fall back to rule-based topPageActions from signal extraction
+  const llmPageActions = Array.isArray(decision.pageActions) ? decision.pageActions : [];
+  const pageActions = llmPageActions.length > 0
+    ? llmPageActions
+    : (signals.topPageActions || []).map((p, idx) => ({
+        url:            p.url,
+        fix:            `${p.action.replace(/_/g, " ")}: ${p.detail}`,
+        expectedImpact: p.impact,
+        priority:       idx + 1,
+        source:         p.source,
+        keyword:        p.keyword || null,
+      }));
+
   const result = {
     decision:    decision.decision    || "Monitor & maintain current strategy",
     reasoning:   decision.reasoning   || "Insufficient data for a specific recommendation",
@@ -210,6 +224,7 @@ async function runCMO(clientId, keys) {
     confidence:  decision.confidence  || 0.7,
     confidenceReasoning: decision.confidenceReasoning || null,
     kpiImpact:   decision.kpiImpact   || [],
+    pageActions,
     signals,
     patternStats,
     agentQuality,
@@ -276,6 +291,91 @@ function extractSignals({ brief, audit, keywords, competitor, onpage, technical,
 
   // KPI selection
   signals.kpi = [].concat(brief?.kpiSelection || ["Organic Traffic Growth"]);
+
+  // ── Page-level specific signals ───────────────────────────────────────────
+  // Extract the most actionable page-specific opportunities so the CMO can
+  // give a page-URL + exact fix + expected impact (not just "run A5").
+  const pageSignals = [];
+
+  // Pages with P1 issues from A2 audit
+  const auditPages = audit?.pages || [];
+  for (const pg of auditPages.slice(0, 50)) {
+    const p1Issues = (pg.issues || []).filter(i => i.severity === "p1" || i.severity === "P1");
+    if (p1Issues.length > 0) {
+      pageSignals.push({
+        url:    pg.url,
+        issue:  p1Issues[0].type,
+        detail: p1Issues[0].detail || p1Issues[0].fix || "",
+        impact: "blocks ranking",
+        action: "fix",
+        source: "A2",
+      });
+    }
+  }
+
+  // Pages with low CTR from A6 onpage fixes
+  const onpageFixes = onpage?.fixes || [];
+  for (const fix of onpageFixes.slice(0, 30)) {
+    if (fix.type === "title_tag" || fix.type === "meta_description" || fix.type === "missing_title") {
+      pageSignals.push({
+        url:    fix.url || fix.page,
+        issue:  fix.type,
+        detail: fix.current ? `Current: "${fix.current}"` : (fix.detail || ""),
+        impact: "low CTR",
+        action: "rewrite",
+        source: "A6",
+      });
+    }
+  }
+
+  // Page-2 keywords — which specific URL needs a backlink
+  const rankMatrix = competitor?.rankingMatrix || [];
+  for (const kw of rankMatrix.filter(k => k.clientRank >= 11 && k.clientRank <= 30).slice(0, 10)) {
+    pageSignals.push({
+      url:    kw.clientPage || kw.page || null,
+      keyword: kw.keyword,
+      issue:  "page_2_ranking",
+      detail: `Position ${kw.clientRank} — needs 1-2 backlinks to reach page 1`,
+      impact: "traffic gain",
+      action: "build_link",
+      source: "A4",
+    });
+  }
+
+  // Missing schema on key pages
+  for (const fix of onpageFixes.filter(f => f.type === "missing_schema").slice(0, 5)) {
+    pageSignals.push({
+      url:    fix.url || fix.page,
+      issue:  "missing_schema",
+      detail: fix.detail || "No structured data — affects rich results eligibility",
+      impact: "CTR + rich results",
+      action: "add_schema",
+      source: "A6",
+    });
+  }
+
+  // Thin content pages (from A2)
+  for (const pg of auditPages.filter(p => (p.issues || []).some(i => i.type === "thin_content")).slice(0, 5)) {
+    pageSignals.push({
+      url:    pg.url,
+      issue:  "thin_content",
+      detail: `Word count: ${pg.wordCount || "unknown"} — below 300 words`,
+      impact: "low rankings",
+      action: "expand_content",
+      source: "A2",
+    });
+  }
+
+  // Deduplicate by URL — keep highest impact per page
+  const urlSeen = new Set();
+  signals.topPageActions = pageSignals
+    .filter(p => {
+      if (!p.url) return false;
+      if (urlSeen.has(p.url)) return false;
+      urlSeen.add(p.url);
+      return true;
+    })
+    .slice(0, 10);
 
   return signals;
 }
@@ -607,6 +707,13 @@ function buildCMOPrompt(brief, signals, patternSummary = null, vetoContext = {})
     ? `Average order value: ${currency}${aov.toLocaleString()}. ALWAYS translate improvements into leads and ${currency} revenue in your reasoning and kpiImpact — e.g. "+2 leads/month × ${currency}${aov.toLocaleString()} = ${currency}${(2*aov).toLocaleString()} added monthly revenue".`
     : "No AOV configured — express impact as leads and traffic, not revenue.";
 
+  const topPageActions = (signals.topPageActions || []).slice(0, 8);
+  const pageActionsBlock = topPageActions.length > 0
+    ? `\n## Specific Pages Needing Action RIGHT NOW\n${topPageActions.map((p, i) =>
+        `${i+1}. URL: ${p.url || "unknown"}\n   Issue: ${p.issue} — ${p.detail}\n   Impact: ${p.impact}\n   Action: ${p.action}`
+      ).join("\n")}\n`
+    : "";
+
   return `You are the CMO Agent for an SEO AI platform. You make revenue-first decisions.
 
 RULE: Never speak in SEO jargon to the user. Every insight must answer "what does this mean for revenue or leads?"
@@ -627,7 +734,7 @@ ${revenueContext}
 - CTR below expected: ${signals.ctrLow ? `YES — getting ${((signals.avgCtr || 0)*100).toFixed(1)}% clicks at position ${(signals.avgPos||0).toFixed(1)} (should be higher)` : "NO"}
 - Content gaps: ${signals.contentGaps} ${signals.contentGaps > 0 ? "keywords with no page targeting them — missing traffic" : ""}
 ${signals.hasKilledKeywords ? `- WASTED EFFORT WARNING: ${signals.killedKeywordCount} keywords have ranked 90+ days with ZERO leads. Stop targeting these. Reallocate budget to converting keywords.` : ""}
-
+${pageActionsBlock}
 ## Available Actions (pick ONLY from this list)
 ${pickFrom.map(a => {
   const labels = {
@@ -649,6 +756,9 @@ Return ONLY valid JSON. Use plain language a business owner understands — no S
   "confidence": 0.85,
   "kpiImpact": [
     { "kpi": "Lead Generation", "expectedLift": "+3-5 leads/month", "mechanism": "higher CTR → more site visits → more conversions", "revenueEstimate": "${aov > 0 ? `+${currency}${(4*aov).toLocaleString()}/month` : "depends on conversion rate"}" }
+  ],
+  "pageActions": [
+    { "url": "https://example.com/services", "fix": "rewrite title tag — current title is too generic", "expectedImpact": "CTR +2-3% on this page", "priority": 1 }
   ]
 }`;
 }

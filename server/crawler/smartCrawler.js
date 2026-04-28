@@ -236,9 +236,69 @@ async function discoverUrls(siteUrl, opts = {}) {
     } catch { /* skip */ }
   }
 
+  // ── Layer 5: Homepage link extraction — when all else fails ──────────────
+  // If sitemap + robots + GSC + CommonCrawl found < 5 URLs, crawl the homepage
+  // and extract every internal link. This ensures we always get something to audit.
+  if (urls.size < 5) {
+    try {
+      const homeRes = await fetch(siteUrl, {
+        signal: AbortSignal.timeout(12000),
+        headers: { "User-Agent": UA_POOL[0], "Accept": "text/html" },
+        redirect: "follow",
+      });
+      if (homeRes.ok) {
+        const homeHtml = await homeRes.text();
+        const linkRe = /<a[^>]+href=["']([^"'\s#][^"'\s]*)["'][^>]*>/gi;
+        let m;
+        while ((m = linkRe.exec(homeHtml)) !== null && urls.size < maxUrls) {
+          try {
+            const resolved = new URL(m[1], siteUrl);
+            if (
+              resolved.hostname === domain &&
+              !SKIP_EXT.test(resolved.pathname) &&
+              !SKIP_PATTERN.some(p => p.test(resolved.href))
+            ) {
+              urls.add(resolved.origin + resolved.pathname);
+            }
+          } catch { /* skip */ }
+        }
+
+        // Also follow nav/footer links one level deep (BFS depth-1)
+        const discovered1 = [...urls].slice(0, 20);
+        await Promise.allSettled(discovered1.map(async (u) => {
+          if (urls.size >= maxUrls) return;
+          try {
+            const r2 = await fetch(u, {
+              signal: AbortSignal.timeout(8000),
+              headers: { "User-Agent": UA_POOL[0], "Accept": "text/html" },
+              redirect: "follow",
+            });
+            if (!r2.ok) return;
+            const h2 = await r2.text();
+            let m2;
+            const re2 = /<a[^>]+href=["']([^"'\s#][^"'\s]*)["'][^>]*>/gi;
+            while ((m2 = re2.exec(h2)) !== null && urls.size < maxUrls) {
+              try {
+                const resolved2 = new URL(m2[1], u);
+                if (
+                  resolved2.hostname === domain &&
+                  !SKIP_EXT.test(resolved2.pathname) &&
+                  !SKIP_PATTERN.some(p => p.test(resolved2.href))
+                ) {
+                  urls.add(resolved2.origin + resolved2.pathname);
+                }
+              } catch { /* skip */ }
+            }
+          } catch { /* skip */ }
+        }));
+      }
+    } catch { /* skip */ }
+  }
+
   // Remove root — crawled separately
   urls.delete(siteUrl);
   urls.delete(siteUrl.replace(/\/$/, ""));
+  urls.delete(siteUrl.endsWith("/") ? siteUrl.slice(0, -1) : siteUrl + "/");
   return [...urls].slice(0, maxUrls);
 }
 
