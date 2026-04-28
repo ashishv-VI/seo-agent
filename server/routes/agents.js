@@ -2478,4 +2478,168 @@ router.patch("/:clientId/content-calendar/:itemId/status", verifyToken, async (r
   }
 });
 
+// ── Local Citation Audit — JustDial, Sulekha, IndiaMart, Google Maps ─────────
+// Checks if the business appears on key Indian directories by searching them
+// and comparing NAP (Name, Address, Phone) consistency.
+// Stores results in local_citations/{clientId} Firestore doc.
+
+router.post("/:clientId/local-citations/scan", verifyToken, async (req, res) => {
+  try {
+    const { clientId } = req.params;
+    await getClientDoc(clientId, req.uid);
+
+    const brief = await getState(clientId, "A1_brief");
+    if (!brief?.businessName) return res.status(400).json({ error: "Run A1 onboarding first" });
+
+    const bizName = brief.businessName;
+    const city    = brief.city || brief.location || "";
+    const phone   = brief.phone || "";
+    const address = brief.address || "";
+
+    const DIRECTORIES = [
+      {
+        id:       "justdial",
+        name:     "JustDial",
+        url:      `https://www.justdial.com/${encodeURIComponent(city || "india")}/${encodeURIComponent(bizName.replace(/\s+/g, "-"))}`,
+        searchUrl: `https://www.justdial.com/search?q=${encodeURIComponent(bizName)}&city=${encodeURIComponent(city)}`,
+        icon:     "📱",
+        priority: "high",
+      },
+      {
+        id:       "sulekha",
+        name:     "Sulekha",
+        url:      `https://www.sulekha.com/${encodeURIComponent(city || "india")}/${encodeURIComponent(bizName.replace(/\s+/g, "-"))}`,
+        searchUrl: `https://www.sulekha.com/search?q=${encodeURIComponent(bizName)}`,
+        icon:     "🔍",
+        priority: "high",
+      },
+      {
+        id:       "indiamart",
+        name:     "IndiaMart",
+        url:      `https://dir.indiamart.com/search.mp?ss=${encodeURIComponent(bizName)}`,
+        searchUrl: `https://dir.indiamart.com/search.mp?ss=${encodeURIComponent(bizName)}`,
+        icon:     "🏭",
+        priority: "medium",
+      },
+      {
+        id:       "google_maps",
+        name:     "Google Maps",
+        url:      `https://maps.google.com/?q=${encodeURIComponent(bizName + (city ? " " + city : ""))}`,
+        searchUrl: `https://www.google.com/search?q=${encodeURIComponent(bizName + " " + city + " google maps")}`,
+        icon:     "🗺️",
+        priority: "high",
+      },
+      {
+        id:       "yelp",
+        name:     "Yelp",
+        searchUrl: `https://www.yelp.com/search?find_desc=${encodeURIComponent(bizName)}&find_loc=${encodeURIComponent(city)}`,
+        icon:     "⭐",
+        priority: "medium",
+      },
+      {
+        id:       "facebook",
+        name:     "Facebook Business",
+        searchUrl: `https://www.facebook.com/search/pages/?q=${encodeURIComponent(bizName)}`,
+        icon:     "👥",
+        priority: "medium",
+      },
+    ];
+
+    const results = [];
+
+    for (const dir of DIRECTORIES) {
+      let status = "unknown";
+      let napConsistent = null;
+      let foundName = null;
+      let foundPhone = null;
+      let listingUrl = null;
+
+      try {
+        const searchRes = await fetch(dir.searchUrl, {
+          signal: AbortSignal.timeout(10000),
+          headers: {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36",
+            "Accept":     "text/html",
+            "Accept-Language": "en-IN,en;q=0.9",
+          },
+          redirect: "follow",
+        });
+
+        if (searchRes.ok) {
+          const html = await searchRes.text();
+          // Check if business name appears in results
+          const nameRegex = new RegExp(bizName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").split(" ").slice(0, 2).join("\\s*"), "i");
+          const hasListing = nameRegex.test(html);
+
+          if (hasListing) {
+            status = "listed";
+            foundName = bizName;
+
+            // NAP check — look for phone number if provided
+            if (phone) {
+              const phoneDigits = phone.replace(/\D/g, "").slice(-10);
+              napConsistent = html.includes(phoneDigits);
+            }
+
+            // Extract first matching URL
+            const urlMatch = html.match(new RegExp(`href=["']((?:[^"']*?)(?:${encodeURIComponent(bizName.split(" ")[0]).toLowerCase()}|${bizName.split(" ")[0].toLowerCase()})[^"']*)["']`, "i"));
+            if (urlMatch) listingUrl = urlMatch[1];
+          } else {
+            status = "not_found";
+          }
+        } else {
+          status = "check_manually";
+        }
+      } catch {
+        status = "check_manually";
+      }
+
+      results.push({
+        directoryId:   dir.id,
+        directoryName: dir.name,
+        icon:          dir.icon,
+        priority:      dir.priority,
+        status,
+        napConsistent,
+        listingUrl:    listingUrl || dir.url,
+        searchUrl:     dir.searchUrl,
+        foundName,
+        foundPhone,
+        checkedAt:     new Date().toISOString(),
+      });
+
+      await new Promise(r => setTimeout(r, 600));
+    }
+
+    const summary = {
+      totalChecked:    results.length,
+      listed:          results.filter(r => r.status === "listed").length,
+      notFound:        results.filter(r => r.status === "not_found").length,
+      checkManually:   results.filter(r => r.status === "check_manually").length,
+      napIssues:       results.filter(r => r.napConsistent === false).length,
+      coverageScore:   Math.round((results.filter(r => r.status === "listed").length / results.length) * 100),
+      checkedAt:       new Date().toISOString(),
+    };
+
+    await db.collection("local_citations").doc(clientId).set({
+      clientId, businessName: bizName, city, results, summary, updatedAt: new Date().toISOString(),
+    });
+    return res.json({ success: true, summary, results });
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
+router.get("/:clientId/local-citations/results", verifyToken, async (req, res) => {
+  try {
+    const { clientId } = req.params;
+    await getClientDoc(clientId, req.uid);
+    const doc = await db.collection("local_citations").doc(clientId).get();
+    if (!doc.exists) return res.json({ notRun: true });
+    return res.json(doc.data());
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
 module.exports = router;
