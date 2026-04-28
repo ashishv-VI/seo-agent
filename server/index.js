@@ -281,7 +281,7 @@ setInterval(async () => {
 
         try {
           const { runCMO } = require("./agents/CMO_agent");
-          const cmoResult = await runCMO(doc.id, keys);
+          const cmoResult = await runCMO(doc.id, keys, null);
           // runCMO returns { success, cmo: { decision, reasoning, nextAgents, confidence } }
           // The previous code read cmoResult.decision.nextAgents which was always
           // undefined — the whole daily wake-up block silently no-op'd.
@@ -517,8 +517,17 @@ setInterval(async () => {
 //   - Create alert + notification if action needed
 setInterval(async () => {
   try {
-    const snap = await db.collection("clients").where("pipelineStatus","==","complete").get();
-    for (const doc of snap.docs) {
+    // CMO runs for ALL clients with a brief — not just pipelineStatus=complete
+    // This means Damco Digital (A2 failing) still gets CMO decisions from A1+GSC+A0
+    const [snapComplete, snapFailed] = await Promise.all([
+      db.collection("clients").where("pipelineStatus","==","complete").get().catch(()=>({docs:[]})),
+      db.collection("clients").where("pipelineStatus","==","failed").get().catch(()=>({docs:[]})),
+    ]);
+    const allDocs = [...snapComplete.docs, ...snapFailed.docs];
+    // Deduplicate
+    const seen = new Set();
+    const uniqueDocs = allDocs.filter(d => { if(seen.has(d.id)){return false;} seen.add(d.id); return true; });
+    for (const doc of uniqueDocs) {
       const data = doc.data();
       try {
         const { getUserKeys }    = require("./utils/getUserKeys");
@@ -539,7 +548,7 @@ setInterval(async () => {
             try {
               const { runCMO }        = require("./agents/CMO_agent");
               const { runAgentById }  = require("./agents/agentRunner");
-              const cmoResult = await runCMO(doc.id, keys);
+              const cmoResult = await runCMO(doc.id, keys, null);
               const cmoDecision = cmoResult?.cmo;
               if (cmoDecision?.nextAgents?.length > 0 && (cmoDecision.confidence || 0) >= 0.85) {
                 for (const agentId of cmoDecision.nextAgents.slice(0, 3)) {
@@ -941,7 +950,7 @@ setInterval(async () => {
             const { getUserKeys } = require("./utils/getUserKeys");
             const cmoKeys = await getUserKeys(fix.ownerId).catch(() => ({}));
             const { runCMO } = require("./agents/CMO_agent");
-            await runCMO(fix.clientId, cmoKeys);
+            await runCMO(fix.clientId, cmoKeys, null);
             console.log(`[fix-verify] CMO re-triggered for ${fix.clientId} (degraded fix)`);
           } catch (cmoErr) {
             console.error(`[fix-verify] CMO re-trigger failed:`, cmoErr.message);

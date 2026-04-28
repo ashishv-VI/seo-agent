@@ -17,10 +17,14 @@ const { db }                  = require("../config/firebase");
  *
  * Returns: { decision, reasoning, nextAgents[], confidence, kpiImpact }
  */
-async function runCMO(clientId, keys) {
+async function runCMO(clientId, keys, masterPrompt) {
   try {
-  // Load all available pipeline data + A17 quality review
-  const [brief, audit, keywords, competitor, onpage, technical, geo, report, rankings, a17Review] = await Promise.all([
+  // Load all available pipeline data — 19 sources total
+  const [
+    brief, audit, keywords, competitor, onpage, technical, geo, report, rankings, a17Review,
+    a15Competitor, a22Predictive, a24Strategist, a25CoreUpdate,
+    ai3Volatility, ai5Seasonal, ai7Decay, ai9ZeroClick,
+  ] = await Promise.all([
     getState(clientId, "A1_brief").catch(() => null),
     getState(clientId, "A2_audit").catch(() => null),
     getState(clientId, "A3_keywords").catch(() => null),
@@ -31,6 +35,15 @@ async function runCMO(clientId, keys) {
     getState(clientId, "A9_report").catch(() => null),
     getState(clientId, "A10_rankings").catch(() => null),
     getState(clientId, "A17_review").catch(() => null),
+    // New: 9 more agents now connected to CMO
+    getState(clientId, "A15_competitorMonitor").catch(() => null),
+    getState(clientId, "A22_predictive").catch(() => null),
+    getState(clientId, "A24_strategist").catch(() => null),
+    getState(clientId, "A25_coreUpdateScanner").catch(() => null),
+    getState(clientId, "AI3_serpVolatility").catch(() => null),
+    getState(clientId, "AI5_seasonalOpportunity").catch(() => null),
+    getState(clientId, "AI7_contentDecay").catch(() => null),
+    getState(clientId, "AI9_zeroClick").catch(() => null),
   ]);
 
   if (!brief) return { success: false, error: "No brief — run A1 first" };
@@ -75,6 +88,10 @@ async function runCMO(clientId, keys) {
   const clientData  = clientDoc?.data() || {};
   const ownerId     = clientData.ownerId || null;
   const businessType = (brief?.businessType || brief?.industry || "").toLowerCase().trim();
+
+  // ── A0 Strategy — read topPriority, quickWins, criticalWarnings, aiSearchStrategy ──
+  const a0Strategy = clientData.seoHeadStrategy || null;
+  const a0Summary  = clientData.seoHeadSummary  || null;
 
   let globalPatterns = [];
 
@@ -125,8 +142,12 @@ async function runCMO(clientId, keys) {
   const failingPlaybooks = identifyFailingPlaybooks(patternStats);
   const allowedAgents    = filterAllowedAgents(failingPlaybooks);
 
-  // ── Rule-based signal extraction ─────────────────
-  const signals = extractSignals({ brief, audit, keywords, competitor, onpage, technical, geo, report, rankings });
+  // ── Rule-based signal extraction — now with 9 new data sources ─────────
+  const signals = extractSignals({
+    brief, audit, keywords, competitor, onpage, technical, geo, report, rankings,
+    a0Strategy, a15Competitor, a22Predictive, a24Strategist, a25CoreUpdate,
+    ai3Volatility, ai5Seasonal, ai7Decay, ai9ZeroClick,
+  });
 
   // ── LLM decision ──────────────────────────────────
   // Prompt tells the LLM which playbooks are proven to fail + which agent outputs
@@ -134,7 +155,11 @@ async function runCMO(clientId, keys) {
   const prompt = buildCMOPrompt(brief, signals, patternSummary, { failingPlaybooks, allowedAgents, lowQualityAgents });
   let decision;
   try {
-    const raw = await callLLM(prompt, keys, { maxTokens: 2000, temperature: 0.2 });
+    const raw = await callLLM(prompt, keys, {
+      system:    masterPrompt || undefined,
+      maxTokens: 2000,
+      temperature: 0.2,
+    });
     decision  = parseJSON(raw);
   } catch (e) {
     // Fallback: use rule-based decision if LLM fails
@@ -241,7 +266,10 @@ async function runCMO(clientId, keys) {
 }
 
 // ── Signal extraction (rule-based, no LLM) ────────
-function extractSignals({ brief, audit, keywords, competitor, onpage, technical, geo, report, rankings }) {
+function extractSignals({ brief, audit, keywords, competitor, onpage, technical, geo, report, rankings,
+  a0Strategy, a15Competitor, a22Predictive, a24Strategist, a25CoreUpdate,
+  ai3Volatility, ai5Seasonal, ai7Decay, ai9ZeroClick,
+}) {
   const signals = {};
 
   // Technical health
@@ -376,6 +404,60 @@ function extractSignals({ brief, audit, keywords, competitor, onpage, technical,
       return true;
     })
     .slice(0, 10);
+
+  // ── NEW: 9 signals from connected agents ──────────────────────────────────
+
+  // 1. A0 Strategy
+  signals.a0TopPriority      = a0Strategy?.topPriority      || null;
+  signals.a0QuickWins        = a0Strategy?.quickWins        || [];
+  signals.a0CriticalWarnings = a0Strategy?.criticalWarnings || [];
+  signals.a0AiSearchStrategy = a0Strategy?.aiSearchStrategy || null;
+
+  // 2. AI Overview / Zero-click risk (A3 v2)
+  const zeroClickPct        = keywords?.zeroClickRiskPct || 0;
+  signals.zeroClickRiskPct  = zeroClickPct;
+  signals.zeroClickHigh     = zeroClickPct > 40;
+  signals.aiRiskHighCount   = keywords?.aiRiskSummary?.high || 0;
+  signals.topicalHubsGap    = (keywords?.topicalHubs || []).filter(h => (h.clusterPages||[]).length < 2).length;
+  signals.geoOpportunities  = (keywords?.geoKeywords || []).length;
+
+  // 3. Competitor move (A15)
+  const sevenDaysAgo        = new Date(Date.now() - 7*24*60*60*1000).toISOString();
+  const recentMoves         = (a15Competitor?.newPages || []).filter(p => p.detectedAt >= sevenDaysAgo);
+  signals.competitorMoved   = recentMoves.length > 0;
+  signals.competitorMoveCount = recentMoves.length;
+  signals.latestCompetitorMove = recentMoves[0] || null;
+
+  // 4. Predictive forecast (A22)
+  signals.forecastTrend     = a22Predictive?.forecastTrend || null;
+  signals.forecastDeclining = a22Predictive?.forecastTrend === "DECLINING";
+  signals.projectedClicks90d= a22Predictive?.projectedClicks90d || null;
+
+  // 5. KPI on track (A24)
+  signals.kpiOnTrack        = a24Strategist?.onTrack !== false;
+  signals.kpiProgress       = a24Strategist?.progress || null;
+
+  // 6. Algorithm risk (A25)
+  signals.algorithmRisk     = a25CoreUpdate?.overallRisk || "LOW";
+  signals.eeAtGap           = !!(a25CoreUpdate?.eeAtGap);
+  signals.aiContentRisk     = !!(a25CoreUpdate?.aiContentRisk);
+  signals.hcuScore          = a25CoreUpdate?.hcuScore || null;
+
+  // 7. Content decay (AI7)
+  const decayingPages       = ai7Decay?.decayingPages || [];
+  signals.contentDecaying   = decayingPages.length;
+  signals.hasContentDecay   = decayingPages.length > 2;
+  signals.topDecayPage      = decayingPages[0] || null;
+
+  // 8. SERP volatility (AI3)
+  signals.serpVolatility    = ai3Volatility?.stability || "stable";
+  signals.serpHighVolatility= ai3Volatility?.stability === "volatile";
+  signals.activeUpdate      = ai3Volatility?.activeUpdate || null;
+
+  // 9. Seasonal opportunity (AI5)
+  const upcomingPeaks       = (ai5Seasonal?.upcomingPeaks || []).filter(p => (p.weeksAway||99) <= 8);
+  signals.seasonalOpportunity = upcomingPeaks.length > 0;
+  signals.upcomingSeasonalPeak = upcomingPeaks[0] || null;
 
   return signals;
 }
@@ -688,7 +770,7 @@ function buildPatternSummary(globalPatterns, clientMemory, businessType = "") {
 // ── LLM prompt ────────────────────────────────────
 function buildCMOPrompt(brief, signals, patternSummary = null, vetoContext = {}) {
   const { failingPlaybooks = new Set(), allowedAgents = null, lowQualityAgents = [] } = vetoContext;
-  const allAgents = ["A2", "A5", "A6", "A7", "A11", "A14"];
+  const allAgents = ["A2", "A5", "A6", "A7", "A11", "A14", "A12", "A13", "A23", "A25", "AI7", "AI9"];
   const pickFrom  = allowedAgents && allowedAgents.length > 0
     ? allowedAgents.filter(a => allAgents.includes(a))
     : allAgents;
@@ -735,15 +817,36 @@ ${revenueContext}
 - Content gaps: ${signals.contentGaps} ${signals.contentGaps > 0 ? "keywords with no page targeting them — missing traffic" : ""}
 ${signals.hasKilledKeywords ? `- WASTED EFFORT WARNING: ${signals.killedKeywordCount} keywords have ranked 90+ days with ZERO leads. Stop targeting these. Reallocate budget to converting keywords.` : ""}
 ${pageActionsBlock}
+## 2025/2026 Intelligence (connected agents data)
+${signals.a0TopPriority ? `- SEO Head top priority: "${signals.a0TopPriority}"` : ""}
+${signals.a0AiSearchStrategy ? `- AI search strategy: ${signals.a0AiSearchStrategy}` : ""}
+${signals.a0CriticalWarnings?.length > 0 ? `- Critical warnings: ${signals.a0CriticalWarnings.join(", ")}` : ""}
+- AI Overview zero-click risk: ${signals.zeroClickRiskPct || 0}% keywords at HIGH risk${signals.zeroClickHigh ? " — URGENT strategy shift needed" : ""}
+- Topical hubs incomplete: ${signals.topicalHubsGap || 0}
+- GEO opportunities: ${signals.geoOpportunities || 0} keywords can appear in ChatGPT/Perplexity
+- Competitor moved: ${signals.competitorMoved ? `YES — ${signals.competitorMoveCount} new page(s) in 7 days` : "No recent moves"}
+- Traffic forecast: ${signals.forecastTrend || "unknown"}${signals.forecastDeclining ? " — DECLINING — URGENT" : ""}
+- Algorithm risk: ${signals.algorithmRisk || "LOW"}${signals.eeAtGap ? " + EEAT gap" : ""}${signals.aiContentRisk ? " + AI content risk" : ""}
+- Content decay: ${signals.contentDecaying || 0} pages losing rankings
+- SERP volatility: ${signals.serpVolatility || "stable"}${signals.serpHighVolatility ? " — HOLD major changes" : ""}
+${signals.seasonalOpportunity ? `- SEASONAL: "${signals.upcomingSeasonalPeak?.keyword}" peaks in ${signals.upcomingSeasonalPeak?.weeksAway} weeks — create content NOW` : ""}
+${signals.kpiOnTrack === false ? `- KPI OFF TRACK: ${signals.kpiProgress || "behind goal"} — escalate all urgency` : ""}
+
 ## Available Actions (pick ONLY from this list)
 ${pickFrom.map(a => {
   const labels = {
-    A2:  "Re-audit — find what's blocking rankings",
-    A5:  "Rewrite titles/metas — more clicks from same rankings",
-    A6:  "On-page fixes — improve content relevance signals",
-    A7:  "Fix Core Web Vitals — stop losing mobile traffic",
-    A11: "Build backlinks — push page-2 keywords to page 1",
-    A14: "Create content — capture unaddressed keyword demand",
+    A2:   "Re-audit — find what's blocking rankings",
+    A5:   "Rewrite titles/metas or generate new content briefs",
+    A6:   "On-page fixes — improve content relevance signals",
+    A7:   "Fix Core Web Vitals — stop losing mobile traffic",
+    A11:  "Build backlinks — push page-2 keywords to page 1",
+    A14:  "Create and publish content — capture keyword demand",
+    A12:  "Auto-fix engine — apply quick technical fixes automatically",
+    A13:  "WordPress push — publish approved content to site",
+    A23:  "Investigate alerts — deep-dive into ranking drops or anomalies",
+    A25:  "Core update scanner — check EEAT, HCU, AI content risk",
+    AI7:  "Content decay refresh — update pages losing rankings",
+    AI9:  "Zero-click capture — win featured snippets and PAA boxes",
   };
   return `- ${a}: ${labels[a] || a}`;
 }).join("\n")}
@@ -817,6 +920,87 @@ function ruleBasedDecision(signals, brief) {
       nextAgents: ["A19", "A6"],
       confidence: 0.80,
       kpiImpact:  [{ kpi, expectedLift: "+15-30% conversion rate on existing traffic", mechanism: "CRO on converting pages instead of dead keyword expansion", revenueEstimate: aov > 0 ? `Reallocate ${cur}${(signals.killedKeywordCount * aov * 0.1).toLocaleString()}/month wasted effort` : null }],
+    };
+  }
+
+  // ── NEW: 7 world-class decisions using connected agents ───────────────────
+
+  // 1. Algorithm risk: EEAT / HCU issues detected by A25
+  if (signals.algorithmRisk === "HIGH" || signals.eeAtGap || signals.aiContentRisk) {
+    return {
+      decision:   "Algorithm penalty risk detected — fix EEAT signals before any other SEO work",
+      reasoning:  `A25 core update scanner detected ${signals.eeAtGap ? "EEAT gaps" : ""}${signals.aiContentRisk ? " and AI content without expertise signals" : ""}. Post March 2024-2025 core updates, these are active penalty triggers. Fixing trust signals first protects all existing rankings.`,
+      nextAgents: ["A25", "A6", "A5"],
+      confidence: 0.92,
+      kpiImpact:  [{ kpi, expectedLift: "Protects existing rankings from penalty", mechanism: "EEAT compliance → penalty risk removed", revenueEstimate: "Avoids potential 30-60% traffic loss from core update" }],
+    };
+  }
+
+  // 2. Zero-click defence: >40% of keywords at AI Overview risk
+  if (signals.zeroClickHigh) {
+    return {
+      decision:   `${signals.zeroClickRiskPct}% of keywords are at HIGH AI Overview risk — shift strategy to transactional content`,
+      reasoning:  `Google AI Overviews are now answering ${signals.zeroClickRiskPct}% of this site's target keywords directly — meaning zero clicks. Informational content investment is shrinking returns. Shifting 30% of content effort to transactional and commercial keywords protects revenue.`,
+      nextAgents: ["A5", "A3"],
+      confidence: 0.88,
+      kpiImpact:  [{ kpi, expectedLift: "Protect click traffic from AI Overview threat", mechanism: "Transactional keywords send clicks — AI Overview cannot replace buying intent", revenueEstimate: aov > 0 ? `Defending ${cur}${Math.round(signals.monthlyClicks * 0.3 * 0.03 * aov).toLocaleString()}/month at risk` : "Protects existing traffic revenue" }],
+    };
+  }
+
+  // 3. Competitor counter-move: competitor published new page in last 7 days
+  if (signals.competitorMoved) {
+    const move = signals.latestCompetitorMove;
+    return {
+      decision:   `Competitor published ${signals.competitorMoveCount} new page(s) targeting your keywords — counter-content brief ready`,
+      reasoning:  `${move?.domain || "A competitor"} published a new page${move?.keyword ? ` targeting "${move.keyword}"` : ""} in the last 7 days. Without a counter-content response, they will rank above you within 30-60 days. A targeted content brief now is the fastest way to defend.`,
+      nextAgents: ["A5", "A4"],
+      confidence: 0.85,
+      kpiImpact:  [{ kpi, expectedLift: "Defend existing keyword positions", mechanism: "Counter-content published before competitor ranks solidly", revenueEstimate: "Prevents estimated traffic loss to competitor" }],
+    };
+  }
+
+  // 4. Forecast declining: A22 shows traffic trending down
+  if (signals.forecastDeclining) {
+    return {
+      decision:   "Traffic forecast is declining — urgent intervention needed across all channels",
+      reasoning:  `A22 predictive agent forecasts a declining traffic trend over the next 90 days. Projected: ${signals.projectedClicks90d ? signals.projectedClicks90d + " clicks" : "below current baseline"}. This requires a comprehensive response: technical fixes, content refresh, and link building simultaneously.`,
+      nextAgents: ["A2", "A5", "A11"],
+      confidence: 0.87,
+      kpiImpact:  [{ kpi, expectedLift: "Reverse declining traffic trend", mechanism: "Multi-front intervention: technical + content + links", revenueEstimate: aov > 0 ? `Prevents estimated ${cur}${Math.round((signals.monthlyClicks||100) * 0.02 * aov).toLocaleString()}/month revenue decline` : "Protects existing traffic" }],
+    };
+  }
+
+  // 5. Content decay: 3+ pages losing rankings (AI7)
+  if (signals.hasContentDecay) {
+    return {
+      decision:   `${signals.contentDecaying} pages are steadily losing rankings — refresh them before traffic disappears`,
+      reasoning:  `AI7 content decay scanner detected ${signals.contentDecaying} pages with consistent month-on-month ranking drops. Content decay happens when pages become outdated or competitors publish fresher content. Refreshing with updated data, people-first signals, and improved internal links reverses the trend.`,
+      nextAgents: ["A5", "A6"],
+      confidence: 0.84,
+      kpiImpact:  [{ kpi, expectedLift: `Recover rankings on ${signals.contentDecaying} decaying pages`, mechanism: "Content refresh → relevance restored → rankings recover", revenueEstimate: aov > 0 ? `Est. recover ${cur}${Math.round(signals.contentDecaying * 0.5 * aov).toLocaleString()}/month in declining traffic value` : "Stabilise declining traffic" }],
+    };
+  }
+
+  // 6. Seasonal opportunity: peak within 8 weeks (AI5)
+  if (signals.seasonalOpportunity && signals.upcomingSeasonalPeak) {
+    const peak = signals.upcomingSeasonalPeak;
+    return {
+      decision:   `Seasonal traffic peak in ${peak.weeksAway || "a few"} weeks — create content now before the window closes`,
+      reasoning:  `AI5 seasonal intelligence detected an upcoming peak for "${peak.keyword || "target keywords"}" in ${peak.weeksAway || "a few"} weeks. Content published now has time to index and rank before the peak. Publishing during the peak is already too late.`,
+      nextAgents: ["A14", "A5"],
+      confidence: 0.83,
+      kpiImpact:  [{ kpi, expectedLift: `Capture seasonal traffic spike`, mechanism: "Content indexed before peak → captures surge demand", revenueEstimate: aov > 0 ? `Seasonal peaks typically 2-3x normal traffic → significant revenue opportunity` : "Seasonal traffic capture" }],
+    };
+  }
+
+  // 7. GEO + topical hub gap: content strategy opportunity
+  if (signals.topicalHubsGap > 1 || signals.geoOpportunities > 2) {
+    return {
+      decision:   `${signals.topicalHubsGap} topical hubs incomplete${signals.geoOpportunities > 2 ? ` and ${signals.geoOpportunities} GEO citation opportunities` : ""} — build content authority now`,
+      reasoning:  `Topical authority requires complete content hubs (pillar + cluster pages). ${signals.topicalHubsGap} hubs are currently incomplete — leaving keyword clusters unranked. ${signals.geoOpportunities > 2 ? `Additionally, ${signals.geoOpportunities} keywords can appear in ChatGPT/Perplexity answers with proper content restructuring.` : ""}`,
+      nextAgents: ["A14", "A5"],
+      confidence: 0.80,
+      kpiImpact:  [{ kpi, expectedLift: "Build topical authority", mechanism: "Complete hubs → Google recognises expertise → cluster rankings improve", revenueEstimate: aov > 0 ? `Topical authority typically lifts cluster traffic 40-60%` : "Authority-driven traffic growth" }],
     };
   }
 
