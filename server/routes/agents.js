@@ -2075,4 +2075,137 @@ router.get("/:clientId/aio/results", verifyToken, async (req, res) => {
   }
 });
 
+// ── AI Citation Tracker — ChatGPT / Perplexity / Gemini ────────────────────
+// Strategy (zero paid API):
+//   1. Bing AI answers (Copilot) — scrape Bing SERP for Copilot citation boxes
+//   2. Perplexity — if perplexityKey in user keys, call Perplexity API
+//   3. Gemini suggestions — scrape Google "AI Overviews" sources from SERP
+// Stores results in ai_citations/{clientId} Firestore doc.
+
+router.post("/:clientId/ai-citations/scan", verifyToken, async (req, res) => {
+  try {
+    const { clientId } = req.params;
+    await getClientDoc(clientId, req.uid);
+
+    const keys     = await getUserKeys(req.uid);
+    const keywords = await getState(clientId, "A3_keywords");
+    const brief    = await getState(clientId, "A1_brief");
+    if (!keywords?.keywordMap?.length) return res.status(400).json({ error: "Run A3 keywords first" });
+
+    const domain  = brief?.websiteUrl ? new URL(brief.websiteUrl).hostname.replace("www.", "") : null;
+    const kws     = keywords.keywordMap.slice(0, 10).map(k => k.keyword);
+    const results = [];
+
+    for (const kw of kws) {
+      const entry = { keyword: kw, sources: [], citedBy: [], checkedAt: new Date().toISOString() };
+
+      // ── Bing Copilot citation check ─────────────────────────────────────────
+      try {
+        const bingUrl = `https://www.bing.com/search?q=${encodeURIComponent(kw)}&setlang=en`;
+        const r = await fetch(bingUrl, {
+          signal: AbortSignal.timeout(12000),
+          headers: {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36",
+            "Accept-Language": "en-US,en;q=0.9",
+          },
+        });
+        if (r.ok) {
+          const html = await r.text();
+          // Bing Copilot citations appear in .b_codeSnippet, .b_wbAns, .sydney-citation
+          const hasCopilot = /sydney-citation|CopilotAnswer|b_codeSnippet|b_wbAns/i.test(html);
+          if (hasCopilot) {
+            entry.citedBy.push("Bing Copilot");
+            // Extract cited source URLs from Copilot answer
+            const citationUrls = [...html.matchAll(/sydney-citation[^>]*href=["']([^"']+)["']/gi)].map(m => m[1]);
+            entry.sources.push(...citationUrls.slice(0, 5));
+          }
+          // Is our domain in the Copilot citations?
+          entry.bingCopilotCited = hasCopilot && domain && entry.sources.some(s => s.includes(domain));
+          entry.bingCopilotPresent = hasCopilot;
+        }
+      } catch { /* skip */ }
+
+      // ── Perplexity API (if key configured) ─────────────────────────────────
+      if (keys?.perplexityKey) {
+        try {
+          const prxRes = await fetch("https://api.perplexity.ai/chat/completions", {
+            method: "POST",
+            signal: AbortSignal.timeout(15000),
+            headers: {
+              "Authorization": `Bearer ${keys.perplexityKey}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              model: "sonar",
+              messages: [{ role: "user", content: `${kw}` }],
+              return_citations: true,
+              max_tokens: 400,
+            }),
+          });
+          if (prxRes.ok) {
+            const prxData = await prxRes.json();
+            const citations = prxData?.citations || [];
+            entry.sources.push(...citations);
+            const domainCited = domain && citations.some(c => c.includes(domain));
+            entry.perplexityCited = domainCited;
+            entry.perplexityPresent = citations.length > 0;
+            if (domainCited) entry.citedBy.push("Perplexity");
+          }
+        } catch { /* skip */ }
+      }
+
+      // ── Google AI Overview source check ─────────────────────────────────────
+      try {
+        const gUrl = `https://www.google.com/search?q=${encodeURIComponent(kw)}&hl=en`;
+        const gRes = await fetch(gUrl, {
+          signal: AbortSignal.timeout(12000),
+          headers: {
+            "User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+            "Accept-Language": "en-US",
+          },
+        });
+        if (gRes.ok) {
+          const gHtml = await gRes.text();
+          const hasAIO = /data-attrid=["']AIOverview\b|class=["'][^"']*ai-overview/i.test(gHtml)
+            || /AI-generated content|Based on sources/i.test(gHtml);
+          entry.googleAIOPresent = hasAIO;
+          entry.googleAIOCited   = hasAIO && domain && gHtml.includes(domain);
+          if (entry.googleAIOCited) entry.citedBy.push("Google AI Overview");
+        }
+      } catch { /* skip */ }
+
+      entry.anyCitation = entry.citedBy.length > 0;
+      results.push(entry);
+      await new Promise(r2 => setTimeout(r2, 1000));
+    }
+
+    const summary = {
+      totalChecked:     results.length,
+      bingCopilotCited: results.filter(r => r.bingCopilotCited).length,
+      perplexityCited:  results.filter(r => r.perplexityCited).length,
+      googleAIOCited:   results.filter(r => r.googleAIOCited).length,
+      anyCitation:      results.filter(r => r.anyCitation).length,
+      hasPerplexityKey: !!keys?.perplexityKey,
+      checkedAt:        new Date().toISOString(),
+    };
+
+    await db.collection("ai_citations").doc(clientId).set({ clientId, keywords: results, summary, updatedAt: new Date().toISOString() });
+    return res.json({ success: true, summary, keywords: results });
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
+router.get("/:clientId/ai-citations/results", verifyToken, async (req, res) => {
+  try {
+    const { clientId } = req.params;
+    await getClientDoc(clientId, req.uid);
+    const doc = await db.collection("ai_citations").doc(clientId).get();
+    if (!doc.exists) return res.json({ notRun: true });
+    return res.json(doc.data());
+  } catch (e) {
+    return res.status(e.code || 500).json({ error: e.message });
+  }
+});
+
 module.exports = router;
