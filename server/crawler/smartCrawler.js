@@ -858,8 +858,6 @@ function analyzePageHTML(html, pageUrl, respHeaders = {}, responseTime = 0, stat
   // 4. Cloaking
   // 5. Doorway pages
 
-  const bodyText = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
-
   // Doorway page signals — thin page that exists only to funnel users elsewhere
   const externalLinksCount  = (html.match(/<a[^>]+href=["']https?:\/\//gi) || []).length;
   const internalLinksCount  = (html.match(/<a[^>]+href=["']\/[^"']/gi) || []).length;
