@@ -850,6 +850,88 @@ function analyzePageHTML(html, pageUrl, respHeaders = {}, responseTime = 0, stat
     descTruncated:  signals.metaLength > 155,
   };
 
+  // ── Google 2024 Spam Policy Checks ───────────────────────────────────────
+  // March 2024 core update targeted these specifically:
+  // 1. Scaled content abuse (mass AI content without added value)
+  // 2. Site reputation abuse (parasite SEO)
+  // 3. Expired domain abuse
+  // 4. Cloaking
+  // 5. Doorway pages
+
+  const bodyText = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+
+  // Doorway page signals — thin page that exists only to funnel users elsewhere
+  const externalLinksCount  = (html.match(/<a[^>]+href=["']https?:\/\//gi) || []).length;
+  const internalLinksCount  = (html.match(/<a[^>]+href=["']\/[^"']/gi) || []).length;
+  const isDoorwayPage = (
+    signals.wordCount < 200 &&
+    externalLinksCount > 5 &&
+    externalLinksCount > internalLinksCount * 3
+  );
+  if (isDoorwayPage) {
+    issues.push({
+      type: "doorway_page",
+      severity: "p1",
+      fix: "Page appears to be a doorway — thin content with many outbound links. Google's 2024 spam policy penalises pages that exist only to funnel users. Add substantial original content.",
+    });
+  }
+
+  // Scaled content abuse — page reads like templated bulk content
+  const templatePhrases = [
+    /\b(?:are you looking for|looking for a|find the best|best \w+ in \w+|top \d+ \w+ in \w+)\b/i,
+    /\b(?:this article will|in this article|this blog post|in this post we will discuss)\b/i,
+    /\b(?:furthermore|moreover|in conclusion|to summarize|as mentioned above)\b/i,
+    /\b(?:feel free to|don't hesitate to|please note that|it's worth noting)\b/i,
+  ];
+  const templateHits = templatePhrases.filter(p => p.test(bodyText)).length;
+  if (templateHits >= 3 && signals.wordCount < 600) {
+    issues.push({
+      type: "scaled_content_abuse",
+      severity: "p2",
+      detail: `${templateHits} templated content phrases detected`,
+      fix: "Page uses formulaic/templated language that SpamBrain flags as scaled AI content. Rewrite with original observations, specific data, and unique expert perspective.",
+    });
+  }
+
+  // Parasite SEO / Site reputation abuse — off-topic subfolders or subdomains
+  // Detects URLs that contain coupon/deal/promo patterns on non-retail sites
+  const parasitePattern = /\/(coupon|coupons|promo|deals?|voucher|discount|affiliate|casino|gambling|loan|payday|forex|crypto)\//i;
+  if (parasitePattern.test(pageUrl)) {
+    issues.push({
+      type: "site_reputation_abuse",
+      severity: "p1",
+      fix: "URL path suggests third-party content hosted on this domain. Google's March 2024 update explicitly targets 'parasite SEO'. Remove or noindex these sections.",
+    });
+  }
+
+  // Hidden text / cloaking signal — text with display:none containing keywords
+  const hiddenTextMatch = html.match(/display\s*:\s*none[^}]*}[^<]*<[^>]*>([\w\s,]{30,})<\/[^>]*>/i);
+  if (hiddenTextMatch && hiddenTextMatch[1]?.split(/\s+/).length > 5) {
+    issues.push({
+      type: "hidden_text",
+      severity: "p1",
+      fix: "Hidden text detected (display:none on keyword-rich content). Google treats this as cloaking — a manual action risk. Remove all hidden text.",
+    });
+  }
+
+  // Intrusive interstitials (hurt mobile-first rankings since 2017, re-emphasised 2024)
+  const hasIntrusiveInterstitial = /(?:popup|modal|overlay|interstitial)[^"']*(?:full.?screen|100vw|100vh)/i.test(html);
+  if (hasIntrusiveInterstitial) {
+    issues.push({
+      type: "intrusive_interstitial",
+      severity: "p2",
+      fix: "Full-screen popup/modal detected. Google demotes pages with intrusive interstitials on mobile — use smaller, dismissible banners instead.",
+    });
+  }
+
+  signals.spamPolicyChecks = {
+    isDoorwayPage,
+    templateHits,
+    hasHiddenText: !!hiddenTextMatch,
+    hasIntrusiveInterstitial,
+    isPossibleParasite: parasitePattern.test(pageUrl),
+  };
+
   // ── Overall Page Score ────────────────────────────────────────────────────
   const p1Count = issues.filter(i => i.severity === "p1").length;
   const p2Count = issues.filter(i => i.severity === "p2").length;
@@ -1177,6 +1259,51 @@ async function smartAudit(siteUrl, options = {}) {
   const blockedCount = pageResults.filter(p => p.blocked).length;
   if (blockedCount > urlsToAudit.length * 0.3) {
     globalIssues.p2.push({ type: "cloudflare_blocking", detail: `${blockedCount} pages blocked by WAF/Cloudflare`, fix: "Bot protection is limiting audit coverage. Use GSC data + sitemap for full coverage." });
+  }
+
+  // ── Google 2024 Spam Policy — Site-level signals ──────────────────────────
+  // Per-page checks are in analyzePageHTML. Here we aggregate site-wide signals.
+
+  // Scaled content abuse — if >30% of pages have 3+ AI content signals
+  const aiRiskPages = pageResults.filter(p => {
+    const r = p.spamPolicyChecks || p.aiContentRisk;
+    if (!r) return false;
+    // check per-page spam checks first, fall back to aiContentRisk signals
+    const aiRisk = p.aiContentRisk || {};
+    return Object.values(aiRisk).filter(Boolean).length >= 3;
+  });
+  if (aiRiskPages.length >= 2 && aiRiskPages.length > pageResults.length * 0.3) {
+    globalIssues.p1.push({
+      type: "scaled_content_abuse",
+      detail: `${aiRiskPages.length} pages show AI content patterns (SpamBrain 2024)`,
+      urls: aiRiskPages.map(p => p.url).slice(0, 10),
+      fix: "Google's March 2024 update targets scaled AI content. Add original data, expert insights, author bios, and citations to differentiate from mass-generated content.",
+    });
+  }
+
+  // Doorway pages — site-wide pattern
+  const doorwayPages = pageResults.filter(p => p.spamPolicyChecks?.isDoorwayPage);
+  if (doorwayPages.length > 0) {
+    globalIssues.p1.push({
+      type: "doorway_pages_detected",
+      detail: `${doorwayPages.length} potential doorway page(s) detected`,
+      urls: doorwayPages.map(p => p.url).slice(0, 5),
+      fix: "Pages appear to exist only to funnel users to other content. Google's spam policy penalises doorway pages. Add substantial original value to each page.",
+    });
+  }
+
+  // Site-wide link spam signals — excessive external links ratio across pages
+  const highOutboundPages = pageResults.filter(p => {
+    const checks = p.spamPolicyChecks;
+    return checks?.isDoorwayPage === false && p.wordCount < 400 && (p.externalLinksCount || 0) > 10;
+  });
+  if (highOutboundPages.length > 2) {
+    globalIssues.p2.push({
+      type: "link_spam_risk",
+      detail: `${highOutboundPages.length} thin pages with excessive outbound links`,
+      urls: highOutboundPages.map(p => p.url).slice(0, 5),
+      fix: "Pages with few words but many outbound links trigger Google's link spam detection. Reduce outbound links or add substantial content.",
+    });
   }
 
   // ── Phase 7: Scores ──────────────────────────────────────────────────────
