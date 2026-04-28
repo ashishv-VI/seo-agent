@@ -48,6 +48,44 @@ async function runCMO(clientId, keys, masterPrompt) {
 
   if (!brief) return { success: false, error: "No brief — run A1 first" };
 
+  // ── Revenue signals: load conversion data from Firestore ─────────────────
+  // conversions collection stores form submits / phone clicks / WhatsApp clicks
+  // Each record has: keyword, landingPage, submittedAt, type
+  let revenueSignals = { totalLeads: 0, leadsByKeyword: {}, last30dLeads: 0, last90dLeads: 0, topLeadKeywords: [] };
+  try {
+    const convSnap = await db.collection("conversions")
+      .where("clientId", "==", clientId)
+      .orderBy("submittedAt", "desc")
+      .limit(200)
+      .get();
+    const convs = convSnap.docs.map(d => d.data());
+    const now90 = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+    const now30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
+    revenueSignals.totalLeads  = convs.length;
+    revenueSignals.last30dLeads = convs.filter(c => (c.submittedAt || "") >= now30).length;
+    revenueSignals.last90dLeads = convs.filter(c => (c.submittedAt || "") >= now90).length;
+
+    // Group by keyword — how many leads each keyword generated
+    const byKw = {};
+    for (const c of convs) {
+      const kw = c.keyword || c.source_keyword || null;
+      if (kw) byKw[kw] = (byKw[kw] || 0) + 1;
+    }
+    revenueSignals.leadsByKeyword = byKw;
+    revenueSignals.topLeadKeywords = Object.entries(byKw)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([kw, count]) => ({ keyword: kw, leads: count }));
+    revenueSignals.zeroLeadKeywords90d = (keywords?.keywordMap || [])
+      .filter(k => {
+        const kLeads = byKw[k.keyword] || 0;
+        return kLeads === 0;
+      })
+      .slice(0, 10)
+      .map(k => k.keyword);
+  } catch { /* non-blocking — conversions may not be set up */ }
+
   // ── A17 quality scores — downweight low-confidence agent data ─────────────
   // A17 scores each agent output 0–1. If an agent scored < 0.5 its data is
   // unreliable. We build a quality map so extractSignals + the LLM prompt can
@@ -142,11 +180,12 @@ async function runCMO(clientId, keys, masterPrompt) {
   const failingPlaybooks = identifyFailingPlaybooks(patternStats);
   const allowedAgents    = filterAllowedAgents(failingPlaybooks);
 
-  // ── Rule-based signal extraction — now with 9 new data sources ─────────
+  // ── Rule-based signal extraction — all sources + revenue signals ─────────
   const signals = extractSignals({
     brief, audit, keywords, competitor, onpage, technical, geo, report, rankings,
     a0Strategy, a15Competitor, a22Predictive, a24Strategist, a25CoreUpdate,
     ai3Volatility, ai5Seasonal, ai7Decay, ai9ZeroClick,
+    revenueSignals,
   });
 
   // ── LLM decision ──────────────────────────────────
@@ -254,6 +293,15 @@ async function runCMO(clientId, keys, masterPrompt) {
     patternStats,
     agentQuality,
     lowQualityAgents,
+    // Revenue summary — surfaced in Control Room CMO banner
+    revenueSummary: {
+      totalLeads30d:    revenueSignals.last30dLeads    || 0,
+      totalLeads90d:    revenueSignals.last90dLeads    || 0,
+      totalLeadsAllTime: revenueSignals.totalLeads     || 0,
+      topLeadKeywords:  revenueSignals.topLeadKeywords || [],
+      hasLeadData:      revenueSignals.totalLeads > 0,
+      lowLeadRate:      signals.lowLeadRate || false,
+    },
     decidedAt:   new Date().toISOString(),
   };
 
@@ -269,6 +317,7 @@ async function runCMO(clientId, keys, masterPrompt) {
 function extractSignals({ brief, audit, keywords, competitor, onpage, technical, geo, report, rankings,
   a0Strategy, a15Competitor, a22Predictive, a24Strategist, a25CoreUpdate,
   ai3Volatility, ai5Seasonal, ai7Decay, ai9ZeroClick,
+  revenueSignals = {},
 }) {
   const signals = {};
 
@@ -319,6 +368,17 @@ function extractSignals({ brief, audit, keywords, competitor, onpage, technical,
 
   // KPI selection
   signals.kpi = [].concat(brief?.kpiSelection || ["Organic Traffic Growth"]);
+
+  // ── Revenue / Lead attribution signals ───────────────────────────────────
+  signals.totalLeads30d    = revenueSignals.last30dLeads || 0;
+  signals.totalLeads90d    = revenueSignals.last90dLeads || 0;
+  signals.totalLeadsAllTime = revenueSignals.totalLeads || 0;
+  signals.topLeadKeywords  = revenueSignals.topLeadKeywords || [];
+  signals.hasLeadData      = revenueSignals.totalLeads > 0;
+  signals.lowLeadRate      = signals.hasLeadData && signals.monthlyClicks > 500 && signals.totalLeads30d < 2;
+  // Keywords with 0 leads (conversion-kill signal for CMO)
+  signals.zeroLeadKeywords = revenueSignals.zeroLeadKeywords90d || [];
+  signals.hasZeroLeadKws   = (revenueSignals.zeroLeadKeywords90d || []).length >= 3;
 
   // ── Page-level specific signals ───────────────────────────────────────────
   // Extract the most actionable page-specific opportunities so the CMO can
@@ -796,6 +856,22 @@ function buildCMOPrompt(brief, signals, patternSummary = null, vetoContext = {})
       ).join("\n")}\n`
     : "";
 
+  // Revenue / lead attribution block — only shown when real conversion data exists
+  const revenueBlock = signals.hasLeadData
+    ? `\n## Real Revenue Signals (from actual form submissions / conversions)\n` +
+      `- Leads last 30 days: ${signals.totalLeads30d}\n` +
+      `- Leads last 90 days: ${signals.totalLeads90d}\n` +
+      (signals.topLeadKeywords.length > 0
+        ? `- Top converting keywords: ${signals.topLeadKeywords.map(k => `"${k.keyword}" (${k.leads} leads)`).join(", ")}\n`
+        : "") +
+      (signals.hasZeroLeadKws
+        ? `- ZERO-LEAD KEYWORDS (90 days): ${signals.zeroLeadKeywords.slice(0, 5).join(", ")} — stop investing here, they don't convert\n`
+        : "") +
+      (signals.lowLeadRate
+        ? `- WARNING: High traffic (${signals.monthlyClicks} clicks/month) but almost no leads (${signals.totalLeads30d} in 30 days). This is a CONVERSION problem, not an SEO problem. Recommend CRO (A19) before more SEO work.\n`
+        : "")
+    : "";
+
   return `You are the CMO Agent for an SEO AI platform. You make revenue-first decisions.
 
 RULE: Never speak in SEO jargon to the user. Every insight must answer "what does this mean for revenue or leads?"
@@ -816,7 +892,7 @@ ${revenueContext}
 - CTR below expected: ${signals.ctrLow ? `YES — getting ${((signals.avgCtr || 0)*100).toFixed(1)}% clicks at position ${(signals.avgPos||0).toFixed(1)} (should be higher)` : "NO"}
 - Content gaps: ${signals.contentGaps} ${signals.contentGaps > 0 ? "keywords with no page targeting them — missing traffic" : ""}
 ${signals.hasKilledKeywords ? `- WASTED EFFORT WARNING: ${signals.killedKeywordCount} keywords have ranked 90+ days with ZERO leads. Stop targeting these. Reallocate budget to converting keywords.` : ""}
-${pageActionsBlock}
+${revenueBlock}${pageActionsBlock}
 ## 2025/2026 Intelligence (connected agents data)
 ${signals.a0TopPriority ? `- SEO Head top priority: "${signals.a0TopPriority}"` : ""}
 ${signals.a0AiSearchStrategy ? `- AI search strategy: ${signals.a0AiSearchStrategy}` : ""}
@@ -901,6 +977,16 @@ function ruleBasedDecision(signals, brief) {
       nextAgents: ["A11"],
       confidence: 0.82,
       kpiImpact:  [{ kpi, expectedLift: `+${extraLeads} leads/month`, mechanism: "Page 2 → Page 1 ranking jump", revenueEstimate: aov > 0 ? `+${cur}${(extraLeads * aov).toLocaleString()}/month` : null }],
+    };
+  }
+  if (signals.lowLeadRate) {
+    const extraLeads = Math.round((signals.monthlyClicks || 500) * 0.005);
+    return {
+      decision:   `High traffic but almost no leads — this is a conversion problem, not an SEO problem`,
+      reasoning:  `The site gets ${signals.monthlyClicks} clicks/month but only ${signals.totalLeads30d} leads in the last 30 days. That's a <0.5% conversion rate. More SEO work adds traffic to a leaky bucket — fixing the conversion funnel first (CTAs, forms, landing pages) will generate leads${rev(extraLeads)} without needing more rankings.`,
+      nextAgents: ["A19", "A6"],
+      confidence: 0.88,
+      kpiImpact:  [{ kpi, expectedLift: `+${extraLeads} leads/month from existing traffic`, mechanism: "CRO — fix CTAs and landing pages to convert existing visitors", revenueEstimate: aov > 0 ? `+${cur}${(extraLeads * aov).toLocaleString()}/month` : null }],
     };
   }
   if (signals.hasContentGaps && !signals.hasKilledKeywords) {

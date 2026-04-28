@@ -211,6 +211,33 @@ export default function ControlRoom({ dark, clientId, clientName }) {
                 </div>
               )}
 
+              {/* REVENUE SIGNALS — actual leads / conversions data from CMO */}
+              {cmo.revenueSummary?.hasLeadData && (
+                <div style={{ marginBottom:12, padding:"8px 12px", background:"#05966911", border:"1px solid #05966933", borderRadius:8 }}>
+                  <div style={{ fontSize:10, color:"#059669", fontWeight:800, textTransform:"uppercase", letterSpacing:0.8, marginBottom:6 }}>
+                    💰 Real Revenue Signals
+                  </div>
+                  <div style={{ display:"flex", gap:16, flexWrap:"wrap", fontSize:11 }}>
+                    <span style={{ color:txt }}>
+                      <strong style={{ color:"#059669" }}>{cmo.revenueSummary.totalLeads30d}</strong> leads last 30 days
+                    </span>
+                    <span style={{ color:txt }}>
+                      <strong style={{ color:B }}>{cmo.revenueSummary.totalLeads90d}</strong> last 90 days
+                    </span>
+                    {cmo.revenueSummary.topLeadKeywords?.slice(0, 3).map((k, i) => (
+                      <span key={i} style={{ color:txt2 }}>
+                        "{k.keyword}" → <strong style={{ color:"#059669" }}>{k.leads}</strong> lead{k.leads !== 1 ? "s" : ""}
+                      </span>
+                    ))}
+                  </div>
+                  {cmo.revenueSummary.lowLeadRate && (
+                    <div style={{ marginTop:6, fontSize:11, color:"#D97706", fontWeight:700 }}>
+                      ⚠️ High traffic but very few leads — conversion problem, not SEO problem
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* EXPECTED IMPACT — revenue-first: leads + money */}
               {cmo.kpiImpact?.length > 0 && (
                 <div style={{ marginBottom:12 }}>
@@ -464,6 +491,10 @@ function DecisionTab({ data, bg2, bg3, bdr, txt, txt2, B, approving, approved, o
             { label:"Ranking Drops",               value: signals.droppingKws ?? "—",    flag: signals.hasDrops,           red: true  },
             { label:"CTR vs Expected",             value: signals.ctrLow ? "LOW" : "OK", flag: signals.ctrLow,             red: true  },
             { label:"Content Gaps",                value: signals.contentGaps ?? "—",    flag: signals.hasContentGaps,     red: false },
+            ...(signals.hasLeadData ? [
+              { label:"Leads (30d)",               value: signals.totalLeads30d ?? 0,    flag: signals.lowLeadRate,        red: true  },
+              { label:"Conversion Rate",           value: signals.lowLeadRate ? "LOW" : signals.hasLeadData ? "OK" : "—", flag: signals.lowLeadRate, red: true },
+            ] : []),
           ].map(sig => (
             <div key={sig.label} style={{ padding:"10px 14px", background:bg3, borderRadius:8 }}>
               <div style={{ fontSize:10, color:txt2, marginBottom:3 }}>{sig.label}</div>

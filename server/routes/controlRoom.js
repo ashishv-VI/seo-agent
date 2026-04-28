@@ -206,6 +206,7 @@ router.get("/:clientId/control-room", verifyToken, async (req, res) => {
       pageActions:         cmoDecision.pageActions || [],
       signals:             cmoDecision.signals    || {},
       patternStats:        cmoDecision.patternStats || null,
+      revenueSummary:      cmoDecision.revenueSummary || null,
       decidedAt:           cmoDecision.decidedAt  || null,
     } : null;
 
