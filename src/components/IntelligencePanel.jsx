@@ -7,6 +7,7 @@ import { useAuth } from "../context/AuthContext";
 import AIOTrackerPanel from "./AIOTrackerPanel";
 import AICitationPanel from "./AICitationPanel";
 import SerpFeaturePanel from "./SerpFeaturePanel";
+import ContentCalendarPanel from "./ContentCalendarPanel";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared fetch hook
@@ -875,6 +876,7 @@ const INTEL_TABS = [
   { id:"aio",       label:"AI Overview",      icon:"🤖" },
   { id:"citations", label:"AI Citations",     icon:"⚡" },
   { id:"serp",      label:"SERP Features",    icon:"⭐" },
+  { id:"calendar",  label:"Content Calendar", icon:"📅" },
   { id:"decay",     label:"Content Decay",    icon:"📉" },
   { id:"volatility",label:"SERP Volatility",  icon:"🌊" },
   { id:"shield",    label:"Negative SEO",     icon:"🛡️" },
@@ -914,6 +916,7 @@ export default function IntelligencePanel({ dark, clientId, bg2, bg3, bdr, txt, 
       {tab === "aio"        && <AIOTrackerPanel        dark={dark} clientId={clientId} />}
       {tab === "citations"  && <AICitationPanel       dark={dark} clientId={clientId} />}
       {tab === "serp"       && <SerpFeaturePanel      dark={dark} clientId={clientId} />}
+      {tab === "calendar"   && <ContentCalendarPanel  dark={dark} clientId={clientId} />}
       {tab === "decay"      && <ContentDecayPanel     {...props} />}
       {tab === "volatility" && <SerpVolatilityPanel   {...props} />}
       {tab === "shield"     && <NegativeSeoPanel      {...props} />}
