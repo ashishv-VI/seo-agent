@@ -26,6 +26,7 @@ router.get("/:clientId/control-room", verifyToken, async (req, res) => {
     const [
       brief, audit, report, keywords, competitor,
       baseline, scoreHistory, latestScore, weeklySnaps, reviewerData, cmoDecision,
+      a22Predictive, a25CoreUpdate, ai3Volatility, ai7Decay,
     ] = await Promise.all([
       getState(clientId, "A1_brief").catch(() => null),
       getState(clientId, "A2_audit").catch(() => null),
@@ -35,13 +36,17 @@ router.get("/:clientId/control-room", verifyToken, async (req, res) => {
       getState(clientId, "baseline").catch(() => null),
       getScoreHistory(clientId, 12).catch(() => []),
       getLatestScore(clientId).catch(() => null),
-      // Get last 4 weeks of snapshots for delta calculation (sort in JS — no Firestore index needed)
       db.collection("weekly_snapshots").where("clientId","==",clientId).limit(4).get()
         .then(s => s.docs.map(d => d.data()).sort((a, b) => (b.week || "").localeCompare(a.week || "")))
         .catch(() => db.collection("weekly_pulls").where("clientId","==",clientId).limit(4).get()
           .then(s => s.docs.map(d => d.data())).catch(() => [])),
       getState(clientId, "A17_review").catch(() => null),
       getState(clientId, "CMO_decision").catch(() => null),
+      // New: world-class intelligence sources
+      getState(clientId, "A22_predictive").catch(() => null),
+      getState(clientId, "A25_coreUpdateScanner").catch(() => null),
+      getState(clientId, "AI3_serpVolatility").catch(() => null),
+      getState(clientId, "AI7_contentDecay").catch(() => null),
     ]);
 
     const client = clientDocResult.data();
@@ -204,6 +209,54 @@ router.get("/:clientId/control-room", verifyToken, async (req, res) => {
       decidedAt:           cmoDecision.decidedAt  || null,
     } : null;
 
+    // ── A0 Strategy (world-class addition) ───────────
+    const a0Strategy = client?.seoHeadStrategy || null;
+
+    // ── AI Overview Risk (from A3 v2) ────────────────
+    const aiOverviewRisk = keywords ? {
+      zeroClickRiskPct:  keywords.zeroClickRiskPct  || 0,
+      aiRiskSummary:     keywords.aiRiskSummary      || null,
+      topicalHubs:       keywords.topicalHubs        || [],
+      geoKeywords:       keywords.geoKeywords        || [],
+      aiOverviewDefence: keywords.aiOverviewDefence  || null,
+      snippetOpportunities: keywords.snippetOpportunities || [],
+      cannibalization:   keywords.cannibalization    || [],
+    } : null;
+
+    // ── Predictive forecast (A22) ─────────────────────
+    const forecast = a22Predictive ? {
+      forecastTrend:      a22Predictive.forecastTrend      || null,
+      projectedClicks90d: a22Predictive.projectedClicks90d || null,
+      opportunities:      (a22Predictive.opportunities     || []).slice(0, 5),
+    } : null;
+
+    // ── Core update / HCU risk (A25) ─────────────────
+    const coreUpdateRisk = a25CoreUpdate ? {
+      overallRisk:   a25CoreUpdate.overallRisk  || "LOW",
+      hcuScore:      a25CoreUpdate.hcuScore     || null,
+      eeAtGap:       a25CoreUpdate.eeAtGap      || false,
+      aiContentRisk: a25CoreUpdate.aiContentRisk|| false,
+      fixes:         (a25CoreUpdate.fixes       || []).slice(0, 5),
+    } : null;
+
+    // ── SERP volatility (AI3) ──────────────────────────
+    const serpVolatility = ai3Volatility ? {
+      stability:    ai3Volatility.stability    || "stable",
+      activeUpdate: ai3Volatility.activeUpdate || null,
+    } : null;
+
+    // ── Content decay (AI7) ───────────────────────────
+    const contentDecay = ai7Decay ? {
+      decayingCount: (ai7Decay.decayingPages || []).length,
+      topPages:      (ai7Decay.decayingPages || []).slice(0, 5),
+    } : null;
+
+    // ── Knowledge freshness ───────────────────────────
+    const knowledgeFreshness = {
+      version:   client?.seoKnowledgeVersion || null,
+      updatedAt: client?.seoHeadStrategyAt   || null,
+    };
+
     return res.json({
       clientName:  client?.name || brief?.businessName,
       websiteUrl:  brief?.websiteUrl,
@@ -221,6 +274,14 @@ router.get("/:clientId/control-room", verifyToken, async (req, res) => {
         lowConfidence:     (reviewerData.agentScores || []).filter(a => a.confidence < 0.6).map(a => a.agent),
       } : null,
       cmo,
+      // World-class intelligence
+      a0Strategy,
+      aiOverviewRisk,
+      forecast,
+      coreUpdateRisk,
+      serpVolatility,
+      contentDecay,
+      knowledgeFreshness,
       lastUpdated: new Date().toISOString(),
     });
 
