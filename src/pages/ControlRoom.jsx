@@ -11,8 +11,10 @@ export default function ControlRoom({ dark, clientId, clientName }) {
   const [loading,   setLoading]   = useState(true);
   const [error,     setError]     = useState("");
   const [tab,       setTab]       = useState("overview");
-  const [approving, setApproving] = useState(false);
-  const [approved,  setApproved]  = useState(false);
+  const [approving,      setApproving]      = useState(false);
+  const [approved,       setApproved]       = useState(false);
+  const [refreshingCMO,  setRefreshingCMO]  = useState(false);
+  const [cmoRefreshed,   setCMORefreshed]   = useState(false);
 
   const bg   = dark ? "#0a0a0a" : "#f5f5f0";
   const bg2  = dark ? "#111"    : "#ffffff";
@@ -61,6 +63,24 @@ export default function ControlRoom({ dark, clientId, clientName }) {
       }
     } catch (_) {}
     setApproving(false);
+  }
+
+  async function refreshCMO() {
+    setRefreshingCMO(true);
+    setCMORefreshed(false);
+    try {
+      const token = await getToken();
+      const r = await fetch(`${API}/api/agents/${clientId}/cmo/run`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      });
+      if (r.ok) {
+        setCMORefreshed(true);
+        // Reload control room data to pick up fresh CMO decision
+        await load();
+      }
+    } catch (_) {}
+    setRefreshingCMO(false);
   }
 
   useEffect(() => { if (clientId) load(); }, [clientId]);
@@ -165,7 +185,7 @@ export default function ControlRoom({ dark, clientId, clientName }) {
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:16 }}>
             <div style={{ flex:1, minWidth:0 }}>
               {/* Badge row */}
-              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10, flexWrap:"wrap" }}>
                 <span style={{ fontSize:10, fontWeight:800, color:"#fff", background:B, textTransform:"uppercase", letterSpacing:1, padding:"3px 8px", borderRadius:4 }}>
                   🧠 AI Agent Recommendation
                 </span>
@@ -178,6 +198,12 @@ export default function ControlRoom({ dark, clientId, clientName }) {
                 {cmo.decidedAt && (
                   <span style={{ fontSize:10, color:txt2 }}>· {new Date(cmo.decidedAt).toLocaleDateString()}</span>
                 )}
+                <button onClick={refreshCMO} disabled={refreshingCMO} style={{
+                  marginLeft:"auto", fontSize:10, padding:"3px 10px", borderRadius:6, border:`1px solid ${bdr}`,
+                  background:"transparent", color:txt2, cursor:refreshingCMO?"not-allowed":"pointer", opacity:refreshingCMO?0.6:1,
+                }}>
+                  {refreshingCMO ? "Refreshing…" : cmoRefreshed ? "✓ Refreshed" : "↻ Refresh CMO"}
+                </button>
               </div>
 
               {/* WHAT to do — the headline action */}
@@ -364,7 +390,8 @@ export default function ControlRoom({ dark, clientId, clientName }) {
       {tab === "competitor"    && <CompetitorRadarPanel dark={dark} clientId={clientId} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2} B={B} />}
       {tab === "coreupdate"    && <CoreUpdateScannerPanel dark={dark} clientId={clientId} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2} B={B} />}
       {tab === "decision"    && <DecisionTab    data={data} dark={dark} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2} B={B}
-                                  approving={approving} approved={approved} onApprove={approveCMO} />}
+                                  approving={approving} approved={approved} onApprove={approveCMO}
+                                  refreshingCMO={refreshingCMO} onRefreshCMO={refreshCMO} />}
       {tab === "health"      && <HealthTab      data={data} dark={dark} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2} B={B} />}
       {tab === "suggestions" && <SuggestionsTab data={data} dark={dark} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2} B={B} />}
       {tab === "beforeafter" && <BeforeAfterTab data={data} dark={dark} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2} B={B} />}
@@ -388,14 +415,20 @@ function scoreColor(v) {
 }
 
 // ── Decision tab — full CMO analysis ─────────────
-function DecisionTab({ data, bg2, bg3, bdr, txt, txt2, B, approving, approved, onApprove }) {
+function DecisionTab({ data, bg2, bg3, bdr, txt, txt2, B, approving, approved, onApprove, refreshingCMO, onRefreshCMO }) {
   const cmo = data.cmo;
   if (!cmo) {
     return (
       <div style={{ background:bg2, border:`1px solid ${bdr}`, borderRadius:12, padding:40, textAlign:"center" }}>
         <div style={{ fontSize:32, marginBottom:12 }}>🧠</div>
-        <div style={{ fontSize:14, fontWeight:700, color:txt, marginBottom:6 }}>No CMO decision yet</div>
-        <div style={{ fontSize:12, color:txt2 }}>Run the full pipeline to get the CMO Agent's strategic recommendation.</div>
+        <div style={{ fontSize:14, fontWeight:700, color:txt, marginBottom:8 }}>No CMO decision yet</div>
+        <div style={{ fontSize:12, color:txt2, marginBottom:20 }}>The pipeline has run but CMO hasn't analysed it yet. Click below to get a fresh recommendation now.</div>
+        <button onClick={onRefreshCMO} disabled={refreshingCMO} style={{
+          padding:"11px 24px", borderRadius:8, border:"none", background:B, color:"#fff",
+          fontSize:13, fontWeight:700, cursor:refreshingCMO?"not-allowed":"pointer", opacity:refreshingCMO?0.7:1,
+        }}>
+          {refreshingCMO ? "Running CMO…" : "🧠 Run CMO Analysis Now"}
+        </button>
       </div>
     );
   }
@@ -411,9 +444,17 @@ function DecisionTab({ data, bg2, bg3, bdr, txt, txt2, B, approving, approved, o
       {/* Main decision card */}
       <div style={{ background:bg2, border:`1px solid ${B}44`, borderRadius:12, padding:24 }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:16 }}>
-          <div>
-            <div style={{ fontSize:11, color:B, fontWeight:700, textTransform:"uppercase", letterSpacing:1, marginBottom:6 }}>
-              Strategic Focus
+          <div style={{ flex:1 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:6 }}>
+              <div style={{ fontSize:11, color:B, fontWeight:700, textTransform:"uppercase", letterSpacing:1 }}>
+                Strategic Focus
+              </div>
+              <button onClick={onRefreshCMO} disabled={refreshingCMO} style={{
+                fontSize:10, padding:"2px 8px", borderRadius:5, border:`1px solid ${bdr}`,
+                background:"transparent", color:txt2, cursor:refreshingCMO?"not-allowed":"pointer", opacity:refreshingCMO?0.6:1,
+              }}>
+                {refreshingCMO ? "Refreshing…" : "↻ Refresh"}
+              </button>
             </div>
             <div style={{ fontSize:18, fontWeight:800, color:txt, lineHeight:1.4 }}>{cmo.decision}</div>
           </div>
