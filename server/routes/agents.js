@@ -16,34 +16,80 @@ const { calculateScore, saveScoreHistory, getLatestScore, getScoreHistory, gener
 const { getState, saveState } = require("../shared-state/stateManager");
 const { translateAlert, SEVERITY_LABELS } = require("../utils/alertTranslator");
 
+// ── Notification routes (extracted Sprint 1, M6.1) ──
+// Mounted at the same base ("/") so paths remain /api/agents/notifications*.
+// Uses its own verifyToken + db; no dependency on helpers in this file.
+const notificationsRouter = require("./modules/notifications");
+router.use("/", notificationsRouter);
+
+// ── Report routes (extracted Sprint 1, M6.2) ──
+// Mounted at the same base ("/") so paths remain /api/agents/:clientId/A9/report
+// and /api/agents/:clientId/A20/impact-report. Reuses the shared getClientDoc.
+const reportsRouter = require("./modules/reports");
+router.use("/", reportsRouter);
+
+// ── Analysis routes (extracted Sprint 1, M6.3) ──
+// Read-only audit/SEO analysis retrieval. Mounted at the same base ("/") so
+// paths remain /api/agents/:clientId/{intent-analysis,A2/patterns,A2/crawl-status,A2/page-scores}.
+// Reuses the shared getClientDoc.
+const analysisRouter = require("./modules/analysis");
+router.use("/", analysisRouter);
+
+// ── Scanner results routes (extracted Sprint 1, M6.4) ──
+// Read-only GET retrieval of persisted scanner output. Mounted at the same base
+// ("/") so paths remain /api/agents/:clientId/{A25,aio,ai-citations,serp-features,local-citations}/results.
+// Reuses the shared getClientDoc. POST scan routes stay in this file.
+const resultsRouter = require("./modules/results");
+router.use("/", resultsRouter);
+
+// ── Agent execution routes (extracted Sprint 1, M6.6) ──
+// Per-agent "run" endpoints (A3–A8, A11). Mounted at the same base ("/") so
+// paths remain /api/agents/:clientId/{A3..A8,A11}/run. Reuses the shared
+// getClientDoc + runAgent. Pipeline/scan/other execution endpoints stay here.
+const executionRouter = require("./modules/execution");
+router.use("/", executionRouter);
+
+// ── ROI / Revenue routes (extracted Sprint 1, M6.7) ──
+// Mounted at the same base ("/") so paths remain /api/agents/:clientId/{revenue,roi,roi/history,roi/settings}.
+// Reuses the shared getClientDoc.
+const roiRouter = require("./modules/roi");
+router.use("/", roiRouter);
+
+// ── Learning / Memory routes (extracted Sprint 1, M6.8) ──
+// Mounted at the same base ("/") so paths remain /api/agents/:clientId/{learning/record,learning,memory}.
+// Reuses the shared getClientDoc.
+const learningRouter = require("./modules/learning");
+router.use("/", learningRouter);
+
+// ── Rankings routes (extracted Sprint 1, M6.9) ──
+// Read-only ranking retrieval. Mounted at the same base ("/") so paths remain
+// /api/agents/:clientId/{rank-history,A10/rankings,rankings,rank-comparison}.
+// Reuses the shared getClientDoc. A11/state stays in this file (link-building, not rankings).
+const rankingsRouter = require("./modules/rankings");
+router.use("/", rankingsRouter);
+
+// ── Monitoring / Alerts routes (extracted Sprint 1, M6.10) ──
+// Mounted at the same base ("/") so paths remain /api/agents/:clientId/{A9/alerts,alerts,alerts/:id/resolve,cwv-history,fix-verification}.
+// Reuses the shared getClientDoc.
+const monitoringRouter = require("./modules/monitoring");
+router.use("/", monitoringRouter);
+
+// ── CMO routes (extracted Sprint 1, M6.11) ──
+// Mounted at the same base ("/") so paths remain /api/agents/:clientId/{cmo/run,cmo/decision,cmo/queue,cmo-decisions,cmo-decisions/:id}.
+// Reuses the shared getClientDoc.
+const cmoRouter = require("./modules/cmo");
+router.use("/", cmoRouter);
+
 // ── Helper: check client ownership ────────────────
-async function getClientDoc(clientId, uid) {
-  const doc = await db.collection("clients").doc(clientId).get();
-  if (!doc.exists)                   throw { code: 404, message: "Client not found" };
-  if (doc.data().ownerId !== uid)    throw { code: 403, message: "Access denied" };
-  return doc;
-}
+// Extracted verbatim to ./shared/clientOwnership (Sprint 1, M6.1.5) so the
+// ownership check has a single source of truth. Imported here; all call sites
+// below are unchanged.
+const { getClientDoc } = require("./shared/clientOwnership");
 
 // ── Generic agent runner ───────────────────────────
-async function runAgent(clientId, agentId, runFn, keys, res) {
-  const { canRun, reason } = await canRunAgent(clientId, agentId);
-  if (!canRun) return res.status(400).json({ error: reason });
-
-  await db.collection("clients").doc(clientId).update({ [`agents.${agentId}`]: "running" });
-
-  try {
-    const result = await runFn(clientId, keys);
-    if (!result.success) {
-      const failure = await handleFailure(clientId, agentId, result.error);
-      return res.status(400).json({ error: result.error, ...failure });
-    }
-    await db.collection("clients").doc(clientId).update({ [`agents.${agentId}`]: "complete" });
-    return res.json(result);
-  } catch (err) {
-    await handleFailure(clientId, agentId, err.message);
-    return res.status(500).json({ error: err.message });
-  }
-}
+// Extracted verbatim to ./shared/agentRunner (Sprint 1, M6.5). Imported here;
+// all runAgent(...) call sites below are unchanged.
+const { runAgent } = require("./shared/agentRunner");
 
 // ── POST Run Full Pipeline (fire-and-forget) ───────
 router.post("/:clientId/run-pipeline", verifyToken, async (req, res) => {
@@ -162,72 +208,10 @@ router.get("/:clientId/pipeline", verifyToken, async (req, res) => {
   }
 });
 
-// ── Run A3: Keyword Research ───────────────────────
-router.post("/:clientId/A3/run", verifyToken, async (req, res) => {
-  try {
-    await getClientDoc(req.params.clientId, req.uid);
-    const keys = await getUserKeys(req.uid);
-    return await runAgent(req.params.clientId, "A3", (id, k) => runA3(id, k), keys, res);
-  } catch (e) {
-    return res.status(e.code || 500).json({ error: e.message });
-  }
-});
-
-// ── Run A4: Competitor Intelligence ───────────────
-router.post("/:clientId/A4/run", verifyToken, async (req, res) => {
-  try {
-    await getClientDoc(req.params.clientId, req.uid);
-    const keys = await getUserKeys(req.uid);
-    return await runAgent(req.params.clientId, "A4", (id, k) => runA4(id, k), keys, res);
-  } catch (e) {
-    return res.status(e.code || 500).json({ error: e.message });
-  }
-});
-
-// ── Run A5: Content Optimisation ──────────────────
-router.post("/:clientId/A5/run", verifyToken, async (req, res) => {
-  try {
-    await getClientDoc(req.params.clientId, req.uid);
-    const keys = await getUserKeys(req.uid);
-    return await runAgent(req.params.clientId, "A5", (id, k) => runA5(id, k), keys, res);
-  } catch (e) {
-    return res.status(e.code || 500).json({ error: e.message });
-  }
-});
-
-// ── Run A6: On-Page & Tags ─────────────────────────
-router.post("/:clientId/A6/run", verifyToken, async (req, res) => {
-  try {
-    await getClientDoc(req.params.clientId, req.uid);
-    const keys = await getUserKeys(req.uid);
-    return await runAgent(req.params.clientId, "A6", (id, k) => runA6(id, k), keys, res);
-  } catch (e) {
-    return res.status(e.code || 500).json({ error: e.message });
-  }
-});
-
-// ── Run A7: Technical SEO & CWV ───────────────────
-router.post("/:clientId/A7/run", verifyToken, async (req, res) => {
-  try {
-    await getClientDoc(req.params.clientId, req.uid);
-    const keys = await getUserKeys(req.uid);
-    return await runAgent(req.params.clientId, "A7", (id, k) => runA7(id, k), keys, res);
-  } catch (e) {
-    return res.status(e.code || 500).json({ error: e.message });
-  }
-});
-
-// ── Run A8: GEO & Off-Page ────────────────────────
-router.post("/:clientId/A8/run", verifyToken, async (req, res) => {
-  try {
-    await getClientDoc(req.params.clientId, req.uid);
-    const keys = await getUserKeys(req.uid);
-    const { googleToken } = req.body;
-    return await runAgent(req.params.clientId, "A8", (id, k) => runA8(id, k, googleToken), keys, res);
-  } catch (e) {
-    return res.status(e.code || 500).json({ error: e.message });
-  }
-});
+// ── Run A3–A8 ───────────────────────────────────────
+// POST /:clientId/{A3,A4,A5,A6,A7,A8}/run extracted verbatim to
+// ./modules/execution (Sprint 1, M6.6) and mounted near the top of this file.
+// Behaviour and paths are unchanged.
 
 // ── GET A8: GEO data ──────────────────────────────
 router.get("/:clientId/A8/data", verifyToken, async (req, res) => {
@@ -241,34 +225,13 @@ router.get("/:clientId/A8/data", verifyToken, async (req, res) => {
 });
 
 // ── Run A9: Generate Report ────────────────────────
-router.post("/:clientId/A9/report", verifyToken, async (req, res) => {
-  try {
-    await getClientDoc(req.params.clientId, req.uid);
-    const keys      = await getUserKeys(req.uid);
-    const gscToken  = req.body.gscToken || null;
-    const { canRun, reason } = await canRunAgent(req.params.clientId, "A9");
-    if (!canRun) return res.status(400).json({ error: reason });
-
-    await db.collection("clients").doc(req.params.clientId).update({ "agents.A9": "running" });
-    const result = await generateReport(req.params.clientId, keys, gscToken);
-    await db.collection("clients").doc(req.params.clientId).update({ "agents.A9": result.success ? "complete" : "failed" });
-    return res.json(result);
-  } catch (e) {
-    return res.status(e.code || 500).json({ error: e.message });
-  }
-});
+// POST /:clientId/A9/report extracted verbatim to ./modules/reports (Sprint 1,
+// M6.2) and mounted near the top of this file. Behaviour and path are unchanged.
 
 // ── Run A9: Check Alerts ───────────────────────────
-router.post("/:clientId/A9/alerts", verifyToken, async (req, res) => {
-  try {
-    await getClientDoc(req.params.clientId, req.uid);
-    const keys   = await getUserKeys(req.uid);
-    const result = await checkAlerts(req.params.clientId, keys);
-    return res.json(result);
-  } catch (e) {
-    return res.status(e.code || 500).json({ error: e.message });
-  }
-});
+// POST /:clientId/A9/alerts extracted verbatim to ./modules/monitoring
+// (Sprint 1, M6.10) and mounted near the top of this file. Behaviour and path
+// are unchanged.
 
 // ── GET Approval Queue for client ─────────────────
 router.get("/:clientId/approvals", verifyToken, async (req, res) => {
@@ -303,18 +266,9 @@ router.post("/:clientId/approvals/:itemId", verifyToken, async (req, res) => {
 });
 
 // ── Resolve alert ─────────────────────────────────
-router.post("/:clientId/alerts/:alertId/resolve", verifyToken, async (req, res) => {
-  try {
-    await getClientDoc(req.params.clientId, req.uid);
-    await db.collection("alerts").doc(req.params.alertId).update({
-      resolved:   true,
-      resolvedAt: FieldValue.serverTimestamp(),
-    });
-    return res.json({ message: "Alert resolved" });
-  } catch (e) {
-    return res.status(e.code || 500).json({ error: e.message });
-  }
-});
+// POST /:clientId/alerts/:alertId/resolve extracted verbatim to
+// ./modules/monitoring (Sprint 1, M6.10) and mounted near the top of this file.
+// Behaviour and path are unchanged.
 
 // ── Request revision on approval item ─────────────
 router.post("/:clientId/approvals/:itemId/revision", verifyToken, async (req, res) => {
@@ -375,20 +329,8 @@ Return ONLY valid JSON (no markdown):
 });
 
 // ── Get rank history for client ────────────────────
-router.get("/:clientId/rank-history", verifyToken, async (req, res) => {
-  try {
-    await getClientDoc(req.params.clientId, req.uid);
-    // No composite index — single where, sort client-side
-    const snap = await db.collection("rank_history")
-      .where("clientId", "==", req.params.clientId)
-      .limit(30)
-      .get();
-    const history = snap.docs.map(d => d.data()).sort((a,b)=>(b.date||"").localeCompare(a.date||"")).slice(0,12);
-    return res.json({ history });
-  } catch (e) {
-    return res.status(e.code || 500).json({ error: e.message });
-  }
-});
+// GET /:clientId/rank-history extracted verbatim to ./modules/rankings (Sprint 1,
+// M6.9) and mounted near the top of this file. Behaviour and path are unchanged.
 
 // ────────────────────────────────────────────────────
 // TASK QUEUE ENDPOINTS
@@ -585,33 +527,8 @@ router.get("/:clientId/dashboard", verifyToken, async (req, res) => {
 });
 
 // ── GET translated alerts for client ──────────────
-router.get("/:clientId/alerts", verifyToken, async (req, res) => {
-  try {
-    await getClientDoc(req.params.clientId, req.uid);
-    // No composite index — single where clause, filter+sort client-side
-    const snap = await db.collection("alerts")
-      .where("clientId", "==", req.params.clientId)
-      .limit(60)
-      .get();
-
-    const alerts = snap.docs
-      .map(d => {
-        const a = d.data();
-        const translated = translateAlert(a.message, a.type);
-        return {
-          id: d.id,
-          ...a,
-          ...translated,
-          severityLabel: SEVERITY_LABELS[translated.severity] || SEVERITY_LABELS.info,
-        };
-      })
-      .sort((a, b) => ((b.createdAt?._seconds || b.createdAt?.seconds || 0) - (a.createdAt?._seconds || a.createdAt?.seconds || 0)));
-
-    return res.json({ alerts });
-  } catch (e) {
-    return res.status(e.code || 500).json({ error: e.message });
-  }
-});
+// GET /:clientId/alerts extracted verbatim to ./modules/monitoring (Sprint 1,
+// M6.10) and mounted near the top of this file. Behaviour and path are unchanged.
 
 // ────────────────────────────────────────────────────
 // AUTOMATION MODE
@@ -646,27 +563,13 @@ router.post("/:clientId/run-a10", verifyToken, async (req, res) => {
 });
 
 // GET A10 pipeline rankings (used by RankTrackerPanel for auto-import)
-router.get("/:clientId/A10/rankings", verifyToken, async (req, res) => {
-  try {
-    await getClientDoc(req.params.clientId, req.uid);
-    const data = await getState(req.params.clientId, "A10_rankings");
-    return res.json(data || {});
-  } catch (e) {
-    return res.status(e.code || 500).json({ error: e.message });
-  }
-});
+// GET /:clientId/A10/rankings extracted verbatim to ./modules/rankings
+// (Sprint 1, M6.9) and mounted near the top of this file. Behaviour and path
+// are unchanged.
 
 // ── A11 Link Builder ───────────────────────────────
-router.post("/:clientId/A11/run", verifyToken, async (req, res) => {
-  try {
-    await getClientDoc(req.params.clientId, req.uid);
-    const keys = await getUserKeys(req.uid);
-    const { runA11 } = require("../agents/A11_linkBuilder");
-    return runAgent(req.params.clientId, "A11", runA11, keys, res);
-  } catch (e) {
-    return res.status(e.code || 500).json({ error: e.message });
-  }
-});
+// POST /:clientId/A11/run extracted verbatim to ./modules/execution (Sprint 1,
+// M6.6) and mounted near the top of this file. Behaviour and path are unchanged.
 
 // GET A11 link-building state
 router.get("/:clientId/A11/state", verifyToken, async (req, res) => {
@@ -695,21 +598,8 @@ router.post("/:clientId/run-a12", verifyToken, async (req, res) => {
 });
 
 // ── GET Rankings for client ────────────────────────
-router.get("/:clientId/rankings", verifyToken, async (req, res) => {
-  try {
-    await getClientDoc(req.params.clientId, req.uid);
-    // No composite index — single where, sort client-side
-    const snap = await db.collection("rank_history")
-      .where("clientId", "==", req.params.clientId)
-      .limit(30)
-      .get();
-    if (snap.empty) return res.json({ rankings: [], source: null });
-    const sorted = snap.docs.map(d => d.data()).sort((a, b) => (b.date||"").localeCompare(a.date||""));
-    return res.json(sorted[0]);
-  } catch (e) {
-    return res.status(e.code || 500).json({ error: e.message });
-  }
-});
+// GET /:clientId/rankings extracted verbatim to ./modules/rankings (Sprint 1,
+// M6.9) and mounted near the top of this file. Behaviour and path are unchanged.
 
 // ── POST Recalculate score + re-emit tasks ─────────
 // Called when pipeline already ran but data isn't showing (Firestore race condition)
@@ -902,21 +792,8 @@ router.get("/:clientId/pages", verifyToken, async (req, res) => {
 // ────────────────────────────────────────────────────
 
 // GET keyword → traffic → revenue impact calculation
-router.get("/:clientId/revenue", verifyToken, async (req, res) => {
-  try {
-    await getClientDoc(req.params.clientId, req.uid);
-    const clientId = req.params.clientId;
-    const [keywords, brief] = await Promise.all([
-      getState(clientId, "A3_keywords"),
-      getState(clientId, "A1_brief"),
-    ]);
-    const revenue = calculateRevenue(keywords, brief);
-    if (!revenue) return res.json({ revenue: null, message: "No keyword volume data — run pipeline with SE Ranking key" });
-    return res.json({ revenue });
-  } catch (e) {
-    return res.status(e.code || 500).json({ error: e.message });
-  }
-});
+// GET /:clientId/revenue extracted verbatim to ./modules/roi (Sprint 1, M6.7)
+// and mounted near the top of this file. Behaviour and path are unchanged.
 
 // ────────────────────────────────────────────────────
 // BULK ACTIONS
@@ -970,205 +847,32 @@ router.post("/:clientId/tasks/bulk", verifyToken, async (req, res) => {
 // ────────────────────────────────────────────────────
 
 // GET compare two most recent rank history snapshots
-router.get("/:clientId/rank-comparison", verifyToken, async (req, res) => {
-  try {
-    await getClientDoc(req.params.clientId, req.uid);
-    const clientId = req.params.clientId;
-    const snap = await db.collection("rank_history")
-      .where("clientId", "==", clientId).limit(30).get();
-    if (snap.empty) return res.json({ comparison: null, message: "No ranking data yet — run pipeline" });
-
-    const sorted = snap.docs.map(d => d.data()).sort((a, b) => (b.date || "").localeCompare(a.date || ""));
-    if (sorted.length < 2) return res.json({ comparison: null, message: "Need at least 2 ranking snapshots (run pipeline twice)" });
-
-    const latest   = sorted[0];
-    const previous = sorted[1];
-
-    const prevMap = {};
-    (previous.keywords || []).forEach(k => { prevMap[k.keyword] = k.position; });
-
-    const comparison = (latest.keywords || []).map(k => {
-      const prev   = prevMap[k.keyword] || null;
-      const curr   = k.position;
-      const change = (prev && curr) ? prev - curr : null; // positive = moved up (improved)
-      return {
-        keyword:  k.keyword,
-        current:  curr,
-        previous: prev,
-        change,
-        trend:    change === null ? "new" : change > 0 ? "up" : change < 0 ? "down" : "stable",
-        category: k.category,
-      };
-    }).sort((a, b) => (b.change || 0) - (a.change || 0));
-
-    const gained = comparison.filter(k => k.trend === "up").length;
-    const lost   = comparison.filter(k => k.trend === "down").length;
-
-    return res.json({
-      comparison,
-      latestDate:   latest.date,
-      previousDate: previous.date,
-      summary: { gained, lost, stable: comparison.length - gained - lost, total: comparison.length },
-      healthScoreChange: (latest.healthScore || 0) - (previous.healthScore || 0),
-    });
-  } catch (e) {
-    return res.status(e.code || 500).json({ error: e.message });
-  }
-});
+// GET /:clientId/rank-comparison extracted verbatim to ./modules/rankings
+// (Sprint 1, M6.9) and mounted near the top of this file. Behaviour and path
+// are unchanged.
 
 // ────────────────────────────────────────────────────
 // LEARNING SYSTEM — track fix → outcome
 // ────────────────────────────────────────────────────
 
-// POST record a fix that was applied (for tracking outcome later)
-router.post("/:clientId/learning/record", verifyToken, async (req, res) => {
-  try {
-    await getClientDoc(req.params.clientId, req.uid);
-    const { taskId, issueType, fixDescription, keywords } = req.body;
-    const ref = await db.collection("learning_log").add({
-      clientId:       req.params.clientId,
-      taskId:         taskId  || null,
-      issueType:      issueType || "unknown",
-      fixDescription: fixDescription || "",
-      keywords:       keywords || [],
-      fixedAt:        FieldValue.serverTimestamp(),
-      fixedBy:        req.uid,
-      rankingsBefore: null,
-      rankingsAfter:  null,
-      outcome:        null,
-      status:         "pending_validation",
-    });
-    return res.json({ id: ref.id, message: "Fix logged for outcome tracking" });
-  } catch (e) {
-    return res.status(e.code || 500).json({ error: e.message });
-  }
-});
-
-// GET learning history for a client
-router.get("/:clientId/learning", verifyToken, async (req, res) => {
-  try {
-    await getClientDoc(req.params.clientId, req.uid);
-    const snap = await db.collection("learning_log")
-      .where("clientId", "==", req.params.clientId).limit(30).get();
-    const logs = snap.docs
-      .map(d => ({ id: d.id, ...d.data() }))
-      .sort((a, b) => (b.fixedAt?._seconds || 0) - (a.fixedAt?._seconds || 0));
-    return res.json({ logs });
-  } catch (e) {
-    return res.status(e.code || 500).json({ error: e.message });
-  }
-});
+// POST /:clientId/learning/record and GET /:clientId/learning extracted verbatim
+// to ./modules/learning (Sprint 1, M6.8) and mounted near the top of this file.
+// Behaviour and paths are unchanged.
 
 // ────────────────────────────────────────────────────
 // NOTIFICATIONS
 // ────────────────────────────────────────────────────
-
-// GET unread notifications for this user
-router.get("/notifications", verifyToken, async (req, res) => {
-  try {
-    // Single where clause only — no composite index needed; filter client-side
-    const snap = await db.collection("notifications")
-      .where("ownerId", "==", req.uid).limit(40).get();
-    const items = snap.docs.map(d => ({ id: d.id, ...d.data() }))
-      .filter(n => !n.read)
-      .sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""))
-      .slice(0, 20);
-    return res.json({ notifications: items, unread: items.length });
-  } catch (e) {
-    return res.status(e.code || 500).json({ error: e.message });
-  }
-});
-
-// POST mark notification as read
-router.post("/notifications/:notifId/read", verifyToken, async (req, res) => {
-  try {
-    await db.collection("notifications").doc(req.params.notifId).update({ read: true });
-    return res.json({ message: "Marked as read" });
-  } catch (e) {
-    return res.status(e.code || 500).json({ error: e.message });
-  }
-});
-
-// POST mark ALL notifications as read for this user
-router.post("/notifications/read-all", verifyToken, async (req, res) => {
-  try {
-    const snap = await db.collection("notifications")
-      .where("ownerId", "==", req.uid)
-      .where("read", "==", false)
-      .limit(50)
-      .get();
-    const batch = db.batch();
-    snap.docs.forEach(d => batch.update(d.ref, { read: true }));
-    if (!snap.empty) await batch.commit();
-    return res.json({ marked: snap.size });
-  } catch (e) {
-    return res.status(e.code || 500).json({ error: e.message });
-  }
-});
+// The /notifications, /notifications/:notifId/read, and /notifications/read-all
+// routes were extracted verbatim to ./modules/notifications (Sprint 1, M6.1)
+// and are mounted near the top of this file. Behaviour and paths are unchanged.
 
 // ────────────────────────────────────────────────────
 // INTENT MATCH ENGINE
 // ────────────────────────────────────────────────────
 
 // GET intent mismatch analysis: compares keyword intent vs page content signals
-router.get("/:clientId/intent-analysis", verifyToken, async (req, res) => {
-  try {
-    await getClientDoc(req.params.clientId, req.uid);
-    const clientId = req.params.clientId;
-    const [keywords, audit] = await Promise.all([
-      getState(clientId, "A3_keywords"),
-      getState(clientId, "A2_audit"),
-    ]);
-    if (!keywords) return res.json({ mismatches: [] });
-
-    const pageSignals = {};
-    const allIssues = [
-      ...(audit?.issues?.p1 || []),
-      ...(audit?.issues?.p2 || []),
-      ...(audit?.issues?.p3 || []),
-    ];
-    allIssues.forEach(i => {
-      if (i.page) {
-        if (!pageSignals[i.page]) pageSignals[i.page] = [];
-        pageSignals[i.page].push(i.type);
-      }
-    });
-
-    // Detect intent mismatches: transactional keyword → page lacks CTA signals
-    const mismatches = [];
-    const kwMap = keywords.keywordMap || [];
-    const intentRules = {
-      transactional: ["missing_cta", "thin_content", "missing_schema"],
-      informational: ["missing_h1", "thin_content"],
-      navigational:  ["redirect_chain", "missing_canonical"],
-      commercial:    ["missing_meta_desc", "missing_schema"],
-    };
-
-    for (const kw of kwMap) {
-      if (!kw.suggestedPage || !kw.intent) continue;
-      const pageIssues = pageSignals[kw.suggestedPage] || [];
-      const conflictRules = intentRules[kw.intent] || [];
-      const conflicts = conflictRules.filter(r => pageIssues.includes(r));
-      if (conflicts.length > 0 || (kw.intent === "transactional" && (kw.priority === "high"))) {
-        const severity = kw.priority === "high" ? "critical" : "warning";
-        mismatches.push({
-          keyword:      kw.keyword,
-          intent:       kw.intent,
-          page:         kw.suggestedPage,
-          conflicts,
-          severity,
-          fix: kw.intent === "transactional"
-            ? `Add clear CTA, pricing, and conversion elements to ${kw.suggestedPage}`
-            : `Align content structure on ${kw.suggestedPage} to match ${kw.intent} user intent`,
-        });
-      }
-    }
-
-    return res.json({ mismatches, total: mismatches.length });
-  } catch (e) {
-    return res.status(e.code || 500).json({ error: e.message });
-  }
-});
+// Extracted verbatim to ./modules/analysis (Sprint 1, M6.3) and mounted near the
+// top of this file. Behaviour and path are unchanged.
 
 // ────────────────────────────────────────────────────
 // CONTENT BRIEFS (from A5 data)
@@ -1330,58 +1034,17 @@ router.post("/:clientId/run-a16", verifyToken, async (req, res) => {
 });
 
 // GET: Get client memory
-router.get("/:clientId/memory", verifyToken, async (req, res) => {
-  try {
-    await getClientDoc(req.params.clientId, req.uid);
-    const { getMemory } = require("../utils/memory");
-    const memory = await getMemory(req.params.clientId);
-    return res.json({ memory });
-  } catch (e) {
-    return res.status(e.code || 500).json({ error: e.message });
-  }
-});
+// GET /:clientId/memory extracted verbatim to ./modules/learning (Sprint 1,
+// M6.8) and mounted near the top of this file. Behaviour and path are unchanged.
 
 // ────────────────────────────────────────────────────
 // LEVEL 4 — ROI: ROI Tracker
 // ────────────────────────────────────────────────────
 
 // GET: Get full ROI report for a client
-router.get("/:clientId/roi", verifyToken, async (req, res) => {
-  try {
-    await getClientDoc(req.params.clientId, req.uid);
-    const { calculateROI, saveROISnapshot } = require("../utils/roiTracker");
-    const roi = await calculateROI(req.params.clientId);
-    // Save snapshot for history (fire-and-forget)
-    saveROISnapshot(req.params.clientId, roi).catch(() => {});
-    return res.json({ roi });
-  } catch (e) {
-    return res.status(e.code || 500).json({ error: e.message });
-  }
-});
-
-// GET: Get ROI history snapshots
-router.get("/:clientId/roi/history", verifyToken, async (req, res) => {
-  try {
-    await getClientDoc(req.params.clientId, req.uid);
-    const { getROIHistory } = require("../utils/roiTracker");
-    const history = await getROIHistory(req.params.clientId);
-    return res.json({ history });
-  } catch (e) {
-    return res.status(e.code || 500).json({ error: e.message });
-  }
-});
-
-// PUT: Update ROI revenue settings (conversion rate, avg order value)
-router.put("/:clientId/roi/settings", verifyToken, async (req, res) => {
-  try {
-    await getClientDoc(req.params.clientId, req.uid);
-    const { updateROISettings } = require("../utils/roiTracker");
-    await updateROISettings(req.params.clientId, req.body);
-    return res.json({ message: "ROI settings updated" });
-  } catch (e) {
-    return res.status(e.code || 500).json({ error: e.message });
-  }
-});
+// GET /:clientId/roi, /:clientId/roi/history, and PUT /:clientId/roi/settings
+// extracted verbatim to ./modules/roi (Sprint 1, M6.7) and mounted near the top
+// of this file. Behaviour and paths are unchanged.
 
 // GET: Get wp_push_log for client (all pushes made to WordPress)
 router.get("/:clientId/wp-push-log", verifyToken, async (req, res) => {
@@ -1401,23 +1064,9 @@ router.get("/:clientId/wp-push-log", verifyToken, async (req, res) => {
 });
 
 // GET: CWV performance history (for trend charts in Technical tab)
-router.get("/:clientId/cwv-history", verifyToken, async (req, res) => {
-  try {
-    await getClientDoc(req.params.clientId, req.uid);
-    const snap = await db.collection("cwv_history")
-      .where("clientId", "==", req.params.clientId)
-      .orderBy("createdAt", "asc")
-      .limit(24)
-      .get();
-    const history = snap.docs.map(d => {
-      const data = d.data();
-      return { id: d.id, ...data, createdAt: data.createdAt?.toDate?.()?.toISOString() };
-    });
-    return res.json({ history, total: history.length });
-  } catch (e) {
-    return res.status(e.code || 500).json({ error: e.message });
-  }
-});
+// GET /:clientId/cwv-history extracted verbatim to ./modules/monitoring
+// (Sprint 1, M6.10) and mounted near the top of this file. Behaviour and path
+// are unchanged.
 
 // ────────────────────────────────────────────────────
 // SPRINT 4 — A17 Reviewer Agent
@@ -1471,60 +1120,17 @@ router.get("/:clientId/A19/state", verifyToken, async (req, res) => {
 // ────────────────────────────────────────────────────
 // SPRINT 4 — A20 Impact Report
 // ────────────────────────────────────────────────────
-router.get("/:clientId/A20/impact-report", verifyToken, async (req, res) => {
-  try {
-    await getClientDoc(req.params.clientId, req.uid);
-    const { buildImpactReport } = require("../agents/A20_impactReport");
-    const report = await buildImpactReport(req.params.clientId);
-    return res.json({ report });
-  } catch (e) {
-    return res.status(e.code || 500).json({ error: e.message });
-  }
-});
+// GET /:clientId/A20/impact-report extracted verbatim to ./modules/reports
+// (Sprint 1, M6.2) and mounted near the top of this file. Behaviour and path
+// are unchanged.
 
 // ────────────────────────────────────────────────────
 // SPRINT 3 — CMO Agent (autonomous decision layer)
 // ────────────────────────────────────────────────────
 
-router.post("/:clientId/cmo/run", verifyToken, async (req, res) => {
-  try {
-    await getClientDoc(req.params.clientId, req.uid);
-    const { runCMO } = require("../agents/CMO_agent");
-    const keys = await getUserKeys(req.uid);
-    const result = await runCMO(req.params.clientId, keys);
-    return res.json(result);
-  } catch (e) {
-    return res.status(e.code || 500).json({ error: e.message });
-  }
-});
-
-router.get("/:clientId/cmo/decision", verifyToken, async (req, res) => {
-  try {
-    await getClientDoc(req.params.clientId, req.uid);
-    const data = await getState(req.params.clientId, "CMO_decision");
-    return res.json(data || {});
-  } catch (e) {
-    return res.status(e.code || 500).json({ error: e.message });
-  }
-});
-
-// ── GET CMO queue (scheduled next actions) ─────────
-router.get("/:clientId/cmo/queue", verifyToken, async (req, res) => {
-  try {
-    await getClientDoc(req.params.clientId, req.uid);
-    const snap = await db.collection("cmo_queue")
-      .where("clientId", "==", req.params.clientId)
-      .limit(10)
-      .get();
-    const queue = snap.docs
-      .map(d => ({ id: d.id, ...d.data() }))
-      .filter(d => d.status === "pending")
-      .slice(0, 5);
-    return res.json({ queue });
-  } catch (e) {
-    return res.status(e.code || 500).json({ error: e.message });
-  }
-});
+// POST /:clientId/cmo/run, GET /:clientId/cmo/decision, and
+// GET /:clientId/cmo/queue extracted verbatim to ./modules/cmo (Sprint 1, M6.11)
+// and mounted near the top of this file. Behaviour and paths are unchanged.
 
 // ────────────────────────────────────────────────────
 // SPRINT 3 — Keyword → Lead Attribution
@@ -1694,86 +1300,18 @@ router.get("/:clientId/gtm-guide", verifyToken, async (req, res) => {
 // SPRINT 6 — CMO DECISIONS (approval-queue style)
 // ────────────────────────────────────────────────────
 
-// GET all CMO decisions for client
-router.get("/:clientId/cmo-decisions", verifyToken, async (req, res) => {
-  try {
-    await getClientDoc(req.params.clientId, req.uid);
-    const snap = await db.collection("cmo_queue")
-      .where("clientId", "==", req.params.clientId)
-      .limit(20)
-      .get();
-    const decisions = snap.docs
-      .map(d => ({ id: d.id, ...d.data() }))
-      .sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
-    return res.json({ decisions });
-  } catch (e) {
-    return res.status(e.code || 500).json({ error: e.message });
-  }
-});
-
-// POST approve/reject a CMO decision (optionally trigger agents)
-router.post("/:clientId/cmo-decisions/:decisionId", verifyToken, async (req, res) => {
-  try {
-    await getClientDoc(req.params.clientId, req.uid);
-    const { action } = req.body; // "approve" | "reject"
-    if (!["approve", "reject"].includes(action)) return res.status(400).json({ error: "action must be approve or reject" });
-
-    await db.collection("cmo_queue").doc(req.params.decisionId).update({
-      status:     action === "approve" ? "approved" : "rejected",
-      reviewedAt: new Date().toISOString(),
-      reviewedBy: req.uid,
-    });
-
-    // If approved, trigger the listed agents in the background.
-    // Uses the central agentRunner so every agent (including A2/A8/A10/A19/A23)
-    // can be auto-triggered. The old inline RUNNABLE map was missing half of
-    // them, so A24 lead-gen/traffic/local pivots silently dropped agents.
-    if (action === "approve") {
-      const decSnap  = await db.collection("cmo_queue").doc(req.params.decisionId).get();
-      const decision = decSnap.data() || {};
-      const agentsToRun = (decision.nextAgents || []).slice(0, 3);
-
-      const { runAgentById } = require("../agents/agentRunner");
-      const keys = await getUserKeys(req.uid);
-
-      for (const agentId of agentsToRun) {
-        runAgentById(agentId, req.params.clientId, keys).then(result => {
-          console.log(`[cmo-decision] ${agentId} auto-triggered → ${result.success ? "ok" : result.error}`);
-        }).catch(e => {
-          console.error(`[cmo-decision] ${agentId} failed:`, e.message);
-        });
-      }
-    }
-
-    return res.json({ message: `Decision ${action}d`, triggeredAgents: action === "approve" ? (await db.collection("cmo_queue").doc(req.params.decisionId).get()).data()?.nextAgents || [] : [] });
-  } catch (e) {
-    return res.status(e.code || 500).json({ error: e.message });
-  }
-});
+// GET /:clientId/cmo-decisions and POST /:clientId/cmo-decisions/:decisionId
+// extracted verbatim to ./modules/cmo (Sprint 1, M6.11) and mounted near the top
+// of this file. Behaviour and paths are unchanged.
 
 // ────────────────────────────────────────────────────
 // SPRINT 6 — FIX VERIFICATION HISTORY
 // ────────────────────────────────────────────────────
 
 // GET fix verification docs for a client — shows outcome of past fixes
-router.get("/:clientId/fix-verification", verifyToken, async (req, res) => {
-  try {
-    await getClientDoc(req.params.clientId, req.uid);
-    const snap = await db.collection("fix_verification")
-      .where("clientId", "==", req.params.clientId)
-      .limit(50)
-      .get();
-    const fixes = snap.docs
-      .map(d => ({ id: d.id, ...d.data() }))
-      .sort((a, b) => (b.pushedAt || "").localeCompare(a.pushedAt || ""));
-    const pending  = fixes.filter(f => f.status === "pending").length;
-    const improved = fixes.filter(f => f.outcome === "improved").length;
-    const degraded = fixes.filter(f => f.outcome === "degraded").length;
-    return res.json({ fixes, stats: { total: fixes.length, pending, improved, degraded, successRate: fixes.length > 0 ? Math.round(improved / (fixes.filter(f=>f.status==="checked").length||1) * 100) : null } });
-  } catch (e) {
-    return res.status(e.code || 500).json({ error: e.message });
-  }
-});
+// GET /:clientId/fix-verification extracted verbatim to ./modules/monitoring
+// (Sprint 1, M6.10) and mounted near the top of this file. Behaviour and path
+// are unchanged.
 
 // ────────────────────────────────────────────────────
 // SPRINT 6 — A22 PREDICTIVE INTELLIGENCE
@@ -1807,73 +1345,10 @@ router.get("/:clientId/A22/forecast", verifyToken, async (req, res) => {
 // SPRINT 6 — AUDIT PATTERNS (A2 site-wide patterns)
 // ────────────────────────────────────────────────────
 
-router.get("/:clientId/A2/patterns", verifyToken, async (req, res) => {
-  try {
-    await getClientDoc(req.params.clientId, req.uid);
-    const refresh = req.query.refresh === "true";
-
-    // Return cached unless refresh=true
-    if (!refresh) {
-      const cached = await getState(req.params.clientId, "A2_patterns");
-      if (cached) return res.json(cached);
-    }
-
-    // Compute live from subcollection and cache
-    const { detectSitePatterns } = require("../utils/auditPatterns");
-    const patterns = await detectSitePatterns(req.params.clientId);
-    await saveState(req.params.clientId, "A2_patterns", patterns).catch(() => {});
-    return res.json(patterns);
-  } catch (e) {
-    return res.status(e.code || 500).json({ error: e.message });
-  }
-});
-
-// GET /:clientId/A2/crawl-status — real-time crawl progress (polling)
-router.get("/:clientId/A2/crawl-status", verifyToken, async (req, res) => {
-  try {
-    await getClientDoc(req.params.clientId, req.uid);
-    const clientId = req.params.clientId;
-
-    // Read from clients doc — A2 writes progress here during crawl
-    const clientDoc = await db.collection("clients").doc(clientId).get();
-    const data      = clientDoc.data() || {};
-    const audit     = await getState(clientId, "A2_audit").catch(() => null);
-
-    return res.json({
-      status:        data.agents?.A2 || "idle",
-      crawlProgress: data.crawlProgress || null,  // { crawled, total, pct }
-      lastAuditAt:   audit?.auditedAt || null,
-      pagesCrawled:  audit?.checks?.pageAuditCount || audit?.checks?.internalLinksFound || 0,
-      healthScore:   audit?.healthScore || null,
-      p1Count:       audit?.issues?.p1?.length || 0,
-      p2Count:       audit?.issues?.p2?.length || 0,
-    });
-  } catch (e) {
-    return res.status(e.code || 500).json({ error: e.message });
-  }
-});
-
-// GET /:clientId/A2/page-scores — per-page SEO scores from pageScorer
-router.get("/:clientId/A2/page-scores", verifyToken, async (req, res) => {
-  try {
-    await getClientDoc(req.params.clientId, req.uid);
-    const clientId = req.params.clientId;
-    const refresh  = req.query.refresh === "true";
-
-    if (!refresh) {
-      const cached = await getState(clientId, "A2_page_scores");
-      if (cached) return res.json(cached);
-    }
-
-    const brief          = await getState(clientId, "A1_brief").catch(() => null);
-    const targetKeywords = (brief?.primaryKeywords || []).slice(0, 5);
-    const { scoreAllPages } = require("../utils/pageScorer");
-    const scores = await scoreAllPages(clientId, targetKeywords);
-    return res.json(scores);
-  } catch (e) {
-    return res.status(e.code || 500).json({ error: e.message });
-  }
-});
+// GET /:clientId/A2/patterns, /:clientId/A2/crawl-status, and
+// /:clientId/A2/page-scores were extracted verbatim to ./modules/analysis
+// (Sprint 1, M6.3) and mounted near the top of this file. Behaviour and paths
+// are unchanged.
 
 // ────────────────────────────────────────────────────
 // A23 — ALERT INVESTIGATOR
@@ -1972,17 +1447,8 @@ router.post("/:clientId/A25/scan", verifyToken, async (req, res) => {
 });
 
 // GET /:clientId/A25/results — latest Core Update Scanner results
-router.get("/:clientId/A25/results", verifyToken, async (req, res) => {
-  try {
-    await getClientDoc(req.params.clientId, req.uid);
-    const { getState } = require("../shared-state/stateManager");
-    const result = await getState(req.params.clientId, "A25_coreUpdateScanner");
-    if (!result) return res.json({ notRun: true });
-    return res.json(result);
-  } catch (e) {
-    return res.status(e.code || 500).json({ error: e.message });
-  }
-});
+// GET /:clientId/A25/results extracted verbatim to ./modules/results (Sprint 1,
+// M6.4) and mounted near the top of this file. Behaviour and path are unchanged.
 
 // ── AIO Tracker — Google AI Overview monitoring ─────────────────────────────
 // Checks whether each tracked keyword appears in an AI Overview box on Bing/Google
@@ -2063,17 +1529,8 @@ router.post("/:clientId/aio/scan", verifyToken, async (req, res) => {
   }
 });
 
-router.get("/:clientId/aio/results", verifyToken, async (req, res) => {
-  try {
-    const { clientId } = req.params;
-    await getClientDoc(clientId, req.uid);
-    const doc = await db.collection("aio_tracker").doc(clientId).get();
-    if (!doc.exists) return res.json({ notRun: true });
-    return res.json(doc.data());
-  } catch (e) {
-    return res.status(e.code || 500).json({ error: e.message });
-  }
-});
+// GET /:clientId/aio/results extracted verbatim to ./modules/results (Sprint 1,
+// M6.4) and mounted near the top of this file. Behaviour and path are unchanged.
 
 // ── AI Citation Tracker — ChatGPT / Perplexity / Gemini ────────────────────
 // Strategy (zero paid API):
@@ -2196,17 +1653,9 @@ router.post("/:clientId/ai-citations/scan", verifyToken, async (req, res) => {
   }
 });
 
-router.get("/:clientId/ai-citations/results", verifyToken, async (req, res) => {
-  try {
-    const { clientId } = req.params;
-    await getClientDoc(clientId, req.uid);
-    const doc = await db.collection("ai_citations").doc(clientId).get();
-    if (!doc.exists) return res.json({ notRun: true });
-    return res.json(doc.data());
-  } catch (e) {
-    return res.status(e.code || 500).json({ error: e.message });
-  }
-});
+// GET /:clientId/ai-citations/results extracted verbatim to ./modules/results
+// (Sprint 1, M6.4) and mounted near the top of this file. Behaviour and path
+// are unchanged.
 
 // ── SERP Feature Tracker — Featured Snippet, PAA, Knowledge Panel, Image Pack ─
 // Scrapes Bing SERP HTML for each keyword and detects which SERP features fire.
@@ -2315,17 +1764,9 @@ router.post("/:clientId/serp-features/scan", verifyToken, async (req, res) => {
   }
 });
 
-router.get("/:clientId/serp-features/results", verifyToken, async (req, res) => {
-  try {
-    const { clientId } = req.params;
-    await getClientDoc(clientId, req.uid);
-    const doc = await db.collection("serp_features").doc(clientId).get();
-    if (!doc.exists) return res.json({ notRun: true });
-    return res.json(doc.data());
-  } catch (e) {
-    return res.status(e.code || 500).json({ error: e.message });
-  }
-});
+// GET /:clientId/serp-features/results extracted verbatim to ./modules/results
+// (Sprint 1, M6.4) and mounted near the top of this file. Behaviour and path
+// are unchanged.
 
 // ── Content Calendar AI — 30-day automated content schedule ─────────────────
 // Uses A3 keywords + A4 competitor gaps + A5 content briefs to generate a
@@ -2630,16 +2071,8 @@ router.post("/:clientId/local-citations/scan", verifyToken, async (req, res) => 
   }
 });
 
-router.get("/:clientId/local-citations/results", verifyToken, async (req, res) => {
-  try {
-    const { clientId } = req.params;
-    await getClientDoc(clientId, req.uid);
-    const doc = await db.collection("local_citations").doc(clientId).get();
-    if (!doc.exists) return res.json({ notRun: true });
-    return res.json(doc.data());
-  } catch (e) {
-    return res.status(e.code || 500).json({ error: e.message });
-  }
-});
+// GET /:clientId/local-citations/results extracted verbatim to ./modules/results
+// (Sprint 1, M6.4) and mounted near the top of this file. Behaviour and path
+// are unchanged.
 
 module.exports = router;
