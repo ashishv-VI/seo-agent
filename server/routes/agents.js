@@ -1,20 +1,5 @@
 const express       = require("express");
 const router        = express.Router();
-const { db, FieldValue } = require("../config/firebase");
-const { verifyToken }        = require("../middleware/auth");
-const { getUserKeys }        = require("../utils/getUserKeys");
-const { canRunAgent, getPipelineStatus, handleFailure, runFullPipeline } = require("../agents/A0_orchestrator");
-const { runA3 }              = require("../agents/A3_keywords");
-const { runA4 }              = require("../agents/A4_competitor");
-const { runA5 }              = require("../agents/A5_content");
-const { runA6 }              = require("../agents/A6_onpage");
-const { runA7 }              = require("../agents/A7_technical");
-const { runA8 }              = require("../agents/A8_geo");
-const { generateReport, checkAlerts } = require("../agents/A9_monitoring");
-const { getTasks, getTopTasks, updateTask, clearTasks } = require("../utils/taskQueue");
-const { calculateScore, saveScoreHistory, getLatestScore, getScoreHistory, generateForecast, calculateRevenue } = require("../utils/scoreCalculator");
-const { getState, saveState } = require("../shared-state/stateManager");
-const { translateAlert, SEVERITY_LABELS } = require("../utils/alertTranslator");
 
 // ── Notification routes (extracted Sprint 1, M6.1) ──
 // Mounted at the same base ("/") so paths remain /api/agents/notifications*.
@@ -138,12 +123,10 @@ router.use("/", pipelineRouter);
 // Extracted verbatim to ./shared/clientOwnership (Sprint 1, M6.1.5) so the
 // ownership check has a single source of truth. Imported here; all call sites
 // below are unchanged.
-const { getClientDoc } = require("./shared/clientOwnership");
 
 // ── Generic agent runner ───────────────────────────
 // Extracted verbatim to ./shared/agentRunner (Sprint 1, M6.5). Imported here;
 // all runAgent(...) call sites below are unchanged.
-const { runAgent } = require("./shared/agentRunner");
 
 // ── POST Run Full Pipeline (fire-and-forget) ───────
 // POST /:clientId/run-pipeline extracted verbatim to ./modules/pipeline (Sprint 1,
