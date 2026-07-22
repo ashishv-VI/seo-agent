@@ -80,6 +80,24 @@ router.use("/", monitoringRouter);
 const cmoRouter = require("./modules/cmo");
 router.use("/", cmoRouter);
 
+// ── Tasks routes (extracted Sprint 1, M6.12) ──
+// Mounted at the same base ("/") so paths remain /api/agents/:clientId/{generate-fix,tasks,tasks/today,tasks/:taskId,tasks/:taskId/execute,tasks/bulk}.
+// Reuses the shared getClientDoc.
+const tasksRouter = require("./modules/tasks");
+router.use("/", tasksRouter);
+
+// ── Content routes (extracted Sprint 1, M6.13) ──
+// Mounted at the same base ("/") so paths remain /api/agents/:clientId/{content-briefs,content-drafts,content-drafts/:id/publish,content-calendar/generate,content-calendar/results,content-calendar/:itemId/status}.
+// Reuses the shared getClientDoc.
+const contentRouter = require("./modules/content");
+router.use("/", contentRouter);
+
+// ── Investigation routes (extracted Sprint 1, M6.14) ──
+// Mounted at the same base ("/") so paths remain /api/agents/:clientId/{A23/investigate,A23/investigations}.
+// Reuses the shared getClientDoc.
+const investigationRouter = require("./modules/investigation");
+router.use("/", investigationRouter);
+
 // ── Helper: check client ownership ────────────────
 // Extracted verbatim to ./shared/clientOwnership (Sprint 1, M6.1.5) so the
 // ownership check has a single source of truth. Imported here; all call sites
@@ -287,46 +305,8 @@ router.post("/:clientId/approvals/:itemId/revision", verifyToken, async (req, re
 });
 
 // ── AI Generate Fix for a specific issue ──────────
-router.post("/:clientId/generate-fix", verifyToken, async (req, res) => {
-  try {
-    await getClientDoc(req.params.clientId, req.uid);
-    const keys    = await getUserKeys(req.uid);
-    const { callLLM, parseJSON } = require("../utils/llm");
-    const { getState } = require("../shared-state/stateManager");
-
-    const { type, detail, current, context } = req.body;
-    const brief = context || await getState(req.params.clientId, "A1_brief") || {};
-
-    const prompt = `You are a senior SEO consultant. Generate an exact, ready-to-implement fix for this issue.
-
-Business: ${brief.businessName || "N/A"}
-Website: ${brief.websiteUrl || "N/A"}
-Services: ${(brief.services || []).join(", ") || "N/A"}
-Issue Type: ${type}
-Issue: ${detail}
-Current Value: ${current || "N/A"}
-
-Return ONLY valid JSON (no markdown):
-{
-  "fix": "concise exact fix instruction (1-2 sentences)",
-  "explanation": "why this fix improves SEO",
-  "implementation": "step-by-step how to apply (2-4 steps)",
-  "codeSnippet": "ready-to-paste HTML/code or null"
-}`;
-
-    const response = await callLLM(prompt, keys, { maxTokens: 600 });
-    const result   = parseJSON(response);
-    return res.json({
-      success:        true,
-      fix:            result.fix            || detail,
-      explanation:    result.explanation    || "",
-      implementation: result.implementation || "",
-      codeSnippet:    result.codeSnippet    || null,
-    });
-  } catch (e) {
-    return res.status(500).json({ error: e.message || "Fix generation failed" });
-  }
-});
+// POST /:clientId/generate-fix extracted verbatim to ./modules/tasks (Sprint 1,
+// M6.12) and mounted near the top of this file. Behaviour and path are unchanged.
 
 // ── Get rank history for client ────────────────────
 // GET /:clientId/rank-history extracted verbatim to ./modules/rankings (Sprint 1,
@@ -337,61 +317,10 @@ Return ONLY valid JSON (no markdown):
 // ────────────────────────────────────────────────────
 
 // GET all tasks sorted by priority
-router.get("/:clientId/tasks", verifyToken, async (req, res) => {
-  try {
-    await getClientDoc(req.params.clientId, req.uid);
-    const tasks = await getTasks(req.params.clientId);
-    return res.json({ tasks, total: tasks.length });
-  } catch (e) {
-    return res.status(e.code || 500).json({ error: e.message });
-  }
-});
-
-// GET top 5 pending tasks
-router.get("/:clientId/tasks/today", verifyToken, async (req, res) => {
-  try {
-    await getClientDoc(req.params.clientId, req.uid);
-    const tasks = await getTopTasks(req.params.clientId, 5);
-    return res.json({ tasks });
-  } catch (e) {
-    return res.status(e.code || 500).json({ error: e.message });
-  }
-});
-
-// PUT update task status
-router.put("/:clientId/tasks/:taskId", verifyToken, async (req, res) => {
-  try {
-    await getClientDoc(req.params.clientId, req.uid);
-    const { status, completedBy, notes } = req.body;
-    const updates = { status };
-    if (status === "complete") {
-      updates.completedAt = FieldValue.serverTimestamp();
-      updates.completedBy = completedBy || req.uid;
-    }
-    if (notes) updates.notes = notes;
-    await updateTask(req.params.clientId, req.params.taskId, updates);
-    return res.json({ message: "Task updated" });
-  } catch (e) {
-    return res.status(e.code || 500).json({ error: e.message });
-  }
-});
-
-// POST mark task as executed (quick-win auto-fix record)
-router.post("/:clientId/tasks/:taskId/execute", verifyToken, async (req, res) => {
-  try {
-    await getClientDoc(req.params.clientId, req.uid);
-    const { outcome } = req.body;
-    await updateTask(req.params.clientId, req.params.taskId, {
-      status:      "complete",
-      completedAt: FieldValue.serverTimestamp(),
-      completedBy: req.uid,
-      outcome:     outcome || "Manually resolved",
-    });
-    return res.json({ message: "Task marked as executed" });
-  } catch (e) {
-    return res.status(e.code || 500).json({ error: e.message });
-  }
-});
+// GET /:clientId/tasks, GET /:clientId/tasks/today, PUT /:clientId/tasks/:taskId,
+// and POST /:clientId/tasks/:taskId/execute extracted verbatim to ./modules/tasks
+// (Sprint 1, M6.12) and mounted near the top of this file. Behaviour and paths
+// are unchanged.
 
 // ────────────────────────────────────────────────────
 // SCORE ENDPOINTS
@@ -800,47 +729,8 @@ router.get("/:clientId/pages", verifyToken, async (req, res) => {
 // ────────────────────────────────────────────────────
 
 // POST bulk task action: complete-all | generate-fixes
-router.post("/:clientId/tasks/bulk", verifyToken, async (req, res) => {
-  try {
-    await getClientDoc(req.params.clientId, req.uid);
-    const clientId = req.params.clientId;
-    const { action } = req.body;
-
-    if (action === "complete-all") {
-      const tasks   = await getTasks(clientId);
-      const pending = tasks.filter(t => t.status === "pending");
-      for (const t of pending) {
-        await updateTask(clientId, t.id, {
-          status: "complete",
-          completedAt: FieldValue.serverTimestamp(),
-          completedBy: req.uid,
-          outcome: "Bulk marked complete",
-        });
-      }
-      return res.json({ message: `Marked ${pending.length} tasks as complete`, count: pending.length });
-    }
-
-    if (action === "generate-fixes") {
-      const { runA12 } = require("../agents/A12_autoExec");
-      const keys = await getUserKeys(req.uid);
-      const result = await runA12(clientId, keys);
-      return res.json(result);
-    }
-
-    if (action === "clear-completed") {
-      const tasks     = await getTasks(clientId);
-      const completed = tasks.filter(t => t.status === "complete");
-      for (const t of completed) {
-        await db.collection("task_queue").doc(clientId).collection("tasks").doc(t.id).delete();
-      }
-      return res.json({ message: `Cleared ${completed.length} completed tasks`, count: completed.length });
-    }
-
-    return res.status(400).json({ error: "Unknown action. Use: complete-all | generate-fixes | clear-completed" });
-  } catch (e) {
-    return res.status(e.code || 500).json({ error: e.message });
-  }
-});
+// POST /:clientId/tasks/bulk extracted verbatim to ./modules/tasks (Sprint 1,
+// M6.12) and mounted near the top of this file. Behaviour and path are unchanged.
 
 // ────────────────────────────────────────────────────
 // BEFORE/AFTER RANKING COMPARISON
@@ -879,48 +769,9 @@ router.post("/:clientId/tasks/bulk", verifyToken, async (req, res) => {
 // ────────────────────────────────────────────────────
 
 // GET structured content briefs
-router.get("/:clientId/content-briefs", verifyToken, async (req, res) => {
-  try {
-    await getClientDoc(req.params.clientId, req.uid);
-    const clientId = req.params.clientId;
-    const [content, keywords, competitor] = await Promise.all([
-      getState(clientId, "A5_content"),
-      getState(clientId, "A3_keywords"),
-      getState(clientId, "A4_competitor"),
-    ]);
-
-    if (!content) return res.json({ briefs: [] });
-
-    // Extract content briefs from A5 data
-    const gaps    = keywords?.gaps || [];
-    const compGap = competitor?.analysis?.contentGaps || [];
-    const briefs  = [
-      ...(content?.contentBriefs || []),
-      ...gaps.slice(0, 3).map(g => ({
-        title:       g.keyword || g.topic,
-        type:        "new_page",
-        priority:    "high",
-        reason:      g.reason || "Content gap identified",
-        targetKws:   [g.keyword],
-        wordCount:   800,
-        sections:    ["Introduction", "Main content", "FAQ", "Conclusion"],
-      })),
-      ...compGap.slice(0, 3).map(g => ({
-        title:       g.topic,
-        type:        "competitor_gap",
-        priority:    "medium",
-        reason:      `Competitor ranking for "${g.topic}" — you're not`,
-        targetKws:   [],
-        wordCount:   1200,
-        sections:    ["Introduction", g.topic, "How it works", "Why choose us", "FAQ"],
-      })),
-    ];
-
-    return res.json({ briefs });
-  } catch (e) {
-    return res.status(e.code || 500).json({ error: e.message });
-  }
-});
+// GET /:clientId/content-briefs extracted verbatim to ./modules/content
+// (Sprint 1, M6.13) and mounted near the top of this file. Behaviour and path
+// are unchanged.
 
 // ────────────────────────────────────────────────────
 // LEVEL 2 — ACT: A13 Auto-Push to WordPress
@@ -973,29 +824,9 @@ router.post("/:clientId/run-a14", verifyToken, async (req, res) => {
   }
 });
 
-// GET: Get content drafts for a client
-router.get("/:clientId/content-drafts", verifyToken, async (req, res) => {
-  try {
-    await getClientDoc(req.params.clientId, req.uid);
-    const { getContentDrafts } = require("../agents/A14_contentAutopilot");
-    const drafts = await getContentDrafts(req.params.clientId);
-    return res.json({ drafts, total: drafts.length });
-  } catch (e) {
-    return res.status(e.code || 500).json({ error: e.message });
-  }
-});
-
-// POST: Mark a content draft as published
-router.post("/:clientId/content-drafts/:draftId/publish", verifyToken, async (req, res) => {
-  try {
-    await getClientDoc(req.params.clientId, req.uid);
-    const { markDraftPublished } = require("../agents/A14_contentAutopilot");
-    await markDraftPublished(req.params.draftId, req.body.wpPostId || null);
-    return res.json({ message: "Draft marked as published" });
-  } catch (e) {
-    return res.status(e.code || 500).json({ error: e.message });
-  }
-});
+// GET /:clientId/content-drafts and POST /:clientId/content-drafts/:draftId/publish
+// extracted verbatim to ./modules/content (Sprint 1, M6.13) and mounted near the
+// top of this file. Behaviour and paths are unchanged.
 
 // ────────────────────────────────────────────────────
 // LEVEL 3 — LEARN: A15 Competitor Monitor
@@ -1355,36 +1186,9 @@ router.get("/:clientId/A22/forecast", verifyToken, async (req, res) => {
 // ────────────────────────────────────────────────────
 
 // POST /:clientId/A23/investigate — run investigation on all unresolved P1 alerts
-router.post("/:clientId/A23/investigate", verifyToken, async (req, res) => {
-  try {
-    await getClientDoc(req.params.clientId, req.uid);
-    const { runA23 } = require("../agents/A23_investigator");
-    const keys = await getUserKeys(req.uid);
-    const result = await runA23(req.params.clientId, keys);
-    return res.json(result);
-  } catch (e) {
-    return res.status(e.code || 500).json({ error: e.message });
-  }
-});
-
-// GET /:clientId/A23/investigations — latest investigation results
-router.get("/:clientId/A23/investigations", verifyToken, async (req, res) => {
-  try {
-    await getClientDoc(req.params.clientId, req.uid);
-    // Return from approval_queue type=investigation_fix
-    const snap = await db.collection("approval_queue")
-      .where("clientId", "==", req.params.clientId)
-      .where("type", "==", "investigation_fix")
-      .limit(20)
-      .get();
-    const investigations = snap.docs
-      .map(d => ({ id: d.id, ...d.data() }))
-      .sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
-    return res.json({ investigations });
-  } catch (e) {
-    return res.status(e.code || 500).json({ error: e.message });
-  }
-});
+// POST /:clientId/A23/investigate and GET /:clientId/A23/investigations extracted
+// verbatim to ./modules/investigation (Sprint 1, M6.14) and mounted near the top
+// of this file. Behaviour and paths are unchanged.
 
 // ── Intelligence Agents (AI1–AI10) — on-demand scan + results ────────────────
 const AI_AGENTS = {
@@ -1773,151 +1577,10 @@ router.post("/:clientId/serp-features/scan", verifyToken, async (req, res) => {
 // prioritised 30-day calendar. LLM assigns topic, keyword, format, publish date.
 // Stores in content_calendar/{clientId} Firestore doc.
 
-router.post("/:clientId/content-calendar/generate", verifyToken, async (req, res) => {
-  try {
-    const { clientId } = req.params;
-    await getClientDoc(clientId, req.uid);
-
-    const keys      = await getUserKeys(req.uid);
-    const brief     = await getState(clientId, "A1_brief");
-    const keywords  = await getState(clientId, "A3_keywords");
-    const competitor = await getState(clientId, "A4_competitor");
-    const content    = await getState(clientId, "A5_content");
-
-    if (!brief?.websiteUrl) return res.status(400).json({ error: "Run A1 onboarding first" });
-    if (!keywords?.keywordMap?.length) return res.status(400).json({ error: "Run A3 keywords first" });
-
-    const { callLLM, parseJSON } = require("../utils/llm");
-
-    // Build input data for LLM
-    const topKws     = (keywords.keywordMap || []).slice(0, 20).map(k => `${k.keyword} (priority: ${k.priority || "medium"})`);
-    const gaps       = (competitor?.analysis?.contentGaps || keywords?.gaps || []).slice(0, 10);
-    const published  = (content?.pages || []).map(p => p.topic || p.title).filter(Boolean).slice(0, 10);
-    const aov        = Number(brief.avgOrderValue) || 0;
-    const currency   = brief.currency === "GBP" ? "£" : brief.currency === "USD" ? "$" : "₹";
-
-    const prompt = `You are a content strategist. Create a 30-day SEO content calendar.
-
-Business: ${brief.businessName}
-Website: ${brief.websiteUrl}
-Industry: ${brief.businessType || brief.industry || "general"}
-Goals: ${(brief.goals || brief.kpiSelection || []).join(", ")}
-${aov > 0 ? `Average order value: ${currency}${aov} — prioritise content that attracts buyers not just visitors` : ""}
-
-Top keywords to target:
-${topKws.join("\n")}
-
-Content gaps competitors rank for but we don't:
-${gaps.length > 0 ? gaps.join("\n") : "None identified yet"}
-
-Already published (avoid duplicates):
-${published.length > 0 ? published.join("\n") : "Nothing yet"}
-
-Create 12 content pieces spread across 30 days (roughly every 2-3 days).
-Mix of: blog posts (long-form), how-to guides, listicles, comparison pages, local/service pages.
-
-Return ONLY valid JSON:
-{
-  "calendar": [
-    {
-      "day": 1,
-      "publishDate": "YYYY-MM-DD",
-      "title": "exact article/page title",
-      "keyword": "primary keyword to target",
-      "format": "blog_post|how_to|listicle|comparison|service_page|local_page",
-      "wordCountTarget": 1200,
-      "outline": ["H2 section 1", "H2 section 2", "H2 section 3"],
-      "intent": "informational|commercial|transactional|navigational",
-      "expectedTraffic": "low|medium|high",
-      "revenueAngle": "one sentence on how this drives leads or sales"
-    }
-  ],
-  "strategy": "2-3 sentence overview of the calendar strategy and why this mix works"
-}`;
-
-    let calendarData;
-    try {
-      const raw = await callLLM(clientId, keys, prompt, { maxTokens: 3000, temperature: 0.4 });
-      calendarData = parseJSON(raw);
-    } catch (e) {
-      // Rule-based fallback
-      const now = new Date();
-      calendarData = {
-        calendar: topKws.slice(0, 12).map((kw, i) => {
-          const d = new Date(now);
-          d.setDate(d.getDate() + (i + 1) * 2 + 1);
-          return {
-            day: (i + 1) * 2 + 1,
-            publishDate: d.toISOString().split("T")[0],
-            title: `Complete Guide to ${kw.split(" (")[0]}`,
-            keyword: kw.split(" (")[0],
-            format: i % 3 === 0 ? "how_to" : i % 3 === 1 ? "blog_post" : "listicle",
-            wordCountTarget: 1200,
-            outline: ["Introduction", "What You Need to Know", "Step-by-Step Guide", "FAQ", "Conclusion"],
-            intent: "informational",
-            expectedTraffic: "medium",
-            revenueAngle: "Educates potential buyers and drives inbound leads",
-          };
-        }),
-        strategy: `Content calendar targeting ${topKws.length} keywords with a mix of how-to guides, blog posts, and listicles to capture different intent levels across the funnel.`,
-      };
-    }
-
-    // Add status tracking fields
-    const items = (calendarData.calendar || []).map((item, idx) => ({
-      ...item,
-      id:     `${clientId}_cal_${idx}`,
-      status: "planned",
-      createdAt: new Date().toISOString(),
-    }));
-
-    const result = {
-      clientId,
-      calendar: items,
-      strategy: calendarData.strategy || "",
-      generatedAt: new Date().toISOString(),
-      totalItems:  items.length,
-    };
-
-    await db.collection("content_calendar").doc(clientId).set(result);
-    return res.json({ success: true, ...result });
-  } catch (e) {
-    return res.status(e.code || 500).json({ error: e.message });
-  }
-});
-
-router.get("/:clientId/content-calendar/results", verifyToken, async (req, res) => {
-  try {
-    const { clientId } = req.params;
-    await getClientDoc(clientId, req.uid);
-    const doc = await db.collection("content_calendar").doc(clientId).get();
-    if (!doc.exists) return res.json({ notRun: true });
-    return res.json(doc.data());
-  } catch (e) {
-    return res.status(e.code || 500).json({ error: e.message });
-  }
-});
-
-router.patch("/:clientId/content-calendar/:itemId/status", verifyToken, async (req, res) => {
-  try {
-    const { clientId, itemId } = req.params;
-    const { status } = req.body;
-    await getClientDoc(clientId, req.uid);
-    if (!["planned", "in_progress", "written", "published"].includes(status)) {
-      return res.status(400).json({ error: "Invalid status" });
-    }
-    const doc = await db.collection("content_calendar").doc(clientId).get();
-    if (!doc.exists) return res.status(404).json({ error: "Calendar not found" });
-    const data = doc.data();
-    const calendar = (data.calendar || []).map(item =>
-      item.id === itemId ? { ...item, status, updatedAt: new Date().toISOString() } : item
-    );
-    await db.collection("content_calendar").doc(clientId).update({ calendar });
-    return res.json({ success: true });
-  } catch (e) {
-    return res.status(e.code || 500).json({ error: e.message });
-  }
-});
+// POST /:clientId/content-calendar/generate, GET /:clientId/content-calendar/results,
+// and PATCH /:clientId/content-calendar/:itemId/status extracted verbatim to
+// ./modules/content (Sprint 1, M6.13) and mounted near the top of this file.
+// Behaviour and paths are unchanged.
 
 // ── Local Citation Audit — JustDial, Sulekha, IndiaMart, Google Maps ─────────
 // Checks if the business appears on key Indian directories by searching them
