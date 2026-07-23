@@ -385,7 +385,6 @@ router.post("/:clientId/local-citations/scan", verifyToken, async (req, res) => 
     const bizName = brief.businessName;
     const city    = brief.city || brief.location || "";
     const phone   = brief.phone || "";
-    const address = brief.address || "";
 
     const DIRECTORIES = [
       {

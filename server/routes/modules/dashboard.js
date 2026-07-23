@@ -325,9 +325,6 @@ router.get("/:clientId/attribution", verifyToken, async (req, res) => {
     if (!keywords) return res.json({ attribution: [], message: "Run keyword research first" });
 
     // Build keyword → estimated traffic → estimated leads chain
-    const gsc    = report?.gscSummary || {};
-    const avgCtr = gsc.avgCtr || 0.03;
-    const avgPos = gsc.avgPos || 10;
 
     // CTR curve by position
     const ctrByPos = p => p <= 1 ? 0.25 : p <= 3 ? 0.12 : p <= 5 ? 0.06 : p <= 10 ? 0.02 : 0.005;
@@ -383,7 +380,6 @@ router.get("/:clientId/gtm-guide", verifyToken, async (req, res) => {
     await getClientDoc(req.params.clientId, req.uid);
     const brief = await getState(req.params.clientId, "A1_brief");
     const kpis  = brief?.kpiSelection || ["Organic Traffic Growth"];
-    const conversionGoal = brief?.conversionGoal || "";
 
     const triggers = [];
 
