@@ -17,13 +17,13 @@ process.on("uncaughtException", (err) => {
 });
 
 // Load rate limiters — graceful fallback if express-rate-limit not yet installed
-let authLimiter, agentLimiter, chatLimiter, apiLimiter;
+let authLimiter, agentLimiter, chatLimiter, apiLimiter, presalesLimiter;
 try {
   ({ authLimiter, agentLimiter, chatLimiter, apiLimiter, presalesLimiter } = require("./middleware/rateLimiter"));
 } catch (e) {
   console.warn("[index] rateLimiter unavailable — using passthrough:", e.message);
   const passthrough = (req, res, next) => next();
-  authLimiter = agentLimiter = chatLimiter = apiLimiter = passthrough;
+  authLimiter = agentLimiter = chatLimiter = apiLimiter = presalesLimiter = passthrough;
 }
 
 const authRoutes    = require("./routes/auth");
