@@ -125,6 +125,12 @@ router.use("/", pipelineRouter);
 const llmVisibilityRouter = require("./modules/llmVisibility");
 router.use("/", llmVisibilityRouter);
 
+// ── Answer Optimization routes (M9.3) ──
+// Mounted at the same base ("/") so paths remain /api/agents/:clientId/{answer-optimization,answer-optimization/recalculate}.
+// Consumes the M9.2 visibility snapshot + existing scans (no LLM, no scanning). Reuses the shared getClientDoc.
+const answerOptimizationRouter = require("./modules/answerOptimization");
+router.use("/", answerOptimizationRouter);
+
 // ── Helper: check client ownership ────────────────
 // Extracted verbatim to ./shared/clientOwnership (Sprint 1, M6.1.5) so the
 // ownership check has a single source of truth. Imported here; all call sites

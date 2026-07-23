@@ -97,7 +97,7 @@ router.get("/:clientId/dashboard", verifyToken, async (req, res) => {
     const clientId = req.params.clientId;
 
     // Run all queries independently so one failure doesn't crash the whole dashboard
-    const [tasks, scoreHistory, brief, audit, report, alertsSnap, keywords, llmVisDoc] = await Promise.all([
+    const [tasks, scoreHistory, brief, audit, report, alertsSnap, keywords, llmVisDoc, answerOptDoc] = await Promise.all([
       getTopTasks(clientId, 5).catch(() => []),
       getScoreHistory(clientId, 12).catch(() => []),
       getState(clientId, "A1_brief").catch(() => null),
@@ -108,6 +108,8 @@ router.get("/:clientId/dashboard", verifyToken, async (req, res) => {
       getState(clientId, "A3_keywords").catch(() => null),
       // LLM Visibility snapshot (M9.2) — additive; null if not yet computed
       db.collection("llm_visibility").doc(clientId).get().catch(() => null),
+      // Answer Optimization snapshot (M9.3) — additive; null if not yet computed
+      db.collection("answer_optimization").doc(clientId).get().catch(() => null),
     ]);
 
     // Filter resolved + sort by date client-side (no composite index needed)
@@ -167,6 +169,16 @@ router.get("/:clientId/dashboard", verifyToken, async (req, res) => {
           grade:           v.grade,
           trend:           v.trend || null,
           topRecommendation: v.recommendations?.[0]?.action || null,
+        };
+      })() : null,
+      // ── Answer Optimization summary (M9.3) — additive, backward compatible ──
+      answerOptimization: (answerOptDoc && answerOptDoc.exists) ? (() => {
+        const a = answerOptDoc.data();
+        return {
+          optimizationScore: a.optimizationScore,
+          grade:             a.grade,
+          criticalCount:     a.criticalCount,
+          topOpportunities:  (a.opportunities || []).slice(0, 3).map(o => ({ category: o.category, title: o.title, priority: o.priority })),
         };
       })() : null,
     });
