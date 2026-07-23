@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useAuth } from "../context/AuthContext";
+import { makeTheme } from "../theme/theme";
 
 // SEO Copilot panel (M9.5) — central AI workspace. Chats over the backend
 // copilot endpoints (context aggregation + reasoning happen server-side).
@@ -42,12 +43,8 @@ export default function SEOCopilotPanel({ dark, clientId }) {
   const [sessionSearch, setSessionSearch] = useState("");
   const scrollRef = useRef(null);
 
-  const bg2  = dark ? "#111"    : "#ffffff";
-  const bg3  = dark ? "#1a1a1a" : "#f0f0ea";
-  const bdr  = dark ? "#222"    : "#e0e0d8";
-  const txt  = dark ? "#e8e8e8" : "#1a1a18";
-  const txt2 = dark ? "#666"    : "#888";
-  const B    = "#443DCB";
+  // M10.1 design-system theme — same surface/text values as before (aliased).
+  const { bg2, bg3, bdr, txt, txt2, B } = makeTheme(dark);
 
   async function loadSessions() {
     try {

@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
+import { makeTheme } from "../theme/theme";
+import { Button, EmptyState } from "./ui";
 
 // LLM Visibility panel (M9.2) — synthesizes existing AI-citation / AI-overview /
 // SERP scans into a single visibility product view. Reads the backend synthesis
@@ -23,12 +25,9 @@ export default function LLMVisibilityPanel({ dark, clientId }) {
   const [recalc,  setRecalc]  = useState(false);
   const [error,   setError]   = useState("");
 
-  const bg2  = dark ? "#111"    : "#ffffff";
-  const bg3  = dark ? "#1a1a1a" : "#f0f0ea";
-  const bdr  = dark ? "#222"    : "#e0e0d8";
-  const txt  = dark ? "#e8e8e8" : "#1a1a18";
-  const txt2 = dark ? "#666"    : "#888";
-  const B    = "#443DCB";
+  // M10.1 design-system theme — same surface/text values as before (aliased).
+  const th = makeTheme(dark);
+  const { bg2, bg3, bdr, txt, txt2, B } = th;
 
   async function load() {
     setLoading(true);
@@ -113,19 +112,9 @@ export default function LLMVisibilityPanel({ dark, clientId }) {
 
       {/* Empty state */}
       {!hasData && !error && (
-        <div style={{ ...card, textAlign: "center", padding: "36px 18px" }}>
-          <div style={{ fontSize: 34, marginBottom: 10 }}>🛰️</div>
-          <div style={{ fontWeight: 700, color: txt, marginBottom: 6 }}>No visibility data yet</div>
-          <div style={{ fontSize: 13.5, color: txt2, maxWidth: 460, margin: "0 auto 16px", lineHeight: 1.6 }}>
-            Run the AI Citation and AI Overview scans first, then recalculate to see your
-            LLM visibility score, share of voice, and citation coverage.
-          </div>
-          <button onClick={recalculate} disabled={recalc}
-            style={{ background: B, color: "#fff", border: "none", borderRadius: 8, padding: "9px 18px",
-                     fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
-            Calculate now
-          </button>
-        </div>
+        <EmptyState t={th} icon="🛰️" title="No visibility data yet"
+          description="Run the AI Citation and AI Overview scans first, then recalculate to see your LLM visibility score, share of voice, and citation coverage."
+          action={<Button t={th} onClick={recalculate} loading={recalc}>Calculate now</Button>} />
       )}
 
       {hasData && (

@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
+import { makeTheme } from "../theme/theme";
+import { Button, EmptyState } from "./ui";
 import {
   ExecutiveCard, HealthGauge, TrendCard, PriorityList, InsightCard,
   AlertBanner, QuickActionCard, MiniTimeline, ActivityFeed,
@@ -17,15 +19,9 @@ export default function ExecutiveDashboardPanel({ dark, clientId, onNavigate }) 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const t = {
-    dark,
-    bg2: dark ? "#111" : "#ffffff",
-    bg3: dark ? "#1a1a1a" : "#f0f0ea",
-    bdr: dark ? "#222" : "#e0e0d8",
-    txt: dark ? "#e8e8e8" : "#1a1a18",
-    txt2: dark ? "#666" : "#888",
-    B: "#443DCB",
-  };
+  // Theme from the M10.1 design system (provides bg2/bg3/bdr/txt/txt2/B aliases
+  // that the ExecutiveWidgets consume — visually identical to before).
+  const t = makeTheme(dark);
 
   async function load() {
     setLoading(true); setError("");
@@ -56,13 +52,10 @@ export default function ExecutiveDashboardPanel({ dark, clientId, onNavigate }) 
 
   if (!hasData) {
     return (
-      <div style={{ ...cardStyle(t), textAlign: "center", padding: "40px 18px", margin: "0 0 24px" }}>
-        <div style={{ fontSize: 36, marginBottom: 12 }}>🚀</div>
-        <div style={{ fontWeight: 700, color: t.txt, marginBottom: 6 }}>Command Center is ready</div>
-        <div style={{ fontSize: 13.5, color: t.txt2, maxWidth: 440, margin: "0 auto 16px", lineHeight: 1.6 }}>
-          Run the pipeline and the visibility/optimization scans to populate mission control with live intelligence.
-        </div>
-        <button onClick={() => go("overview")} style={{ background: t.B, color: "#fff", border: "none", borderRadius: 8, padding: "9px 18px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>Go to pipeline</button>
+      <div style={{ margin: "0 0 24px" }}>
+        <EmptyState t={t} icon="🚀" title="Command Center is ready"
+          description="Run the pipeline and the visibility/optimization scans to populate mission control with live intelligence."
+          action={<Button t={t} onClick={() => go("overview")}>Go to pipeline</Button>} />
       </div>
     );
   }

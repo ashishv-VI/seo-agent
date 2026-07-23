@@ -1,5 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useAuth } from "../context/AuthContext";
+import { makeTheme } from "../theme/theme";
+import { Button, EmptyState } from "./ui";
 
 // Task Center panel (M9.4) — unified execution queue merging task_queue,
 // approvals, and answer-optimization opportunities. Reads the backend merge
@@ -25,12 +27,9 @@ export default function TaskCenterPanel({ dark, clientId }) {
   const [drawer,  setDrawer]  = useState(null);
   const [selected, setSelected] = useState(new Set());
 
-  const bg2  = dark ? "#111"    : "#ffffff";
-  const bg3  = dark ? "#1a1a1a" : "#f0f0ea";
-  const bdr  = dark ? "#222"    : "#e0e0d8";
-  const txt  = dark ? "#e8e8e8" : "#1a1a18";
-  const txt2 = dark ? "#666"    : "#888";
-  const B    = "#443DCB";
+  // M10.1 design-system theme — same surface/text values as before (aliased).
+  const th = makeTheme(dark);
+  const { bg2, bg3, bdr, txt, txt2, B } = th;
 
   async function load() {
     setLoading(true); setError("");
@@ -171,17 +170,9 @@ export default function TaskCenterPanel({ dark, clientId }) {
       </div>
 
       {!hasData ? (
-        <div style={{ ...card, textAlign: "center", padding: "36px 18px" }}>
-          <div style={{ fontSize: 34, marginBottom: 10 }}>✅</div>
-          <div style={{ fontWeight: 700, color: txt, marginBottom: 6 }}>No tasks yet</div>
-          <div style={{ fontSize: 13.5, color: txt2, maxWidth: 460, margin: "0 auto 16px", lineHeight: 1.6 }}>
-            Run the pipeline, approvals, or Answer Optimization to populate work. Then rebuild to see everything in one prioritized queue.
-          </div>
-          <button onClick={rebuild} disabled={busy}
-            style={{ background: B, color: "#fff", border: "none", borderRadius: 8, padding: "9px 18px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
-            Build Task Center
-          </button>
-        </div>
+        <EmptyState t={th} icon="✅" title="No tasks yet"
+          description="Run the pipeline, approvals, or Answer Optimization to populate work. Then rebuild to see everything in one prioritized queue."
+          action={<Button t={th} onClick={rebuild} loading={busy}>Build Task Center</Button>} />
       ) : (
         <>
           {/* Controls: filters + search + category + view + bulk */}
