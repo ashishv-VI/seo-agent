@@ -97,7 +97,7 @@ router.get("/:clientId/dashboard", verifyToken, async (req, res) => {
     const clientId = req.params.clientId;
 
     // Run all queries independently so one failure doesn't crash the whole dashboard
-    const [tasks, scoreHistory, brief, audit, report, alertsSnap, keywords] = await Promise.all([
+    const [tasks, scoreHistory, brief, audit, report, alertsSnap, keywords, llmVisDoc] = await Promise.all([
       getTopTasks(clientId, 5).catch(() => []),
       getScoreHistory(clientId, 12).catch(() => []),
       getState(clientId, "A1_brief").catch(() => null),
@@ -106,6 +106,8 @@ router.get("/:clientId/dashboard", verifyToken, async (req, res) => {
       // No composite index — fetch by clientId only, filter+sort client-side
       db.collection("alerts").where("clientId","==",clientId).limit(50).get().catch(() => null),
       getState(clientId, "A3_keywords").catch(() => null),
+      // LLM Visibility snapshot (M9.2) — additive; null if not yet computed
+      db.collection("llm_visibility").doc(clientId).get().catch(() => null),
     ]);
 
     // Filter resolved + sort by date client-side (no composite index needed)
@@ -157,6 +159,16 @@ router.get("/:clientId/dashboard", verifyToken, async (req, res) => {
         highPriority: (keywords.keywordMap||[]).filter(k=>k.priority==="high").length,
       } : null,
       reportReady: !!report,
+      // ── LLM Visibility summary (M9.2) — additive, backward compatible ──
+      llmVisibility: (llmVisDoc && llmVisDoc.exists) ? (() => {
+        const v = llmVisDoc.data();
+        return {
+          visibilityScore: v.visibilityScore,
+          grade:           v.grade,
+          trend:           v.trend || null,
+          topRecommendation: v.recommendations?.[0]?.action || null,
+        };
+      })() : null,
     });
   } catch (e) {
     return res.status(e.code || 500).json({ error: e.message });

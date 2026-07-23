@@ -119,6 +119,12 @@ router.use("/", execution2Router);
 const pipelineRouter = require("./modules/pipeline");
 router.use("/", pipelineRouter);
 
+// ── LLM Visibility routes (M9.2) ──
+// Mounted at the same base ("/") so paths remain /api/agents/:clientId/{llm-visibility,llm-visibility/recalculate}.
+// Synthesizes existing scanner data (no new scanning, no LLM). Reuses the shared getClientDoc.
+const llmVisibilityRouter = require("./modules/llmVisibility");
+router.use("/", llmVisibilityRouter);
+
 // ── Helper: check client ownership ────────────────
 // Extracted verbatim to ./shared/clientOwnership (Sprint 1, M6.1.5) so the
 // ownership check has a single source of truth. Imported here; all call sites
