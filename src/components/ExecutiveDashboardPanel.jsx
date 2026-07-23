@@ -122,6 +122,7 @@ export default function ExecutiveDashboardPanel({ dark, clientId, onNavigate }) 
         <div>
           <div style={{ ...label, marginBottom: 10 }}>Quick Launch</div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(90px, 1fr))", gap: 10 }}>
+            <QuickActionCard t={t} icon="📊" label="Business Intel" onClick={() => go("bi")} />
             <QuickActionCard t={t} icon="🛰️" label="LLM Visibility" onClick={() => go("llmvisibility")} />
             <QuickActionCard t={t} icon="🎯" label="Answer Opt" onClick={() => go("answeropt")} />
             <QuickActionCard t={t} icon="🗂️" label="Task Center" onClick={() => go("taskcenter")} />

@@ -150,6 +150,12 @@ router.use("/", copilotRouter);
 const executiveDashboardRouter = require("./modules/executiveDashboard");
 router.use("/", executiveDashboardRouter);
 
+// ── Business Intelligence routes (M10.3) ──
+// Mounted at the same base ("/") so paths remain /api/agents/:clientId/business-intelligence*.
+// Composes existing metrics into business KPIs/trends (no LLM, reuses M9.6 executive engine). Reuses the shared getClientDoc.
+const businessIntelligenceRouter = require("./modules/businessIntelligence");
+router.use("/", businessIntelligenceRouter);
+
 // ── Helper: check client ownership ────────────────
 // Extracted verbatim to ./shared/clientOwnership (Sprint 1, M6.1.5) so the
 // ownership check has a single source of truth. Imported here; all call sites

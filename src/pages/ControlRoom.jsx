@@ -9,6 +9,7 @@ import AnswerOptimizationPanel from "../components/AnswerOptimizationPanel";
 import TaskCenterPanel from "../components/TaskCenterPanel";
 import SEOCopilotPanel from "../components/SEOCopilotPanel";
 import ExecutiveDashboardPanel from "../components/ExecutiveDashboardPanel";
+import BusinessIntelligencePanel from "../components/BusinessIntelligencePanel";
 
 export default function ControlRoom({ dark, clientId, clientName }) {
   const { user, API } = useAuth();
@@ -144,6 +145,7 @@ export default function ControlRoom({ dark, clientId, clientName }) {
 
   const TABS = [
     { id:"command",       label:"Command Center"    },
+    { id:"bi",            label:"Business Intelligence" },
     { id:"overview",      label:"Overview"          },
     { id:"warroom",       label:"War Room"          },
     { id:"intelligence",  label:"Intelligence"      },
@@ -395,6 +397,7 @@ export default function ControlRoom({ dark, clientId, clientName }) {
 
       {/* Tab content */}
       {tab === "command"       && <ExecutiveDashboardPanel dark={dark} clientId={clientId} onNavigate={setTab} />}
+      {tab === "bi"            && <BusinessIntelligencePanel dark={dark} clientId={clientId} />}
       {tab === "overview"      && <OverviewTab          data={data} dark={dark} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2} B={B} />}
       {tab === "warroom"       && <WarRoomPanel         dark={dark} clientId={clientId} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2} B={B} />}
       {tab === "intelligence"  && <IntelligencePanel    dark={dark} clientId={clientId} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2} B={B} />}
