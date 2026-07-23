@@ -1,4 +1,11 @@
 require("dotenv").config();
+
+// ── Observability (optional, env-driven) ──────────
+// Initialize Sentry before anything else so early errors are captured.
+// No-op if @sentry/node is missing or SENTRY_DSN is unset (see utils/observability).
+const observability = require("./utils/observability");
+observability.initObservability();
+
 const express = require("express");
 const cors    = require("cors");
 const { db }  = require("./config/firebase");
@@ -11,9 +18,11 @@ const { db }  = require("./config/firebase");
 // Log loudly and keep the server alive so one bad async doesn't take it down.
 process.on("unhandledRejection", (reason, promise) => {
   console.error("[fatal] Unhandled promise rejection:", reason?.stack || reason);
+  observability.captureException(reason instanceof Error ? reason : new Error(String(reason)), { kind: "unhandledRejection" });
 });
 process.on("uncaughtException", (err) => {
   console.error("[fatal] Uncaught exception:", err?.stack || err);
+  observability.captureException(err, { kind: "uncaughtException" });
 });
 
 // Load rate limiters — graceful fallback if express-rate-limit not yet installed
@@ -109,8 +118,58 @@ app.get("/", (req, res) => {
   });
 });
 
-app.get("/health", (req, res) => {
-  res.json({ status: "ok" });
+app.get("/health", async (req, res) => {
+  // Lightweight diagnostics (M9.1). Every probe is best-effort + timeboxed so
+  // /health always responds fast and never 500s. Keeps `status:"ok"` for
+  // existing uptime monitors.
+  const mem = process.memoryUsage();
+  const out = {
+    status:  "ok",
+    uptimeSec: Math.round(process.uptime()),
+    memoryMB: {
+      rss:       Math.round(mem.rss / 1048576),
+      heapUsed:  Math.round(mem.heapUsed / 1048576),
+      heapTotal: Math.round(mem.heapTotal / 1048576),
+    },
+    node:    process.version,
+    env:     process.env.NODE_ENV || "production",
+    commit:  process.env.RENDER_GIT_COMMIT || process.env.GIT_COMMIT || "unknown",
+    sentry:  observability.isEnabled() ? "enabled" : "disabled",
+    firestore: "unknown",
+    pipelines: { running: null },
+    queue:     { pending: null },
+    indexesDeclared: null,
+    time:    new Date().toISOString(),
+  };
+
+  // Firestore connectivity — fast timeboxed probe.
+  try {
+    const probe = db.collection("clients").limit(1).get();
+    await Promise.race([
+      probe,
+      new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 2500)),
+    ]);
+    out.firestore = "connected";
+  } catch { out.firestore = "unreachable"; }
+
+  // Pipeline + queue snapshot (best-effort, cheap equality queries).
+  try {
+    const running = await db.collection("clients").where("pipelineStatus", "==", "running").limit(50).get();
+    out.pipelines.running = running.size;
+  } catch { /* leave null */ }
+  try {
+    const pending = await db.collection("cmo_queue").where("status", "==", "pending").limit(100).get();
+    out.queue.pending = pending.size;
+  } catch { /* leave null */ }
+
+  // Index deployment status — best effort: report the declared index count from
+  // the committed artifact. Actual live-deploy state is not queryable from here.
+  try {
+    const idx = require("../firestore.indexes.json");
+    out.indexesDeclared = Array.isArray(idx.indexes) ? idx.indexes.length : null;
+  } catch { /* file not resolvable from here — leave null */ }
+
+  res.json(out);
 });
 
 // /test-db endpoint removed — was a debug route that wrote to Firestore with no auth
@@ -1150,6 +1209,9 @@ app.use((req, res) => {
 
 // ── Error Handler ──────────────────────────────────
 // Must set CORS headers here too — otherwise 500 errors look like CORS errors in the browser
+// Sentry Express error handler (no-op if Sentry disabled) — must run before our handler.
+observability.setupExpressErrorHandler(app);
+
 app.use((err, req, res, next) => {
   const origin = req.headers.origin || "";
   if (isAllowedOrigin(origin)) {
@@ -1157,6 +1219,7 @@ app.use((err, req, res, next) => {
     res.header("Access-Control-Allow-Credentials", "true");
   }
   console.error("Server error:", err);
+  observability.captureException(err, { path: req.originalUrl, method: req.method });
   res.status(500).json({ error: "Internal server error" });
 });
 

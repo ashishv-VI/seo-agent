@@ -579,6 +579,12 @@ async function runFullPipeline(clientId, keys, googleToken = null) {
   console.log(`[A0-SEOHead] ║  PIPELINE START: ${clientId.slice(0, 16)}  ║`);
   console.log(`[A0-SEOHead] ╚══════════════════════════════════╝\n`);
 
+  // ── Pipeline metrics (M9.1) — best-effort telemetry, never blocks/changes flow ──
+  const metrics = require("../utils/pipelineMetrics");
+  const metricStartedAt = new Date().toISOString();
+  const metricHandle = await metrics.recordStart(clientId, metricStartedAt).catch(() => null);
+  const agentFailures = [];
+
   const pipelineTimeout = setTimeout(async () => {
     console.error(`[A0-SEOHead] ⏰ Hard timeout after 25 min for ${clientId}`);
     await db.collection("clients").doc(clientId).update({
@@ -586,6 +592,7 @@ async function runFullPipeline(clientId, keys, googleToken = null) {
       pipelineError:       "Pipeline timed out after 25 minutes — re-run when available",
       pipelineCompletedAt: new Date().toISOString(),
     }).catch(() => {});
+    await metrics.recordFail(metricHandle, "timeout after 25 minutes", { agentFailures }).catch(() => {});
   }, 25 * 60 * 1000);
 
   const keepAlive = setInterval(async () => {
@@ -630,6 +637,8 @@ async function runFullPipeline(clientId, keys, googleToken = null) {
       ]);
 
       if (!result?.success) {
+        agentFailures.push({ agentId, error: result?.error || "Agent returned failure" });
+        metrics.recordAgentFailure(metricHandle, agentId, result?.error || "Agent returned failure").catch(() => {});
         await handleFailure(clientId, agentId, result?.error || "Agent returned failure");
         return false;
       }
@@ -643,6 +652,8 @@ async function runFullPipeline(clientId, keys, googleToken = null) {
 
       return true;
     } catch (err) {
+      agentFailures.push({ agentId, error: err.message });
+      metrics.recordAgentFailure(metricHandle, agentId, err.message).catch(() => {});
       await handleFailure(clientId, agentId, err.message);
       return false;
     }
@@ -684,6 +695,7 @@ async function runFullPipeline(clientId, keys, googleToken = null) {
         pipelineError:       "Technical Audit (A2) failed — cannot proceed without site data",
         pipelineCompletedAt: new Date().toISOString(),
       });
+      await metrics.recordFail(metricHandle, "A2 audit failed — pipeline blocked", { agentFailures, agentFailureCount: agentFailures.length }).catch(() => {});
       return;
     }
 
@@ -726,6 +738,20 @@ async function runFullPipeline(clientId, keys, googleToken = null) {
       pipelineCompletedAt: new Date().toISOString(),
       pipelineError:       null,
     });
+
+    // ── Pipeline metrics: finalize as complete with best-effort LLM usage ──
+    try {
+      const { getMonthlySpend } = require("../utils/costTracker");
+      const spend = await getMonthlySpend(clientId).catch(() => null);
+      await metrics.recordComplete(metricHandle, {
+        agentFailures,
+        agentFailureCount: agentFailures.length,
+        llmCalls:     spend?.calls || 0,
+        inputTokens:  spend?.inputTokens || 0,
+        outputTokens: spend?.outputTokens || 0,
+        estCostUsd:   spend?.spent || 0,
+      });
+    } catch { /* best-effort */ }
 
     // ── Save SEO Score ────────────────────────────────────────────────────
     try {
@@ -864,6 +890,7 @@ Be direct. Be specific. No generic advice. Sound like a world-class SEO director
       pipelineError:       `Fatal error: ${err.message}`,
       pipelineCompletedAt: new Date().toISOString(),
     });
+    await metrics.recordFail(metricHandle, err.message, { agentFailures, agentFailureCount: agentFailures.length }).catch(() => {});
   } finally {
     clearTimeout(pipelineTimeout);
     clearInterval(keepAlive);
