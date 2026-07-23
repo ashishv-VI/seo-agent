@@ -488,28 +488,30 @@ function MainApp({ onLogout }) {
                 style={{ fontSize:15, cursor:"pointer", color:txt3, padding:4 }}>🚪</div>
             </div>
 
-            <div style={s.secLabel}>Agency</div>
-            <div onClick={()=>setPage("clients")} style={s.navItem(page==="clients", "#443DCB")}>🏢 <span>Client Manager</span></div>
-            <div onClick={()=>setPage("agency")}  style={s.navItem(page==="agency",  "#059669")}>📊 <span>Agency Dashboard</span></div>
-            <div onClick={()=>setPage("users")}   style={s.navItem(page==="users",   "#DC2626")}>👥 <span>User Management</span></div>
+            {/* ── M10.2 Enterprise IA: 5-section workspace hierarchy. ──
+                Same pages/setPage calls as before — regrouped only. The AI
+                Workspace items route to the client workspace (Control Room)
+                where the M9 features live. No functionality removed. */}
 
-            <div style={s.secLabel}>Main</div>
+            <div style={s.secLabel}>Overview</div>
             <div onClick={()=>setPage("dashboard")}     style={s.navItem(page==="dashboard",     "#443DCB")}>🏠 <span>Dashboard</span></div>
+            <div onClick={()=>setPage("clients")}       style={s.navItem(page==="clients",       "#443DCB")}>🛰️ <span>Command Center</span></div>
+            <div onClick={()=>setPage("agency")}        style={s.navItem(page==="agency",        "#059669")}>📊 <span>Agency Dashboard</span></div>
+
+            <div style={s.secLabel}>AI Workspace</div>
+            <div onClick={()=>setPage("clients")}       style={s.navItem(false,                  "#6a5cf0")}>💬 <span>SEO Copilot</span></div>
+            <div onClick={()=>setPage("clients")}       style={s.navItem(false,                  "#6a5cf0")}>🗂️ <span>Task Center</span></div>
+            <div onClick={()=>setPage("clients")}       style={s.navItem(false,                  "#6a5cf0")}>🎯 <span>Answer Optimization</span></div>
+            <div onClick={()=>setPage("clients")}       style={s.navItem(false,                  "#6a5cf0")}>🛰️ <span>LLM Visibility</span></div>
             <div onClick={()=>setPage("promptcontent")} style={s.navItem(page==="promptcontent", "#F59E0B")}>⚡ <span>Prompt-to-Content</span></div>
             <div onClick={()=>setPage("writer")}        style={s.navItem(page==="writer",        "#443DCB")}>✍️ <span>AI Writer</span></div>
 
-            <div style={s.secLabel}>Analytics</div>
-            <div onClick={()=>setPage("gsc")}           style={s.navItem(page==="gsc",           "#059669")}>📈 <span>Search Console</span></div>
-            <div onClick={()=>setPage("ga4")}           style={s.navItem(page==="ga4",           "#DC2626")}>📊 <span>GA4 Analytics</span></div>
+            <div style={s.secLabel}>SEO Operations</div>
+            <div onClick={()=>setPage("audit")}         style={s.navItem(page==="audit",         "#DC2626")}>🏥 <span>Site Audit</span></div>
             <div onClick={()=>setPage("ranktracker")}   style={s.navItem(page==="ranktracker",   "#059669")}>📡 <span>Rank Tracker</span></div>
-
-            <div style={s.secLabel}>Crawler</div>
             <div onClick={()=>setPage("domainoverview")} style={s.navItem(page==="domainoverview", "#059669")}>🌐 <span>Domain Overview</span></div>
             <div onClick={()=>setPage("keywordresearch")} style={s.navItem(page==="keywordresearch", "#9333EA")}>🔑 <span>Keyword Research</span></div>
             <div onClick={()=>setPage("backlink")}       style={s.navItem(page==="backlink",       "#1E40AF")}>🔗 <span>Backlink Analyzer</span></div>
-
-            <div style={s.secLabel}>SEO Tools</div>
-            <div onClick={()=>setPage("audit")}         style={s.navItem(page==="audit",         "#DC2626")}>🏥 <span>Site Audit</span></div>
             <div onClick={()=>setPage("compare")}       style={s.navItem(page==="compare",       "#0891B2")}>⚔️ <span>Compare Sites</span></div>
             <div onClick={()=>setPage("competitorgap")} style={s.navItem(page==="competitorgap", "#443DCB")}>🕵️ <span>Competitor Gap</span></div>
             <div onClick={()=>setPage("readability")}   style={s.navItem(page==="readability",   "#059669")}>📖 <span>Readability Checker</span></div>
@@ -523,7 +525,9 @@ function MainApp({ onLogout }) {
             <div onClick={()=>setPage("serpsimulator")} style={s.navItem(page==="serpsimulator", "#EA4335")}>🔎 <span>SERP Simulator</span></div>
             <div onClick={()=>setPage("metapreview")}   style={s.navItem(page==="metapreview",   "#D97706")}>🏷️ <span>Meta Previewer</span></div>
 
-            <div style={s.secLabel}>Planning</div>
+            <div style={s.secLabel}>Analytics</div>
+            <div onClick={()=>setPage("gsc")}           style={s.navItem(page==="gsc",           "#059669")}>📈 <span>Search Console</span></div>
+            <div onClick={()=>setPage("ga4")}           style={s.navItem(page==="ga4",           "#DC2626")}>📊 <span>GA4 Analytics</span></div>
             <div onClick={()=>setPage("calendar")}      style={s.navItem(page==="calendar",      "#B45309")}>📅 <span>Content Calendar</span></div>
             <div onClick={()=>setPage("checklist")}     style={s.navItem(page==="checklist",     "#059669")}>✅ <span>SEO Checklist</span></div>
             <div onClick={()=>setPage("bulk")}          style={s.navItem(page==="bulk",          "#CA8A04")}>📊 <span>Bulk Keywords</span></div>
@@ -532,6 +536,10 @@ function MainApp({ onLogout }) {
               📚 <span>History</span>
               {totalHistory>0 && <span style={{ marginLeft:"auto", fontSize:10, background:"#D9770622", color:"#D97706", padding:"1px 6px", borderRadius:10, flexShrink:0 }}>{totalHistory}</span>}
             </div>
+
+            <div style={s.secLabel}>Administration</div>
+            <div onClick={()=>setPage("users")}   style={s.navItem(page==="users",   "#DC2626")}>👥 <span>User Management</span></div>
+            <div onClick={()=>window.dispatchEvent(new Event("seo:openSettings"))} style={s.navItem(false, "#6B7280")}>⚙️ <span>Settings</span></div>
           </div>
 
           <div style={s.catRow}>
