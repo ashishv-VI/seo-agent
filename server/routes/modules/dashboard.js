@@ -97,7 +97,7 @@ router.get("/:clientId/dashboard", verifyToken, async (req, res) => {
     const clientId = req.params.clientId;
 
     // Run all queries independently so one failure doesn't crash the whole dashboard
-    const [tasks, scoreHistory, brief, audit, report, alertsSnap, keywords, llmVisDoc, answerOptDoc] = await Promise.all([
+    const [tasks, scoreHistory, brief, audit, report, alertsSnap, keywords, llmVisDoc, answerOptDoc, taskCenterDoc] = await Promise.all([
       getTopTasks(clientId, 5).catch(() => []),
       getScoreHistory(clientId, 12).catch(() => []),
       getState(clientId, "A1_brief").catch(() => null),
@@ -110,6 +110,8 @@ router.get("/:clientId/dashboard", verifyToken, async (req, res) => {
       db.collection("llm_visibility").doc(clientId).get().catch(() => null),
       // Answer Optimization snapshot (M9.3) — additive; null if not yet computed
       db.collection("answer_optimization").doc(clientId).get().catch(() => null),
+      // Task Center summary snapshot (M9.4) — additive; null if not yet built
+      db.collection("task_center").doc(clientId).get().catch(() => null),
     ]);
 
     // Filter resolved + sort by date client-side (no composite index needed)
@@ -179,6 +181,17 @@ router.get("/:clientId/dashboard", verifyToken, async (req, res) => {
           grade:             a.grade,
           criticalCount:     a.criticalCount,
           topOpportunities:  (a.opportunities || []).slice(0, 3).map(o => ({ category: o.category, title: o.title, priority: o.priority })),
+        };
+      })() : null,
+      // ── Task Center summary (M9.4) — additive, backward compatible ──
+      taskCenter: (taskCenterDoc && taskCenterDoc.exists) ? (() => {
+        const s = taskCenterDoc.data().summary || {};
+        return {
+          criticalTasks:  s.criticalTasks ?? 0,
+          overdue:        s.overdue ?? 0,
+          quickWins:      s.quickWins ?? 0,
+          completedToday: s.completedToday ?? 0,
+          completionRate: s.completionRate ?? 0,
         };
       })() : null,
     });

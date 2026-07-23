@@ -131,6 +131,12 @@ router.use("/", llmVisibilityRouter);
 const answerOptimizationRouter = require("./modules/answerOptimization");
 router.use("/", answerOptimizationRouter);
 
+// ── Task Center routes (M9.4) ──
+// Mounted at the same base ("/") so paths remain /api/agents/:clientId/{task-center,task-center/rebuild,task-center/:taskId}.
+// Merges existing sources (task_queue + approvals + answer_optimization) into one canonical view. Reuses the shared getClientDoc.
+const taskCenterRouter = require("./modules/taskCenter");
+router.use("/", taskCenterRouter);
+
 // ── Helper: check client ownership ────────────────
 // Extracted verbatim to ./shared/clientOwnership (Sprint 1, M6.1.5) so the
 // ownership check has a single source of truth. Imported here; all call sites

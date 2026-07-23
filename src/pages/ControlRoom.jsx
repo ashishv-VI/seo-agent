@@ -6,6 +6,7 @@ import CoreUpdateScannerPanel from "../components/CoreUpdateScannerPanel";
 import IntelligencePanel from "../components/IntelligencePanel";
 import LLMVisibilityPanel from "../components/LLMVisibilityPanel";
 import AnswerOptimizationPanel from "../components/AnswerOptimizationPanel";
+import TaskCenterPanel from "../components/TaskCenterPanel";
 
 export default function ControlRoom({ dark, clientId, clientName }) {
   const { user, API } = useAuth();
@@ -145,6 +146,7 @@ export default function ControlRoom({ dark, clientId, clientName }) {
     { id:"intelligence",  label:"Intelligence"      },
     { id:"llmvisibility", label:"LLM Visibility"    },
     { id:"answeropt",     label:"Answer Optimization" },
+    { id:"taskcenter",    label:"Task Center"      },
     { id:"competitor",    label:"Competitor Radar"  },
     { id:"coreupdate",    label:"Core Update"       },
     { id:"decision",      label:"Agent Decision"    },
@@ -393,6 +395,7 @@ export default function ControlRoom({ dark, clientId, clientName }) {
       {tab === "intelligence"  && <IntelligencePanel    dark={dark} clientId={clientId} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2} B={B} />}
       {tab === "llmvisibility" && <LLMVisibilityPanel   dark={dark} clientId={clientId} />}
       {tab === "answeropt"     && <AnswerOptimizationPanel dark={dark} clientId={clientId} />}
+      {tab === "taskcenter"    && <TaskCenterPanel        dark={dark} clientId={clientId} />}
       {tab === "competitor"    && <CompetitorRadarPanel dark={dark} clientId={clientId} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2} B={B} />}
       {tab === "coreupdate"    && <CoreUpdateScannerPanel dark={dark} clientId={clientId} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2} B={B} />}
       {tab === "decision"    && <DecisionTab    data={data} dark={dark} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2} B={B}
