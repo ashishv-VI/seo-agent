@@ -110,7 +110,7 @@ Be specific with dates and names. Flag if uncertain vs confirmed.`;
       maxTokens: 1000,
     });
 
-    const knowledge = result?.content || "";
+    const knowledge = result || "";
     if (knowledge.length > 200) {
       await db.collection(KNOWLEDGE_CACHE_COLL).doc(KNOWLEDGE_CACHE_KEY).set({
         knowledge,

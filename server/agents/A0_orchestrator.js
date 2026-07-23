@@ -355,9 +355,9 @@ Return ONLY valid JSON. No preamble, no explanation.`;
       maxTokens: 1200,
     });
 
-    if (result?.content) {
+    if (result) {
       try {
-        const clean    = result.content.replace(/```json|```/g, "").trim();
+        const clean    = result.replace(/```json|```/g, "").trim();
         const strategy = JSON.parse(clean);
 
         await db.collection("clients").doc(clientId).update({
@@ -421,9 +421,9 @@ Return ONLY valid JSON.`;
       maxTokens: 700,
     });
 
-    if (review?.content) {
+    if (review) {
       try {
-        const clean  = review.content.replace(/```json|```/g, "").trim();
+        const clean  = review.replace(/```json|```/g, "").trim();
         const parsed = JSON.parse(clean);
 
         // Save to Firestore for dashboard visibility
@@ -844,9 +844,9 @@ Be direct. Be specific. No generic advice. Sound like a world-class SEO director
         maxTokens: 400,
       });
 
-      if (summary?.content) {
+      if (summary) {
         await db.collection("clients").doc(clientId).update({
-          seoHeadSummary:   summary.content,
+          seoHeadSummary:   summary,
           seoHeadSummaryAt: new Date().toISOString(),
         });
         console.log(`[A0-SEOHead] ✅ Executive summary saved`);
