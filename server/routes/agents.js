@@ -137,6 +137,13 @@ router.use("/", answerOptimizationRouter);
 const taskCenterRouter = require("./modules/taskCenter");
 router.use("/", taskCenterRouter);
 
+// ── SEO Copilot routes (M9.5) ──
+// Mounted at the same base ("/") so paths remain /api/agents/:clientId/copilot*.
+// Aggregates existing platform context + reasons over it (reuses callLLM/parseJSON).
+// Reuses the shared getClientDoc. Persists conversations to copilot_sessions.
+const copilotRouter = require("./modules/copilot");
+router.use("/", copilotRouter);
+
 // ── Helper: check client ownership ────────────────
 // Extracted verbatim to ./shared/clientOwnership (Sprint 1, M6.1.5) so the
 // ownership check has a single source of truth. Imported here; all call sites

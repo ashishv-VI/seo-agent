@@ -194,6 +194,15 @@ router.get("/:clientId/dashboard", verifyToken, async (req, res) => {
           completionRate: s.completionRate ?? 0,
         };
       })() : null,
+      // ── SEO Copilot entry (M9.5) — lightweight, additive ──
+      copilot: {
+        enabled: true,
+        suggestedPrompts: [
+          "What are my biggest SEO problems right now?",
+          "How do I improve my visibility in AI answers?",
+          "What should I work on this week?",
+        ],
+      },
     });
   } catch (e) {
     return res.status(e.code || 500).json({ error: e.message });
