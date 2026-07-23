@@ -1,5 +1,13 @@
 services:
   # ── Backend API (Node.js) ──────────────────────────────────────
+  # ⚠️  SINGLE INSTANCE ONLY — DO NOT enable autoscaling or set numInstances > 1.
+  #     Scheduled jobs (9 setInterval cron loops) and runFullPipeline execute
+  #     IN-PROCESS. A second web instance would run every cron a second time:
+  #     duplicate notifications/alerts, doubled LLM spend, and double-executed
+  #     agents (the cmo_queue consumer and daily-monitor have no cross-instance
+  #     lock). Horizontal scaling is UNSUPPORTED until the dedicated worker
+  #     service exists (see DEPLOYMENT.md → "Future Worker Architecture (M8.4b)").
+  #     Keep this service at exactly one instance (Render free/starter default).
   - type: web
     name: seo-agent-backend
     runtime: node
