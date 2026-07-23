@@ -8,13 +8,14 @@ import LLMVisibilityPanel from "../components/LLMVisibilityPanel";
 import AnswerOptimizationPanel from "../components/AnswerOptimizationPanel";
 import TaskCenterPanel from "../components/TaskCenterPanel";
 import SEOCopilotPanel from "../components/SEOCopilotPanel";
+import ExecutiveDashboardPanel from "../components/ExecutiveDashboardPanel";
 
 export default function ControlRoom({ dark, clientId, clientName }) {
   const { user, API } = useAuth();
   const [data,      setData]      = useState(null);
   const [loading,   setLoading]   = useState(true);
   const [error,     setError]     = useState("");
-  const [tab,       setTab]       = useState("overview");
+  const [tab,       setTab]       = useState("command");
   const [approving,      setApproving]      = useState(false);
   const [approved,       setApproved]       = useState(false);
   const [refreshingCMO,  setRefreshingCMO]  = useState(false);
@@ -142,6 +143,7 @@ export default function ControlRoom({ dark, clientId, clientName }) {
   const hasCMO = !!cmo?.decision;
 
   const TABS = [
+    { id:"command",       label:"Command Center"    },
     { id:"overview",      label:"Overview"          },
     { id:"warroom",       label:"War Room"          },
     { id:"intelligence",  label:"Intelligence"      },
@@ -392,6 +394,7 @@ export default function ControlRoom({ dark, clientId, clientName }) {
       </div>
 
       {/* Tab content */}
+      {tab === "command"       && <ExecutiveDashboardPanel dark={dark} clientId={clientId} onNavigate={setTab} />}
       {tab === "overview"      && <OverviewTab          data={data} dark={dark} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2} B={B} />}
       {tab === "warroom"       && <WarRoomPanel         dark={dark} clientId={clientId} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2} B={B} />}
       {tab === "intelligence"  && <IntelligencePanel    dark={dark} clientId={clientId} bg2={bg2} bg3={bg3} bdr={bdr} txt={txt} txt2={txt2} B={B} />}

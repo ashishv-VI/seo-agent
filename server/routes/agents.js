@@ -144,6 +144,12 @@ router.use("/", taskCenterRouter);
 const copilotRouter = require("./modules/copilot");
 router.use("/", copilotRouter);
 
+// ── Executive Command Center route (M9.6) ──
+// Mounted at the same base ("/") so the path remains /api/agents/:clientId/executive-dashboard.
+// Composes existing snapshots into an executive rollup (no LLM, no recompute). Reuses the shared getClientDoc.
+const executiveDashboardRouter = require("./modules/executiveDashboard");
+router.use("/", executiveDashboardRouter);
+
 // ── Helper: check client ownership ────────────────
 // Extracted verbatim to ./shared/clientOwnership (Sprint 1, M6.1.5) so the
 // ownership check has a single source of truth. Imported here; all call sites
