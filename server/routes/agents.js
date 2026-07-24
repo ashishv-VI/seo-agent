@@ -150,6 +150,13 @@ router.use("/", copilotRouter);
 const copilotActionsRouter = require("./modules/copilotActions");
 router.use("/", copilotActionsRouter);
 
+// ── Branding routes (M10.5) ──
+// Mounted at the same base ("/") so paths remain /api/agents/:clientId/branding.
+// Agency-level white-label branding on users/{ownerId}.brand (one source of truth).
+// Reuses the shared getClientDoc + the pure branding engine for validation.
+const brandingRouter = require("./modules/branding");
+router.use("/", brandingRouter);
+
 // ── Executive Command Center route (M9.6) ──
 // Mounted at the same base ("/") so the path remains /api/agents/:clientId/executive-dashboard.
 // Composes existing snapshots into an executive rollup (no LLM, no recompute). Reuses the shared getClientDoc.

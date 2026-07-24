@@ -123,11 +123,23 @@ router.get("/:token", async (req, res) => {
         seoScore:            client.seoScore || null,
         agents:              client.agents   || {},
       },
-      agency: {
-        name:  owner.agencyName || owner.company || owner.name || "SEO Agency",
-        email: owner.agencyEmail || owner.email || null,
-        logo:  owner.agencyLogo || null,
-      },
+      // Agency branding resolved through the single-source-of-truth helper (M10.5).
+      // Reads users/{ownerId}.brand (the canonical store the Branding API writes),
+      // falling back to the older ad-hoc fields + platform defaults.
+      agency: (() => {
+        const { resolveBrand } = require("../utils/branding");
+        const b = resolveBrand(owner.brand || {});
+        return {
+          name:  b.companyName || owner.agencyName || owner.company || owner.name || "SEO Agency",
+          email: b.supportEmail || owner.agencyEmail || owner.email || null,
+          logo:  b.logo || owner.agencyLogo || null,
+          primaryColor:   b.primaryColor,
+          secondaryColor: b.secondaryColor,
+          accentColor:    b.accentColor,
+          footer:         b.footer || null,
+          portalTheme:    b.portalTheme,
+        };
+      })(),
       data: {
         // A9 report highlights
         summary:         report?.summary         || null,
