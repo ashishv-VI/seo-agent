@@ -1,11 +1,15 @@
 import { useState, useEffect, useRef } from "react";
 import { useAuth } from "../context/AuthContext";
 import { makeTheme } from "../theme/theme";
+import { Button, Modal } from "./ui";
 
-// SEO Copilot panel (M9.5) — central AI workspace. Chats over the backend
-// copilot endpoints (context aggregation + reasoning happen server-side).
-// No streaming infra exists server-side, so this uses request/response with a
-// typing indicator. Matches existing panel conventions.
+// SEO Copilot panel (M9.5 chat + M10.4 actions) — central AI workspace + operator.
+// Chats over the backend copilot endpoints AND executes actions that delegate to
+// existing platform workflows (no duplicated logic). When an action returns a
+// `redirect.call`, the panel auto-invokes that existing endpoint (e.g. the real
+// recalculate / rebuild routes) — the Copilot is an orchestrator only.
+// Priority styling for action suggestions.
+const ACTION_PRIORITY_COLOR = { high: "#DC2626", medium: "#D97706", low: "#0891B2" };
 
 const SUGGESTED = [
   "What are my biggest SEO problems right now?",
@@ -43,8 +47,15 @@ export default function SEOCopilotPanel({ dark, clientId }) {
   const [sessionSearch, setSessionSearch] = useState("");
   const scrollRef = useRef(null);
 
-  // M10.1 design-system theme — same surface/text values as before (aliased).
-  const { bg2, bg3, bdr, txt, txt2, B } = makeTheme(dark);
+  // ── M10.4 action state ──
+  const [suggestions, setSuggestions] = useState([]);
+  const [executing, setExecuting] = useState(null);   // actionId currently running
+  const [confirm, setConfirm] = useState(null);        // { actionId, label, params, reason }
+  const [actionHistory, setActionHistory] = useState([]); // recent executed actions
+
+  // M10.1 design-system theme.
+  const th = makeTheme(dark);
+  const { bg2, bg3, bdr, txt, txt2, B } = th;
 
   async function loadSessions() {
     try {
@@ -71,6 +82,58 @@ export default function SEOCopilotPanel({ dark, clientId }) {
       if (sid === sessionId) { setSessionId(null); setMessages([]); }
       loadSessions();
     } catch { /* silent */ }
+  }
+
+  // ── M10.4: load deterministic action suggestions from platform state ──
+  async function loadSuggestions() {
+    try {
+      const token = await user.getIdToken();
+      const r = await fetch(`${API}/api/agents/${clientId}/copilot/suggestions`, { headers: { Authorization: `Bearer ${token}` } });
+      const json = await r.json();
+      if (r.ok) setSuggestions(json.suggestions || []);
+    } catch { /* silent */ }
+  }
+
+  // Execute an action. Actions marked needsConfirm route through the dialog first.
+  // If the backend result carries redirect.call, the panel auto-invokes that
+  // EXISTING endpoint (orchestration only — no duplicated logic here).
+  const CONFIRM_ACTIONS = new Set(["approve_item", "reject_item", "push_to_wordpress", "run_pipeline", "reset_pipeline"]);
+
+  function requestAction(actionId, label, params = {}, reason = "") {
+    if (CONFIRM_ACTIONS.has(actionId)) setConfirm({ actionId, label, params, reason });
+    else runAction(actionId, label, params);
+  }
+
+  async function runAction(actionId, label, params = {}) {
+    setExecuting(actionId); setError("");
+    const startedAt = new Date().toISOString();
+    try {
+      const token = await user.getIdToken();
+      const r = await fetch(`${API}/api/agents/${clientId}/copilot/action`, {
+        method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ actionId, params }),
+      });
+      const out = await r.json();
+      let finalMsg = out.message || (out.success ? "Done." : (out.error || "Action failed."));
+
+      // Auto-invoke the referenced existing endpoint (recalc / rebuild / etc.).
+      if (out.success && out.redirect?.call) {
+        const method = (out.redirect.method || "POST").toUpperCase();
+        const r2 = await fetch(`${API}${out.redirect.call}`, {
+          method, headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        });
+        finalMsg += r2.ok ? " ✓ Completed." : " (follow-up call failed)";
+      }
+
+      setActionHistory(prev => [{ actionId, label: label || out.title, success: out.success !== false, message: finalMsg, at: startedAt }, ...prev].slice(0, 8));
+      if (out.success === false) setError(finalMsg);
+      // Refresh suggestions (state changed) and sessions if relevant.
+      loadSuggestions();
+    } catch (e) {
+      setError(e.message);
+      setActionHistory(prev => [{ actionId, label, success: false, message: e.message, at: startedAt }, ...prev].slice(0, 8));
+    }
+    setExecuting(null); setConfirm(null);
   }
 
   function newChat() { setSessionId(null); setMessages([]); setError(""); }
@@ -104,7 +167,7 @@ export default function SEOCopilotPanel({ dark, clientId }) {
     if (lastUser) { setMessages(prev => prev.filter((_, i) => i < prev.length - 1)); send(lastUser.content); }
   }
 
-  useEffect(() => { if (clientId) { loadSessions(); newChat(); } }, [clientId]);
+  useEffect(() => { if (clientId) { loadSessions(); loadSuggestions(); newChat(); } }, [clientId]);
   useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, [messages, sending]);
 
   const card  = { background: bg2, border: `1px solid ${bdr}`, borderRadius: 12 };
@@ -138,8 +201,66 @@ export default function SEOCopilotPanel({ dark, clientId }) {
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
           <div>
             <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: txt, letterSpacing: "-.01em" }}>SEO Copilot</h2>
-            <div style={{ fontSize: 13, color: txt2, marginTop: 2 }}>Ask anything about this client — it knows your audit, rankings, visibility, tasks, and reports.</div>
+            <div style={{ fontSize: 13, color: txt2, marginTop: 2 }}>Ask anything, or run actions — it knows your audit, rankings, visibility, tasks, and reports.</div>
           </div>
+        </div>
+
+        {/* ── M10.4 Actions rail ── */}
+        <div style={{ ...card, padding: "14px 16px", display: "grid", gap: 12 }}>
+          {/* Suggested actions (state-derived, deterministic) */}
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: txt2, marginBottom: 8 }}>Suggested Actions</div>
+            {suggestions.length === 0 ? (
+              <div style={{ fontSize: 12.5, color: txt2 }}>No pending suggestions — you're on top of things.</div>
+            ) : (
+              <div style={{ display: "grid", gap: 8 }}>
+                {suggestions.map((s, i) => (
+                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                    <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: 2, background: ACTION_PRIORITY_COLOR[s.priority] || txt2, flexShrink: 0 }} />
+                    <span style={{ flex: 1, minWidth: 140, fontSize: 13, color: txt }}>{s.reason}</span>
+                    <Button t={th} size="sm" variant="secondary" loading={executing === s.actionId}
+                      onClick={() => requestAction(s.actionId, s.label, s.params || {}, s.reason)}>
+                      {s.label}
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Quick actions (always available) */}
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: txt2, marginBottom: 8 }}>Quick Actions</div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {[
+                { id: "run_pipeline",          label: "▶ Run Pipeline" },
+                { id: "rebuild_task_center",   label: "🗂️ Rebuild Tasks" },
+                { id: "recalc_llm_visibility", label: "🛰️ LLM Visibility" },
+                { id: "recalc_answer_opt",     label: "🎯 Answer Opt" },
+                { id: "open_business_intelligence", label: "📊 Business Intel" },
+              ].map(q => (
+                <Button key={q.id} t={th} size="sm" variant="ghost" loading={executing === q.id}
+                  onClick={() => requestAction(q.id, q.label, {})}
+                  style={{ border: `1px solid ${bdr}` }}>{q.label}</Button>
+              ))}
+            </div>
+          </div>
+
+          {/* Recent actions / execution history */}
+          {actionHistory.length > 0 && (
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: txt2, marginBottom: 8 }}>Recent Actions</div>
+              <div style={{ display: "grid", gap: 5 }}>
+                {actionHistory.map((h, i) => (
+                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5 }}>
+                    <span aria-hidden="true" style={{ color: h.success ? "#059669" : "#DC2626" }}>{h.success ? "✓" : "✕"}</span>
+                    <span style={{ flex: 1, color: txt }}>{h.message}</span>
+                    <span style={{ color: txt2, fontSize: 11 }}>{new Date(h.at).toLocaleTimeString?.() || ""}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Messages */}
@@ -221,6 +342,23 @@ export default function SEOCopilotPanel({ dark, clientId }) {
             style={{ background: B, color: "#fff", border: "none", borderRadius: 10, padding: "0 20px", fontSize: 14, fontWeight: 700, cursor: sending ? "wait" : "pointer", opacity: (sending || !input.trim()) ? .6 : 1 }}>Send</button>
         </div>
       </div>
+
+      {/* ── M10.4 confirmation dialog for high-impact actions ── */}
+      <Modal t={th} open={!!confirm} onClose={() => setConfirm(null)} title="Confirm action" width={420}>
+        {confirm && (
+          <div style={{ display: "grid", gap: 14 }}>
+            <div style={{ fontSize: 14, color: txt }}>
+              Run <b>{confirm.label}</b>?
+              {confirm.reason && <div style={{ fontSize: 13, color: txt2, marginTop: 6 }}>{confirm.reason}</div>}
+            </div>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <Button t={th} variant="secondary" onClick={() => setConfirm(null)}>Cancel</Button>
+              <Button t={th} loading={executing === confirm.actionId}
+                onClick={() => runAction(confirm.actionId, confirm.label, confirm.params)}>Confirm &amp; Run</Button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

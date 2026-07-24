@@ -144,6 +144,12 @@ router.use("/", taskCenterRouter);
 const copilotRouter = require("./modules/copilot");
 router.use("/", copilotRouter);
 
+// ── Copilot Actions routes (M10.4) ──
+// Mounted at the same base ("/") so paths remain /api/agents/:clientId/copilot/{action,actions,suggestions}.
+// Orchestration only — delegates to existing helpers (Task Center, Approvals, Pipeline, recalc engines). Reuses the shared getClientDoc.
+const copilotActionsRouter = require("./modules/copilotActions");
+router.use("/", copilotActionsRouter);
+
 // ── Executive Command Center route (M9.6) ──
 // Mounted at the same base ("/") so the path remains /api/agents/:clientId/executive-dashboard.
 // Composes existing snapshots into an executive rollup (no LLM, no recompute). Reuses the shared getClientDoc.
