@@ -54,6 +54,7 @@ const agencyRoutes       = require("./routes/agency");
 const attributionRoutes  = require("./routes/attribution");
 const rulesEngineRoutes  = require("./routes/rulesEngine");
 const aiChatRoutes       = require("./routes/aiChat");
+const publicApiRoutes    = require("./routes/modules/publicApi"); // M10.6 — /api/v1 (API-key auth)
 
 const app  = express();
 const PORT = process.env.PORT || 5000;
@@ -194,6 +195,10 @@ app.use("/api/agency",       apiLimiter,   agencyRoutes);
 app.use("/api/attribution",  apiLimiter,   attributionRoutes);
 app.use("/api/rules-engine", agentLimiter, rulesEngineRoutes);
 app.use("/api/ai",          apiLimiter,   aiChatRoutes);
+
+// ── Public developer API (M10.6) — versioned, API-key authenticated (apiAuth
+//    inside the router). Separate top-level mount from the JWT-guarded /api/agents. ──
+app.use("/api/v1",          apiLimiter,   publicApiRoutes);
 
 // ── Daily alert monitoring ─────────────────────────
 // Runs A9.checkAlerts for every active client — detects new technical issues,

@@ -157,6 +157,13 @@ router.use("/", copilotActionsRouter);
 const brandingRouter = require("./modules/branding");
 router.use("/", brandingRouter);
 
+// ── Developer API management routes (M10.6) ──
+// Agency-scoped (JWT verifyToken), keyed by req.uid: manage API keys + webhooks
+// from the app. Paths: /api/agents/dev/{keys,webhooks,scopes}. Delegates to the
+// pure apiKeys + webhooks engines. (The public API itself is mounted at /api/v1.)
+const apiManagementRouter = require("./modules/apiManagement");
+router.use("/", apiManagementRouter);
+
 // ── Executive Command Center route (M9.6) ──
 // Mounted at the same base ("/") so the path remains /api/agents/:clientId/executive-dashboard.
 // Composes existing snapshots into an executive rollup (no LLM, no recompute). Reuses the shared getClientDoc.

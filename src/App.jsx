@@ -11,6 +11,7 @@ import Markdown from "./Markdown";
 const History          = lazy(() => import("./History"));
 const GscDashboard     = lazy(() => import("./GscDashboard"));
 const ClientManager    = lazy(() => import("./pages/ClientManager"));
+const DeveloperPortal  = lazy(() => import("./components/DeveloperPortal"));
 const GA4Dashboard     = lazy(() => import("./GA4Dashboard"));
 const SiteAudit        = lazy(() => import("./SiteAudit"));
 const Compare          = lazy(() => import("./Compare"));
@@ -539,6 +540,7 @@ function MainApp({ onLogout }) {
 
             <div style={s.secLabel}>Administration</div>
             <div onClick={()=>setPage("users")}   style={s.navItem(page==="users",   "#DC2626")}>👥 <span>User Management</span></div>
+            <div onClick={()=>setPage("developer")} style={s.navItem(page==="developer", "#0e8fa8")}>🔌 <span>Developer API</span></div>
             <div onClick={()=>window.dispatchEvent(new Event("seo:openSettings"))} style={s.navItem(false, "#6B7280")}>⚙️ <span>Settings</span></div>
           </div>
 
@@ -610,6 +612,7 @@ function MainApp({ onLogout }) {
         {page==="clients"       && <ClientManager dark={dark} />}
         {page==="agency"        && <AgencyDashboard dark={dark} onClientSelect={id => { setPage("clients"); }} />}
         {page==="users"         && <UserPanel dark={dark} />}
+        {page==="developer"     && <DeveloperPortal dark={dark} />}
         {page==="dashboard"     && <Dashboard onToolSelect={selectTool} count={count} keys={keys} dark={dark} onPageSelect={setPage} />}
         {page==="promptcontent" && <PromptToContent dark={dark} keys={keys} model={model} getToken={() => user.getIdToken()} />}
         {page==="writer"        && <AiWriter dark={dark} keys={keys} model={model} getToken={() => user.getIdToken()} />}
