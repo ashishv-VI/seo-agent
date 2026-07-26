@@ -164,6 +164,13 @@ router.use("/", brandingRouter);
 const apiManagementRouter = require("./modules/apiManagement");
 router.use("/", apiManagementRouter);
 
+// ── Organization & RBAC routes (M10.7) ──
+// Enterprise teams layered on the existing verifyToken (never replaces auth).
+// Paths: /api/agents/organization*. Delegates to the pure organization engine;
+// client access is widened to same-org members via the shared getClientDoc.
+const organizationRouter = require("./modules/organization");
+router.use("/", organizationRouter);
+
 // ── Executive Command Center route (M9.6) ──
 // Mounted at the same base ("/") so the path remains /api/agents/:clientId/executive-dashboard.
 // Composes existing snapshots into an executive rollup (no LLM, no recompute). Reuses the shared getClientDoc.

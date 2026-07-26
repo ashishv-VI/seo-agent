@@ -12,11 +12,22 @@
 const { db } = require("../../config/firebase");
 
 // ── Helper: check client ownership ────────────────
+// M10.7: ownership widened from strict ownerId===uid to "owner OR same-org
+// member". Backward-compatible — a user with no org is a solo org of one, so the
+// direct-owner fast path preserves the exact prior behaviour for existing users.
+// Same 404/403 contract + returned snapshot. This single choke-point propagates
+// org access to every client-scoped surface without touching call sites.
 async function getClientDoc(clientId, uid) {
   const doc = await db.collection("clients").doc(clientId).get();
-  if (!doc.exists)                   throw { code: 404, message: "Client not found" };
-  if (doc.data().ownerId !== uid)    throw { code: 403, message: "Access denied" };
-  return doc;
+  if (!doc.exists) throw { code: 404, message: "Client not found" };
+  const ownerId = doc.data().ownerId;
+  if (ownerId === uid) return doc;                     // direct owner — unchanged fast path
+  // Org fallback: allow if caller shares an organization with the client's owner.
+  try {
+    const { sameOrg } = require("../../utils/organization");
+    if (await sameOrg(db, ownerId, uid)) return doc;
+  } catch { /* org module unavailable → deny (fail closed) */ }
+  throw { code: 403, message: "Access denied" };
 }
 
 module.exports = { getClientDoc };
